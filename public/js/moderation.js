@@ -7,7 +7,7 @@ import {
   doc, serverTimestamp, Timestamp,
 } from 'firebase/firestore';
 import { sub, plain } from './fb.js';
-import { state, emit, memberName, isDelegate, isTeacher, CHANNELS } from './state.js';
+import { state, emit, memberName, isDelegate, isTeacher, isPrincipal, CHANNELS } from './state.js';
 import { decryptMessage } from './chat.js';
 import { h, icon, modal, toast, fmtDay, fmtTime } from './ui.js';
 
@@ -21,12 +21,14 @@ export const REASONS = {
 };
 const RETENTION_DAYS = 30;
 const MODERATORS = {
-  messages: 'aux délégués de la classe',
-  mixed_messages: 'aux délégués et aux professeurs',
+  messages: 'aux délégués et au(x) professeur(s) principal(aux)',
+  mixed_messages: 'aux délégués, aux professeurs et au(x) professeur(s) principal(aux)',
   staff_messages: 'aux professeurs de la classe',
 };
-/** Channels whose reports the current member handles. */
-const moderatedChannels = () => (isTeacher() ? ['mixed_messages', 'staff_messages'] : isDelegate() ? ['messages', 'mixed_messages'] : []);
+/** Channels whose reports the current member handles (head teachers receive every report). */
+const moderatedChannels = () => (isPrincipal() ? ['messages', 'mixed_messages', 'staff_messages']
+  : isTeacher() ? ['mixed_messages', 'staff_messages']
+  : isDelegate() ? ['messages', 'mixed_messages'] : []);
 export let reports = [];
 let unsub = null;
 
@@ -125,7 +127,9 @@ export function reportsCard() {
   const open = reports.filter((r) => r.status === 'open');
   return h('div.admin-card.card.span-2',
     h('h3', icon('flag'), ' Signalements ', open.length ? h('b.count', open.length) : null),
-    h('p.muted', isTeacher()
+    h('p.muted', isPrincipal()
+      ? 'En tant que prof principal, tu reçois tous les signalements de la classe (tous les canaux). Conservés 30 jours puis effacés automatiquement.'
+      : isTeacher()
       ? 'Signalements des canaux « Profs & élèves » et « Salle des profs ». Conservés 30 jours puis effacés automatiquement.'
       : 'Preuves transmises par les membres (messages déchiffrés + contexte). Conservées 30 jours puis effacées automatiquement.'),
     reports.length

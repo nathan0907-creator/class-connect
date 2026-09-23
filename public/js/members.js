@@ -1,7 +1,7 @@
 import { doc, getDocs, query, where, updateDoc, writeBatch, deleteDoc } from 'firebase/firestore';
 import { reauthenticateWithCredential, EmailAuthProvider, deleteUser } from 'firebase/auth';
 import { auth, db, sub, classRef, userRef } from './fb.js';
-import { state, on, emit, isDelegate, isTeacher } from './state.js';
+import { state, on, emit, isDelegate, isTeacher, MAX_DELEGATES } from './state.js';
 import { fingerprint, deriveAuthKey, clearKeys } from './crypto.js';
 import { sharesFor, shareRefFor, rotateKey } from './keyring.js';
 import { reportsCard, openReportsCount } from './moderation.js';
@@ -35,7 +35,7 @@ export async function leave() {
       const mine = await getDocs(query(sub(state.cls.id, 'shares'), where('user_id', '==', state.me.id)));
       mine.docs.forEach((d) => batch.delete(d.ref));
     }
-    batch.update(userRef(state.me.id), { class_id: null, status: 'none', role: 'student', trusted: false });
+    batch.update(userRef(state.me.id), { class_id: null, status: 'none', role: 'student', trusted: false, principal: false });
     await batch.commit();
     emit('reroute');
   } catch (err) { toastError(err); }
@@ -68,7 +68,7 @@ function deleteAccount() {
             const mine = await getDocs(query(sub(state.cls.id, 'shares'), where('user_id', '==', state.me.id)));
             mine.docs.forEach((d) => batch.delete(d.ref));
           }
-          batch.update(userRef(state.me.id), { class_id: null, status: 'none', role: 'student', trusted: false });
+          batch.update(userRef(state.me.id), { class_id: null, status: 'none', role: 'student', trusted: false, principal: false });
           await batch.commit();
         }
         const batch = writeBatch(db);
@@ -86,8 +86,9 @@ function deleteAccount() {
 }
 
 function roleBadge(m) {
-  if (m.role === 'teacher') return h('span.role-badge.teacher', '🎓 Professeur');
+  if (m.role === 'teacher') return h('span.role-badge.teacher', m.principal ? '🎓 Prof principal' : '🎓 Professeur');
   if (m.role === 'delegate') return h('span.role-badge', '★ Délégué');
+  if (m.role === 'deputy') return h('span.role-badge.deputy', '☆ Suppléant');
   if (m.trusted) return h('span.role-badge.trusted', '✓ Confiance');
   return h('span.role-badge.student', 'Élève');
 }
@@ -102,7 +103,7 @@ async function toggleTrusted(m) {
   catch (err) { toastError(err); }
 }
 
-const RANK = { teacher: 0, delegate: 1, student: 2 };
+const RANK = { teacher: 0, delegate: 1, deputy: 2, student: 3 };
 
 function renderMembers() {
   const grid = $('#panel-members .member-grid');
@@ -198,18 +199,30 @@ function renderAdmin() {
       : h('p.muted', 'Aucune demande. Partage le code d\'invitation !'));
 
   const others = active().filter((m) => m.id !== state.me.id);
+  const all = active();
+  const count = (role) => all.filter((m) => m.role === role).length;
+  const principals = all.filter((m) => m.role === 'teacher' && m.principal).length;
   const crew = h('div.admin-card.card.span-2',
-    h('h3', icon('star'), ' Gestion de l\'équipage'),
+    h('h3', icon('star'), ' Rôles et équipage'),
+    h('div.role-summary',
+      h('span', h('b', `${count('delegate')}/${MAX_DELEGATES}`), ' délégués'),
+      h('span', h('b', count('deputy')), ' suppléant(s)'),
+      h('span', h('b', count('teacher')), ' professeur(s)'),
+      h('span', h('b', principals), ' prof(s) principal(aux)')),
+    principals ? null : h('p.report-notice', '⚠️ Aucun prof principal : désigne-en un pour qu\'il reçoive tous les signalements de harcèlement.'),
     others.length ? h('div.crew-list', others.map((m) => h('div.crew-item',
       avatar(m, 34),
       h('div.pi-info', h('b', m.display_name), roleBadge(m)),
-      m.role === 'student'
-        ? h('button.btn.btn-sm.btn-ghost', { onclick: () => toggleTrusted(m), title: 'Les membres de confiance peuvent publier des cours pour l\'IA' },
-          m.trusted ? 'Retirer confiance' : 'Confiance')
-        : null,
-      m.role !== 'teacher'
-        ? h('button.btn.btn-sm.btn-ghost', { onclick: () => setRole(m) }, m.role === 'delegate' ? 'Retirer délégué' : 'Nommer délégué')
-        : null,
+      m.role === 'teacher'
+        ? h(`button.btn.btn-sm.${m.principal ? 'btn-ghost' : 'btn-primary'}`, { onclick: () => togglePrincipal(m) },
+          h('span', m.principal ? 'Retirer prof principal' : 'Nommer prof principal'))
+        : [
+            roleSelect(m, count('delegate')),
+            m.role === 'student'
+              ? h('button.btn.btn-sm.btn-ghost', { onclick: () => toggleTrusted(m), title: 'Les membres de confiance peuvent publier des cours pour l\'IA' },
+                m.trusted ? 'Retirer confiance' : 'Confiance')
+              : null,
+          ],
       h('button.btn.btn-sm.btn-danger', { onclick: () => removeMember(m, true) }, 'Exclure'))))
       : h('p.muted', 'Personne d\'autre pour l\'instant.'));
 
@@ -259,7 +272,7 @@ async function removeMember(m, wasActive) {
       const theirs = await getDocs(query(sub(state.cls.id, 'shares'), where('user_id', '==', m.id)));
       theirs.docs.forEach((d) => batch.delete(d.ref));
     }
-    batch.update(userRef(m.id), { class_id: null, status: 'none', role: 'student', trusted: false });
+    batch.update(userRef(m.id), { class_id: null, status: 'none', role: 'student', trusted: false, principal: false });
     await batch.commit();
     if (wasActive) {
       await rotateKey();
@@ -268,12 +281,38 @@ async function removeMember(m, wasActive) {
   } catch (err) { toastError(err); }
 }
 
-async function setRole(m) {
-  const promote = m.role !== 'delegate';
-  const ok = await confirmDialog(promote ? 'Nommer délégué ?' : 'Retirer le rôle de délégué ?',
-    promote ? `${m.display_name} pourra gérer les membres, l'emploi du temps et les votes.` : `${m.display_name} redeviendra élève.`,
-    { danger: !promote });
+const ROLE_INFO = {
+  student: ['Élève', 'redeviendra simple élève.'],
+  deputy: ['Suppléant', 'pourra modérer les canaux élèves (épingler, supprimer) et publier des cours pour l\'IA, pour remplacer un délégué absent.'],
+  delegate: ['Délégué', 'aura tous les pouvoirs : membres, rôles, emploi du temps, votes et signalements.'],
+};
+
+/** Student role picker: élève / suppléant / délégué (2 delegates max, like a French class council). */
+function roleSelect(m, delegates) {
+  const full = delegates >= MAX_DELEGATES && m.role !== 'delegate';
+  const select = h('select.role-select', { 'aria-label': `Rôle de ${m.display_name}` },
+    Object.entries(ROLE_INFO).map(([value, [label]]) => h('option', {
+      value, selected: m.role === value, disabled: value === 'delegate' && full,
+    }, value === 'delegate' && full ? `${label} (2 max)` : label)));
+  select.addEventListener('change', async () => {
+    const role = select.value;
+    const [label, effect] = ROLE_INFO[role];
+    const ok = await confirmDialog(`${m.display_name} : ${label} ?`, `${m.display_name} ${effect}`, { danger: role === 'student', label: 'Confirmer' });
+    if (!ok) { select.value = m.role; return; }
+    try {
+      await updateDoc(userRef(m.id), { role });
+      toast(`${m.display_name} est maintenant ${label.toLowerCase()}`, 'success');
+    } catch (err) { select.value = m.role; toastError(err); }
+  });
+  return select;
+}
+
+async function togglePrincipal(m) {
+  const on = !m.principal;
+  const ok = await confirmDialog(on ? `Nommer ${m.display_name} prof principal ?` : 'Retirer le rôle de prof principal ?',
+    on ? `${m.display_name} recevra TOUS les signalements de harcèlement de la classe, y compris ceux du canal des élèves (uniquement les messages signalés et leur contexte).`
+      : `${m.display_name} ne recevra plus les signalements du canal des élèves.`, { danger: !on });
   if (!ok) return;
-  try { await updateDoc(userRef(m.id), { role: promote ? 'delegate' : 'student' }); }
+  try { await updateDoc(userRef(m.id), { principal: on }); toast(on ? 'Prof principal nommé 🎓' : 'Rôle retiré', 'success'); }
   catch (err) { toastError(err); }
 }

@@ -4,7 +4,7 @@ import {
 } from 'firebase/firestore';
 import { openReport } from './moderation.js';
 import { db, sub, plain } from './fb.js';
-import { state, on, isDelegate, isTeacher, memberName, CHANNELS, channelsFor } from './state.js';
+import { state, on, isDelegate, isDeputy, isTeacher, memberName, CHANNELS, channelsFor } from './state.js';
 import { encryptJSON, decryptJSON } from './crypto.js';
 import { MAX_FILE, uploadEncrypted, downloadDecrypted, deleteFileChunks, compressImage } from './media.js';
 import { currentKey } from './keyring.js';
@@ -38,8 +38,8 @@ const aadFor = (row) => {
 };
 const messagesCol = () => sub(state.cls.id, channel);
 /** Who may pin / delete others' messages in a channel. */
-const moderates = (ch = channel) => (ch === 'messages' ? isDelegate()
-  : ch === 'staff_messages' ? isTeacher() : isDelegate() || isTeacher());
+const moderates = (ch = channel) => (ch === 'messages' ? isDelegate() || isDeputy()
+  : ch === 'staff_messages' ? isTeacher() : isDelegate() || isDeputy() || isTeacher());
 
 export function initChat() {
   root = $('#panel-chat');
@@ -220,8 +220,9 @@ function appendMessage(row) {
   regroup(list.lastElementChild);
 }
 
-const roleTag = (author) => (author?.role === 'teacher' ? h('span.role-badge.teacher', '🎓 prof')
-  : author?.role === 'delegate' ? h('span.role-badge', '★ délégué') : null);
+const roleTag = (author) => (author?.role === 'teacher' ? h('span.role-badge.teacher', author.principal ? '🎓 prof principal' : '🎓 prof')
+  : author?.role === 'delegate' ? h('span.role-badge', '★ délégué')
+  : author?.role === 'deputy' ? h('span.role-badge.deputy', '☆ suppléant') : null);
 
 function messageEl(row) {
   row.channel ||= channel;

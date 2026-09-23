@@ -19,8 +19,11 @@ service cloud.firestore {
     function isActiveMember(cid) { return signedIn() && exists(userPath(uid())) && me().class_id == cid && me().status == 'active'; }
     function isDelegate(cid) { return isActiveMember(cid) && me().role == 'delegate'; }
     function isTeacher(cid) { return isActiveMember(cid) && me().role == 'teacher'; }
+    function isPrincipal(cid) { return isTeacher(cid) && me().get('principal', false) == true; }
+    function isDeputy(cid) { return isActiveMember(cid) && me().role == 'deputy'; }
     function isStudent(cid) { return isActiveMember(cid) && me().role != 'teacher'; }
-    function canPublishCourses(cid) { return isActiveMember(cid) && (me().role in ['delegate', 'teacher'] || me().get('trusted', false) == true); }
+    function canPublishCourses(cid) { return isActiveMember(cid) && (me().role in ['delegate', 'deputy', 'teacher'] || me().get('trusted', false) == true); }
+    function notPrincipal(d) { return d.get('principal', false) == false; }
 
     // Chat channels: "messages" = students only, "staff_messages" = teachers only, "mixed_messages" = everyone.
     function isChannel(ch) { return ch in ['messages', 'mixed_messages', 'staff_messages']; }
@@ -29,10 +32,17 @@ service cloud.firestore {
         || (ch == 'staff_messages' && isTeacher(cid))
         || (ch == 'mixed_messages' && isActiveMember(cid));
     }
+    // Pin / delete others' messages: delegates and deputies for students, teachers for the staff room.
     function moderates(cid, ch) {
-      return (ch == 'messages' && isDelegate(cid))
+      return (ch == 'messages' && (isDelegate(cid) || isDeputy(cid)))
         || (ch == 'staff_messages' && isTeacher(cid))
-        || (ch == 'mixed_messages' && (isDelegate(cid) || isTeacher(cid)));
+        || (ch == 'mixed_messages' && (isDelegate(cid) || isDeputy(cid) || isTeacher(cid)));
+    }
+    // Reports: delegates for the students' channels, teachers for theirs, and head teachers receive ALL reports.
+    function handlesReports(cid, ch) {
+      return isPrincipal(cid)
+        || (ch in ['messages', 'mixed_messages'] && isDelegate(cid))
+        || (ch in ['mixed_messages', 'staff_messages'] && isTeacher(cid));
     }
     function notTrusted(d) { return d.get('trusted', false) == false; }
     function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
@@ -84,7 +94,7 @@ service cloud.firestore {
     // ---------------------------------------------------------------- users
     function userKeys() {
       return request.resource.data.keys().hasOnly(['username', 'display_name', 'color', 'public_key', 'class_id',
-        'role', 'status', 'created_at', 'invite_code', 'trusted']);
+        'role', 'status', 'created_at', 'invite_code', 'trusted', 'principal']);
     }
     function selfUpdate(userId) {
       let b = resource.data;
@@ -103,8 +113,8 @@ service cloud.firestore {
             && !exists(classPath(a.class_id))
             && getAfter(classPath(a.class_id)).data.created_by == uid())
         // leave the class (the "trusted" flag is dropped)
-        || (onlyChanged(['class_id', 'status', 'role', 'invite_code', 'trusted']) && a.class_id == null && a.status == 'none'
-            && a.role == 'student' && notTrusted(a))
+        || (onlyChanged(['class_id', 'status', 'role', 'invite_code', 'trusted', 'principal']) && a.class_id == null && a.status == 'none'
+            && a.role == 'student' && notTrusted(a) && notPrincipal(a))
       );
     }
     function delegateUpdate(userId) {
@@ -112,9 +122,12 @@ service cloud.firestore {
       let a = request.resource.data;
       return userId != uid() && b.class_id != null && isDelegate(b.class_id) && (
         (onlyChanged(['status']) && b.status == 'pending' && a.status == 'active')
-        || (onlyChanged(['class_id', 'status', 'role', 'trusted']) && a.class_id == null && a.status == 'none'
-            && a.role == 'student' && notTrusted(a))
-        || (onlyChanged(['role']) && b.status == 'active' && b.role != 'teacher' && a.role in ['student', 'delegate'])
+        || (onlyChanged(['class_id', 'status', 'role', 'trusted', 'principal']) && a.class_id == null && a.status == 'none'
+            && a.role == 'student' && notTrusted(a) && notPrincipal(a))
+        // student roles: élève / suppléant / délégué
+        || (onlyChanged(['role']) && b.status == 'active' && b.role != 'teacher' && a.role in ['student', 'deputy', 'delegate'])
+        // head teacher ("prof principal"): receives every report
+        || (onlyChanged(['principal']) && b.status == 'active' && b.role == 'teacher' && a.principal is bool)
         // mark a student as trusted (may publish courses for the AI)
         || (onlyChanged(['trusted']) && b.status == 'active' && b.role != 'teacher' && a.trusted is bool)
       );
@@ -127,7 +140,7 @@ service cloud.firestore {
       allow create: if signedIn() && userId == uid() && userKeys()
         && request.resource.data.class_id == null && request.resource.data.role == 'student'
         && request.resource.data.status == 'none' && request.resource.data.created_at == request.time
-        && notTrusted(request.resource.data)
+        && notTrusted(request.resource.data) && notPrincipal(request.resource.data)
         && str(request.resource.data.display_name, 1, 40) && str(request.resource.data.public_key, 50, 400)
         && getAfter(/databases/$(database)/documents/usernames/$(request.resource.data.username)).data.uid == uid();
       allow update: if signedIn() && (selfUpdate(userId) || delegateUpdate(userId));
@@ -225,7 +238,7 @@ service cloud.firestore {
       match /reports/{rid} {
         function validEvidence(items) { return items is list && items.size() >= 1 && items.size() <= 25; }
         allow read: if isActiveMember(cid)
-          && (resource.data.reporter_id == uid() || moderates(cid, resource.data.channel));
+          && (resource.data.reporter_id == uid() || handlesReports(cid, resource.data.channel));
         allow create: if isActiveMember(cid)
           && request.resource.data.keys().hasOnly(['reporter_id', 'reported_id', 'message_id', 'reason', 'comment',
                'evidence', 'status', 'handled_by', 'created_at', 'expire_at', 'channel'])
@@ -240,7 +253,7 @@ service cloud.firestore {
           && request.resource.data.expire_at is timestamp
           && request.resource.data.expire_at > request.time + duration.value(29, 'd')
           && request.resource.data.expire_at < request.time + duration.value(31, 'd');
-        allow update: if moderates(cid, resource.data.channel) && resource.data.reported_id != uid()
+        allow update: if handlesReports(cid, resource.data.channel) && resource.data.reported_id != uid()
           && onlyChanged(['status', 'handled_by'])
           && request.resource.data.status in ['open', 'handled'] && request.resource.data.handled_by == uid();
         allow delete: if isActiveMember(cid) && resource.data.expire_at < request.time;

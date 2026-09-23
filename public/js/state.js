@@ -16,8 +16,13 @@ export const on = (type, fn) => bus.addEventListener(type, (e) => fn(e.detail));
 
 export const isDelegate = () => state.me?.role === 'delegate' && state.me?.status === 'active';
 export const isTeacher = () => state.me?.role === 'teacher' && state.me?.status === 'active';
-/** Delegates, teachers and members marked as trusted may publish courses for the revision AI. */
-export const canPublish = () => state.me?.status === 'active' && (['delegate', 'teacher'].includes(state.me.role) || state.me.trusted === true);
+/** "Prof principal": receives every harassment report of the class. */
+export const isPrincipal = () => isTeacher() && state.me.principal === true;
+/** "Suppléant": stands in for the delegates (moderation of the students' channels, course publishing). */
+export const isDeputy = () => state.me?.role === 'deputy' && state.me?.status === 'active';
+export const MAX_DELEGATES = 2;
+/** Delegates, deputies, teachers and members marked as trusted may publish courses for the revision AI. */
+export const canPublish = () => state.me?.status === 'active' && (['delegate', 'deputy', 'teacher'].includes(state.me.role) || state.me.trusted === true);
 
 /** Chat channels. Students never see the staff room; teachers never see the students' channel. */
 export const CHANNELS = {

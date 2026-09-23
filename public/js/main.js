@@ -1,7 +1,7 @@
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, getDocs, onSnapshot, query, where, collection, writeBatch, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { configured, auth, db, userRef, classRef, sub, plain, friendly, startAnalytics } from './fb.js';
-import { state, emit, on, isDelegate, isTeacher, canPublish } from './state.js';
+import { state, emit, on, isDelegate, isDeputy, isTeacher, isPrincipal, canPublish } from './state.js';
 import { unlockIdentity, storePrivateKey, loadPrivateKey, clearKeys } from './crypto.js';
 import { loadKeys, shareNeeded, currentKey } from './keyring.js';
 import { initAuthFlow } from './authflow.js';
@@ -45,7 +45,10 @@ function showPanel(name) {
 function fillIdentity() {
   const me = state.me;
   $$('[data-me-name]').forEach((el) => { el.textContent = me?.display_name || ''; });
-  $$('[data-me-role]').forEach((el) => { el.textContent = isTeacher() ? '🎓 Professeur' : isDelegate() ? '★ Délégué' : 'Élève'; });
+  $$('[data-me-role]').forEach((el) => {
+    el.textContent = isPrincipal() ? '🎓 Prof principal' : isTeacher() ? '🎓 Professeur'
+      : isDelegate() ? '★ Délégué' : isDeputy() ? '☆ Suppléant' : 'Élève';
+  });
   $$('[data-me-avatar]').forEach((el) => {
     const next = avatar(me, 38);
     next.dataset.meAvatar = '';
@@ -202,12 +205,16 @@ function watchMe() {
       if (before.status === 'pending' && after.status === 'active') toast('Ta demande a été acceptée ! 🚀', 'success');
       if (before.class_id && !after.class_id && before.status !== 'none') toast('Tu ne fais plus partie de la classe', 'info');
       if (before.role !== after.role && after.status === 'active' && before.status === 'active') {
-        toast(after.role === 'delegate' ? 'Tu es maintenant délégué ⭐' : 'Tu n\'es plus délégué');
+        toast({ delegate: 'Tu es maintenant délégué ⭐', deputy: 'Tu es maintenant suppléant ☆', student: 'Tu es maintenant élève (sans rôle particulier)' }[after.role] || 'Ton rôle a changé');
       }
       route();
     } else if (!!before.trusted !== !!after.trusted) {
       fillIdentity();
       toast(after.trusted ? 'Tu peux maintenant publier des cours pour l\'IA 📚' : 'Tu ne peux plus publier de cours');
+    } else if (!!before.principal !== !!after.principal) {
+      fillIdentity();
+      startModeration();
+      toast(after.principal ? 'Tu es prof principal : tu recevras tous les signalements 🎓' : 'Tu n\'es plus prof principal');
     }
   });
 }

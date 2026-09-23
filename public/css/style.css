@@ -1272,3 +1272,9 @@ body.is-teacher .student-only { display: none !important; }
 .invite-code.teacher { background-image: linear-gradient(90deg, #fff, var(--gold), #ffb547, #fff); }
 .teacher-reports:empty { display: none; }
 .teacher-reports { margin-bottom: 16px; flex: none; }
+
+/* roles */
+.role-badge.deputy { color: #c9bbff; background: rgba(124, 92, 255, .12); border-color: rgba(150, 130, 255, .4); }
+.role-select { width: auto; padding: 6px 10px; font-size: 13px; border-radius: 10px; }
+.role-summary { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 13px; color: var(--muted); }
+.role-summary b { color: #fff; font-family: var(--font-display); }
