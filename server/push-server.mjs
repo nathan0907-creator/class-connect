@@ -99,7 +99,11 @@ async function notifyClass(cid, channel, ch, msg) {
   // Forget devices that uninstalled the app or revoked the permission.
   const dead = res.responses.map((r, i) => (!r.success && DEAD_TOKEN.has(r.error?.code) ? targets[i][0] : null)).filter(Boolean);
   await Promise.all(dead.map((id) => db.doc(`push_tokens/${id}`).delete().catch(() => {})));
-  log(`🔔 ${classes.get(cid) || cid} · ${ch.label} : ${res.successCount}/${targets.length} notification(s)${dead.length ? `, ${dead.length} appareil(s) oublié(s)` : ''}`);
+  const errors = [...new Set(res.responses.filter((r) => !r.success).map((r) => r.error?.code || r.error?.message))];
+  log(`🔔 ${classes.get(cid) || cid} · ${ch.label} : ${res.successCount}/${targets.length} notification(s)${dead.length ? `, ${dead.length} appareil(s) oublié(s)` : ''}${errors.length ? ` · erreurs : ${errors.join(', ')}` : ''}`);
+  if (errors.some((e) => /auth|credential|invalid_grant|ACCOUNT_STATE/i.test(String(e)))) {
+    log('   → La clé service-account.json est refusée par Google (supprimée ou désactivée ?) : génère-en une nouvelle (voir LISEZMOI.md).');
+  }
 }
 
 log('🚀 Serveur de notifications Class Connect démarré. Laisse cette fenêtre ouverte.');

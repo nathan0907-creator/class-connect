@@ -1432,3 +1432,35 @@ body.is-teacher .student-only { display: none !important; }
 .guide-link { align-self: center; }
 .link-btn.inline { align-self: auto; margin: 0; }
 .danger-zone { flex-wrap: wrap; }
+
+/* ---------------------------------------------------------------- phone layout fixes */
+@media (max-width: 820px) {
+  /* The column must never grow wider than the screen because of its content. */
+  .app-shell { grid-template-columns: minmax(0, 1fr); padding-left: max(10px, env(safe-area-inset-left)); padding-right: max(10px, env(safe-area-inset-right)); }
+  .sidebar, .panels, .panel { min-width: 0; max-width: 100%; }
+  /* Bottom bar: scrolls sideways when the buttons don't fit (7 tabs for delegates). */
+  .nav-items { min-width: 0; width: 100%; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; scroll-snap-type: x proximity; }
+  .nav-items::-webkit-scrollbar { display: none; }
+  .nav-item { flex: 1 0 60px; min-width: 60px; scroll-snap-align: start; }
+  .panel-head { flex-wrap: wrap; gap: 10px; }
+  .panel-head > div { min-width: 0; }
+  .panel-head .btn { flex: none; }
+  .channel-tabs { overflow-x: auto; scrollbar-width: none; flex-wrap: nowrap; }
+  .channel-tab { flex: none; }
+  .composer { min-width: 0; }
+  .composer textarea { min-width: 0; }
+  .msg-body { min-width: 0; }
+  .bubble { max-width: 100%; }
+  .media, .media img, .media video { max-width: 100%; }
+  .modal { max-width: calc(100vw - 20px); }
+  .modal-body { overflow-x: hidden; }
+  .danger-zone { justify-content: center; }
+  .danger-zone .btn { flex: 1 1 140px; }
+  .toasts { left: 10px; right: 10px; }
+}
+@media (max-width: 820px) {
+  .nav-item span[data-short] { font-size: 0; }
+  .nav-item span[data-short]::after { content: attr(data-short); font-size: 10px; }
+  .danger-zone .btn { white-space: normal; line-height: 1.2; }
+}
+@media (max-width: 820px) { .nav-item { flex: 1 0 48px; min-width: 48px; padding-left: 0; padding-right: 0; } .nav-item span { font-size: 9.5px; } .nav-item span[data-short]::after { font-size: 9.5px; } }
