@@ -278,7 +278,7 @@ service cloud.firestore {
         function isCouncilStaff() { return isTeacher(cid) || isDelegate(cid); }
         function validRecord(d) {
           return d.keys().hasOnly(['student_id', 'period', 'author_id', 'updated_at', 'iv', 'ciphertext', 'keys'])
-            && d.student_id is string && d.period in ['T1', 'T2', 'T3', 'S1', 'S2']
+            && d.student_id is string && d.period in ['T1', 'T2', 'T3']
             && rid == d.period + '_' + d.student_id
             && d.author_id == uid() && d.updated_at == request.time
             && str(d.iv, 10, 32) && str(d.ciphertext, 10, 20000)

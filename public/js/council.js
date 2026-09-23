@@ -7,8 +7,10 @@ import { state, on, isTeacher, isDelegate } from './state.js';
 import { generateClassKey, wrapClassKey, unwrapClassKey, encryptJSON, decryptJSON } from './crypto.js';
 import { $, h, icon, avatar, toast, toastError, confirmDialog, busy } from './ui.js';
 
-export const PERIODS = { T1: '1er trimestre', T2: '2e trimestre', T3: '3e trimestre', S1: '1er semestre', S2: '2nd semestre' };
-const MENTIONS = ['', 'Félicitations', 'Compliments', 'Encouragements', 'Mise en garde (travail)', 'Mise en garde (comportement)', 'Avertissement'];
+export const PERIODS = { T1: '1er trimestre', T2: '2e trimestre', T3: '3e trimestre' };
+/** Records saved before the rename still say "Compliments": show them as "Tableau d'honneur". */
+const mentionLabel = (m) => (m === 'Compliments' ? 'Tableau d\'honneur' : m || '');
+const MENTIONS = ['', 'Félicitations', 'Tableau d\'honneur', 'Encouragements', 'Mise en garde (travail)', 'Mise en garde (comportement)', 'Avertissement'];
 
 let records = new Map();   // doc id -> { row, data | null, key | null }
 let unsub = null;
@@ -119,7 +121,7 @@ function studentView() {
   }
   return h('div.council-cards', mine.map((r) => r.data
     ? h('article.council-card.card',
-        h('div.cc-head', h('b', PERIODS[r.row.period]), r.data.mention ? h('span.mention', r.data.mention) : null),
+        h('div.cc-head', h('b', PERIODS[r.row.period]), r.data.mention ? h('span.mention', mentionLabel(r.data.mention)) : null),
         h('div.cc-average', h('span', fmtAvg(r.data.average)), h('small', '/20')),
         r.data.appreciation ? h('blockquote', r.data.appreciation) : h('p.muted', 'Pas d\'appréciation.'),
         h('small.muted', `Saisi par ${r.data.author || 'un professeur'}`))
@@ -179,7 +181,7 @@ function editor(student, recFor) {
   const rec = recFor(student);
   const data = rec?.data || {};
   const average = h('input', { type: 'number', min: 0, max: 20, step: 0.01, value: data.average ?? '', required: true, 'aria-label': 'Moyenne' });
-  const mention = h('select', { 'aria-label': 'Mention' }, MENTIONS.map((m) => h('option', { value: m, selected: m === (data.mention || '') }, m || '— Aucune —')));
+  const mention = h('select', { 'aria-label': 'Mention' }, MENTIONS.map((m) => h('option', { value: m, selected: m === mentionLabel(data.mention) }, m || '— Aucune —')));
   const appreciation = h('textarea', { rows: 6, maxLength: 1000, placeholder: 'Appréciation du conseil de classe…', 'aria-label': 'Appréciation' });
   appreciation.value = data.appreciation || '';
   const counter = h('small.muted', `${appreciation.value.length}/1000`);
