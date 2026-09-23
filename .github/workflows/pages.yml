@@ -24,6 +24,8 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - name: Versionner les fichiers (évite les anciens fichiers en cache)
+        run: node scripts/cache-bust.mjs "${GITHUB_SHA::8}"
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
