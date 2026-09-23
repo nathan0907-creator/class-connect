@@ -1,0 +1,15 @@
+{
+  "name": "class-connect-push-server",
+  "private": true,
+  "description": "Serveur de notifications de Class Connect, à faire tourner sur un PC allumé en permanence",
+  "type": "module",
+  "scripts": {
+    "start": "node push-server.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.10.0"
+  }
+}
