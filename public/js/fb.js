@@ -5,7 +5,7 @@ import {
   doc, collection,
 } from 'firebase/firestore';
 import { getDatabase } from 'firebase/database';
-import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
+import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check';
 import { FIREBASE_CONFIG, RECAPTCHA_SITE_KEY } from './config.js';
 
 export const configured = Boolean(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.projectId);
@@ -13,8 +13,9 @@ const app = configured ? initializeApp(FIREBASE_CONFIG) : null;
 export const firebaseApp = app;
 
 // Anti-abuse: App Check proves requests come from this site, not from a script reusing the API key.
-if (app && RECAPTCHA_SITE_KEY) {
-  initializeAppCheck(app, { provider: new ReCaptchaV3Provider(RECAPTCHA_SITE_KEY), isTokenAutoRefreshEnabled: true });
+// Only on the real site: reCAPTCHA keys are tied to the published domain (local tests would be rejected).
+if (app && RECAPTCHA_SITE_KEY && !/^(localhost|127\.)/.test(location.hostname)) {
+  initializeAppCheck(app, { provider: new ReCaptchaEnterpriseProvider(RECAPTCHA_SITE_KEY), isTokenAutoRefreshEnabled: true });
 }
 
 export const auth = app ? getAuth(app) : null;

@@ -19,8 +19,8 @@ export const FIREBASE_CONFIG = {
   databaseURL: 'https://class-connectv3-default-rtdb.europe-west1.firebasedatabase.app',
 };
 
-// Optionnel mais recommandé — anti-spam : clé de site reCAPTCHA v3 pour Firebase App Check.
-export const RECAPTCHA_SITE_KEY = '';
+// Optionnel mais recommandé — anti-spam : clé de site reCAPTCHA Enterprise pour Firebase App Check (publique).
+export const RECAPTCHA_SITE_KEY = '6LdofsstAAAAAG_CJifPaptQAXfTbLIYa9zKw7Uc';
 
 // Assistant de révision (Firebase AI Logic → Gemini Developer API, offre gratuite sans facturation).
 // Le modèle de secours est utilisé si le premier est saturé (quota gratuit atteint).
