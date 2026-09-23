@@ -18,7 +18,22 @@ service cloud.firestore {
     function me() { return get(userPath(uid())).data; }
     function isActiveMember(cid) { return signedIn() && exists(userPath(uid())) && me().class_id == cid && me().status == 'active'; }
     function isDelegate(cid) { return isActiveMember(cid) && me().role == 'delegate'; }
-    function canPublishCourses(cid) { return isActiveMember(cid) && (me().role == 'delegate' || me().get('trusted', false) == true); }
+    function isTeacher(cid) { return isActiveMember(cid) && me().role == 'teacher'; }
+    function isStudent(cid) { return isActiveMember(cid) && me().role != 'teacher'; }
+    function canPublishCourses(cid) { return isActiveMember(cid) && (me().role in ['delegate', 'teacher'] || me().get('trusted', false) == true); }
+
+    // Chat channels: "messages" = students only, "staff_messages" = teachers only, "mixed_messages" = everyone.
+    function isChannel(ch) { return ch in ['messages', 'mixed_messages', 'staff_messages']; }
+    function canChannel(cid, ch) {
+      return (ch == 'messages' && isStudent(cid))
+        || (ch == 'staff_messages' && isTeacher(cid))
+        || (ch == 'mixed_messages' && isActiveMember(cid));
+    }
+    function moderates(cid, ch) {
+      return (ch == 'messages' && isDelegate(cid))
+        || (ch == 'staff_messages' && isTeacher(cid))
+        || (ch == 'mixed_messages' && (isDelegate(cid) || isTeacher(cid)));
+    }
     function notTrusted(d) { return d.get('trusted', false) == false; }
     function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
     function onlyChanged(keys) { return changed().hasOnly(keys); }
@@ -77,10 +92,11 @@ service cloud.firestore {
       return userId == uid() && userKeys() && a.username == b.username && a.created_at == b.created_at && (
         // profile
         (onlyChanged(['display_name', 'color', 'public_key']) && str(a.display_name, 1, 40) && str(a.public_key, 50, 400))
-        // join a class with an invite code → pending
+        // join a class with an invite code → pending (as student or teacher, depending on the code)
         || (onlyChanged(['class_id', 'status', 'role', 'invite_code']) && b.class_id == null
-            && a.status == 'pending' && a.role == 'student' && a.invite_code is string
-            && get(/databases/$(database)/documents/invites/$(a.invite_code)).data.class_id == a.class_id)
+            && a.status == 'pending' && a.invite_code is string
+            && get(/databases/$(database)/documents/invites/$(a.invite_code)).data.class_id == a.class_id
+            && a.role == get(/databases/$(database)/documents/invites/$(a.invite_code)).data.get('role', 'student'))
         // create a class (same batch) → delegate
         || (onlyChanged(['class_id', 'status', 'role']) && b.class_id == null
             && a.status == 'active' && a.role == 'delegate' && a.class_id is string
@@ -98,9 +114,9 @@ service cloud.firestore {
         (onlyChanged(['status']) && b.status == 'pending' && a.status == 'active')
         || (onlyChanged(['class_id', 'status', 'role', 'trusted']) && a.class_id == null && a.status == 'none'
             && a.role == 'student' && notTrusted(a))
-        || (onlyChanged(['role']) && b.status == 'active' && a.role in ['student', 'delegate'])
-        // mark a member as trusted (may publish courses for the AI)
-        || (onlyChanged(['trusted']) && b.status == 'active' && a.trusted is bool)
+        || (onlyChanged(['role']) && b.status == 'active' && b.role != 'teacher' && a.role in ['student', 'delegate'])
+        // mark a student as trusted (may publish courses for the AI)
+        || (onlyChanged(['trusted']) && b.status == 'active' && b.role != 'teacher' && a.trusted is bool)
       );
     }
 
@@ -123,7 +139,8 @@ service cloud.firestore {
       allow get: if signedIn();
       allow list: if false;
       allow create: if signedIn() && code.matches('^[A-Z0-9]{4}-[A-Z0-9]{4}$')
-        && request.resource.data.keys().hasOnly(['class_id'])
+        && request.resource.data.keys().hasOnly(['class_id', 'role'])
+        && request.resource.data.get('role', 'student') in ['student', 'teacher']
         && (isDelegate(request.resource.data.class_id)
             || (!exists(classPath(request.resource.data.class_id))
                 && getAfter(classPath(request.resource.data.class_id)).data.created_by == uid()));
@@ -145,6 +162,9 @@ service cloud.firestore {
       allow update: if isDelegate(cid) && (
         (onlyChanged(['name']) && str(request.resource.data.name, 2, 60))
         || (onlyChanged(['invite_code']) && getAfter(/databases/$(database)/documents/invites/$(request.resource.data.invite_code)).data.class_id == cid)
+        || (onlyChanged(['teacher_code'])
+            && getAfter(/databases/$(database)/documents/invites/$(request.resource.data.teacher_code)).data.class_id == cid
+            && getAfter(/databases/$(database)/documents/invites/$(request.resource.data.teacher_code)).data.role == 'teacher')
         || (onlyChanged(['key_epoch']) && request.resource.data.key_epoch == resource.data.key_epoch + 1)
       );
       allow delete: if false;
@@ -175,10 +195,10 @@ service cloud.firestore {
               || request.time > resource.data.last + duration.value(1, 's'));
       }
 
-      // Encrypted messages.
-      match /messages/{mid} {
-        allow read: if isActiveMember(cid);
-        allow create: if isActiveMember(cid)
+      // Encrypted messages, one collection per channel (students / teachers / everyone).
+      match /{channel}/{mid} {
+        allow read: if isChannel(channel) && canChannel(cid, channel);
+        allow create: if isChannel(channel) && canChannel(cid, channel)
           && request.resource.data.keys().hasOnly(['user_id', 'epoch', 'iv', 'ciphertext', 'pinned', 'created_at'])
           && request.resource.data.user_id == uid()
           && request.resource.data.epoch == get(classPath(cid)).data.key_epoch
@@ -186,26 +206,30 @@ service cloud.firestore {
           && request.resource.data.created_at == request.time
           && str(request.resource.data.iv, 10, 32) && str(request.resource.data.ciphertext, 10, 60000)
           && getAfter(/databases/$(database)/documents/classes/$(cid)/rate/$(uid())).data.last == request.time;
-        allow update: if (isDelegate(cid) && onlyChanged(['pinned']) && request.resource.data.pinned is bool)
+        allow update: if isChannel(channel) && (
+          (moderates(cid, channel) && onlyChanged(['pinned']) && request.resource.data.pinned is bool)
           // Deletion is "soft": the message disappears for everyone but stays (encrypted) 30 days as evidence.
-          || (isActiveMember(cid) && (resource.data.user_id == uid() || isDelegate(cid))
+          || (canChannel(cid, channel) && (resource.data.user_id == uid() || moderates(cid, channel))
               && !('deleted_at' in resource.data)
               && onlyChanged(['deleted_at', 'deleted_by', 'pinned'])
               && request.resource.data.deleted_at == request.time
               && request.resource.data.deleted_by == uid()
-              && request.resource.data.pinned == false);
+              && request.resource.data.pinned == false));
         // Permanent removal only once the 30-day retention period is over.
-        allow delete: if isActiveMember(cid) && 'deleted_at' in resource.data
+        allow delete: if isChannel(channel) && canChannel(cid, channel) && 'deleted_at' in resource.data
           && resource.data.deleted_at < request.time - duration.value(30, 'd');
       }
 
       // Harassment reports: evidence decrypted by the reporter's device, kept 30 days.
+      // Visible to the moderators of the channel it comes from (never to members who can't read that channel).
       match /reports/{rid} {
         function validEvidence(items) { return items is list && items.size() >= 1 && items.size() <= 25; }
-        allow read: if isActiveMember(cid) && (isDelegate(cid) || resource.data.reporter_id == uid());
+        allow read: if isActiveMember(cid)
+          && (resource.data.reporter_id == uid() || moderates(cid, resource.data.channel));
         allow create: if isActiveMember(cid)
           && request.resource.data.keys().hasOnly(['reporter_id', 'reported_id', 'message_id', 'reason', 'comment',
-               'evidence', 'status', 'handled_by', 'created_at', 'expire_at'])
+               'evidence', 'status', 'handled_by', 'created_at', 'expire_at', 'channel'])
+          && isChannel(request.resource.data.channel) && canChannel(cid, request.resource.data.channel)
           && request.resource.data.reporter_id == uid()
           && request.resource.data.reported_id is string
           && request.resource.data.reason in ['harcelement', 'insulte', 'menace', 'contenu_choquant', 'usurpation', 'autre']
@@ -216,7 +240,7 @@ service cloud.firestore {
           && request.resource.data.expire_at is timestamp
           && request.resource.data.expire_at > request.time + duration.value(29, 'd')
           && request.resource.data.expire_at < request.time + duration.value(31, 'd');
-        allow update: if isDelegate(cid) && resource.data.reported_id != uid()
+        allow update: if moderates(cid, resource.data.channel) && resource.data.reported_id != uid()
           && onlyChanged(['status', 'handled_by'])
           && request.resource.data.status in ['open', 'handled'] && request.resource.data.handled_by == uid();
         allow delete: if isActiveMember(cid) && resource.data.expire_at < request.time;
@@ -262,7 +286,7 @@ service cloud.firestore {
           let b = resource.data;
           let a = request.resource.data;
           let nv = getAfter(votePath()).data.value;
-          return isActiveMember(cid) && b.status == 'open' && b.deadline > request.time
+          return isStudent(cid) && b.status == 'open' && b.deadline > request.time
             && onlyChanged(['yes', 'no', 'abstain'])
             && existsAfter(votePath())
             && a[field(nv)] == b[field(nv)] + 1
@@ -303,10 +327,10 @@ service cloud.firestore {
           allow get: if signedIn() && voterId == uid();
           allow list: if false;
           // The tally must move by exactly one in the same batch.
-          allow create: if signedIn() && voterId == uid() && isActiveMember(cid) && validVote()
+          allow create: if signedIn() && voterId == uid() && isStudent(cid) && validVote()
             && exists(proposal()) && get(proposal()).data.status == 'open' && get(proposal()).data.deadline > request.time
             && getAfter(proposal()).data[field(request.resource.data.value)] == get(proposal()).data[field(request.resource.data.value)] + 1;
-          allow update: if signedIn() && voterId == uid() && isActiveMember(cid) && validVote()
+          allow update: if signedIn() && voterId == uid() && isStudent(cid) && validVote()
             && resource.data.value != request.resource.data.value
             && get(proposal()).data.status == 'open' && get(proposal()).data.deadline > request.time
             && getAfter(proposal()).data[field(request.resource.data.value)] == get(proposal()).data[field(request.resource.data.value)] + 1

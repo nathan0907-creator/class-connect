@@ -4,11 +4,11 @@ import {
 } from 'firebase/firestore';
 import { openReport } from './moderation.js';
 import { db, sub, plain } from './fb.js';
-import { state, on, isDelegate, memberName } from './state.js';
+import { state, on, isDelegate, isTeacher, memberName, CHANNELS, channelsFor } from './state.js';
 import { encryptJSON, decryptJSON } from './crypto.js';
 import { MAX_FILE, uploadEncrypted, downloadDecrypted, deleteFileChunks, compressImage } from './media.js';
 import { currentKey } from './keyring.js';
-import { sendTyping } from './presence.js';
+import { sendTyping, watchTyping } from './presence.js';
 import { GIPHY_API_KEY } from './config.js';
 import { $, h, icon, avatar, toast, toastError, fmtTime, fmtDay, fmtSize, linkify, confirmDialog } from './ui.js';
 
@@ -24,8 +24,22 @@ const decrypted = new Map(); // message id -> payload | null
 const mediaCache = new Map(); // file id -> object URL
 const typingTimers = new Map();
 
-const aadFor = (row) => `msg|${state.cls.id}|${row.epoch}|${row.user_id}`;
-const messagesCol = () => sub(state.cls.id, 'messages');
+let channel = 'messages';
+let watchers = [];
+const unreadChannels = new Set();
+export const currentChannel = () => channel;
+
+// The students' channel keeps the original format; other channels bind the channel name into the ciphertext.
+const aadFor = (row) => {
+  const ch = row.channel || channel;
+  return ch === 'messages'
+    ? `msg|${state.cls.id}|${row.epoch}|${row.user_id}`
+    : `msg|${state.cls.id}|${ch}|${row.epoch}|${row.user_id}`;
+};
+const messagesCol = () => sub(state.cls.id, channel);
+/** Who may pin / delete others' messages in a channel. */
+const moderates = (ch = channel) => (ch === 'messages' ? isDelegate()
+  : ch === 'staff_messages' ? isTeacher() : isDelegate() || isTeacher());
 
 export function initChat() {
   root = $('#panel-chat');
@@ -76,7 +90,7 @@ export function initChat() {
   buildEmojiPicker();
   buildGifPicker();
 
-  on('typing', ({ id }) => showTyping(id));
+  on('typing', ({ id, channel: ch }) => { if (ch === channel) showTyping(id); });
   on('keys', redecryptFailed);
   on('members', refreshAuthors);
   on('panel', (name) => { if (name === 'chat') { setUnread(0); scrollToBottom(); } });
@@ -86,8 +100,37 @@ export function initChat() {
 }
 
 // ------------------------------------------------------------ live data
-export function startChat() {
+/** Starts the class chat: the chosen channel is displayed, the others are watched for unread messages. */
+export function startChat(requested) {
+  const allowed = channelsFor();
+  const next = allowed.includes(requested) ? requested : allowed.includes(channel) ? channel : allowed[0];
+  stopWatchers();
+  openChannel(next);
+  for (const ch of allowed) {
+    if (ch === next) continue;
+    let first = true;
+    watchers.push(onSnapshot(query(sub(state.cls.id, ch), orderBy('created_at', 'desc'), limit(1)), (snap) => {
+      if (first) { first = false; return; }
+      const added = snap.docChanges().some((c) => c.type === 'added' && c.doc.get('user_id') !== state.me.id && !c.doc.get('deleted_at'));
+      if (added && ch !== channel) { unreadChannels.add(ch); renderChannelTabs(); setUnread(unread + 1); }
+    }, () => {}));
+  }
+}
+
+function stopWatchers() { watchers.forEach((u) => u()); watchers = []; }
+
+function openChannel(ch) {
   stopChat();
+  channel = ch;
+  unreadChannels.delete(ch);
+  renderChannelTabs();
+  $('[data-channel-title]').textContent = CHANNELS[ch].title;
+  $('[data-channel-hint]').textContent = CHANNELS[ch].hint;
+  textarea.placeholder = `Message chiffré — ${CHANNELS[ch].label}…`;
+  typingTimers.forEach((t) => clearTimeout(t));
+  typingTimers.clear();
+  renderTyping();
+  watchTyping(ch);
   list.replaceChildren();
   decrypted.clear();
   oldestSnap = null;
@@ -119,6 +162,15 @@ export function startChat() {
 export function stopChat() {
   unsubs.forEach((u) => u());
   unsubs = [];
+}
+export function stopAllChat() { stopChat(); stopWatchers(); }
+
+function renderChannelTabs() {
+  const tabs = $('.channel-tabs', root);
+  tabs.replaceChildren(...channelsFor().map((ch) => h(`button.channel-tab${ch === channel ? '.active' : ''}${unreadChannels.has(ch) ? '.unread' : ''}`, {
+    type: 'button', role: 'tab', 'aria-selected': String(ch === channel),
+    onclick: () => { if (ch !== channel) startChat(ch); },
+  }, CHANNELS[ch].label)));
 }
 
 function onIncoming(row) {
@@ -168,7 +220,11 @@ function appendMessage(row) {
   regroup(list.lastElementChild);
 }
 
+const roleTag = (author) => (author?.role === 'teacher' ? h('span.role-badge.teacher', '🎓 prof')
+  : author?.role === 'delegate' ? h('span.role-badge', '★ délégué') : null);
+
 function messageEl(row) {
+  row.channel ||= channel;
   const author = state.members.get(row.user_id);
   const mine = row.user_id === state.me.id;
   const el = h(`div.msg${mine ? '.mine' : ''}${row.pinned ? '.pinned' : ''}`, {
@@ -178,7 +234,7 @@ function messageEl(row) {
   h('div.msg-body',
     h('div.msg-head',
       h('b', { style: { color: author?.color } }, memberName(row.user_id)),
-      author?.role === 'delegate' ? h('span.role-badge', '★ délégué') : null,
+      roleTag(author),
       h('time', fmtTime(row.created_at))),
     h('div.bubble', h('span.decrypting', icon('lock'), ' déchiffrement…'))),
   h('div.msg-actions', actionButtons(row)));
@@ -199,7 +255,7 @@ function refreshAuthors() {
 
 function actionButtons(row) {
   const out = [];
-  if (isDelegate()) {
+  if (moderates(row.channel)) {
     out.push(h('button.icon-btn', { title: 'Épingler / désépingler', onclick: () => {
       updateDoc(doc(messagesCol(), row.id), { pinned: !row.pinned }).catch(toastError);
     } }, icon('pin')));
@@ -207,9 +263,9 @@ function actionButtons(row) {
   if (row.user_id !== state.me.id) {
     out.push(h('button.icon-btn', { title: 'Signaler ce message', 'aria-label': 'Signaler ce message', onclick: () => openReport(row) }, icon('flag')));
   }
-  if (row.user_id === state.me.id || isDelegate()) {
+  if (row.user_id === state.me.id || moderates(row.channel)) {
     out.push(h('button.icon-btn', { title: 'Supprimer', 'aria-label': 'Supprimer', onclick: async () => {
-      if (!(await confirmDialog('Supprimer le message ?', 'Il disparaîtra pour toute la classe. Par sécurité (harcèlement), il reste conservé chiffré 30 jours et peut être joint à un signalement.'))) return;
+      if (!(await confirmDialog('Supprimer le message ?', 'Il disparaîtra pour tout le canal. Par sécurité (harcèlement), il reste conservé chiffré 30 jours et peut être joint à un signalement.'))) return;
       try {
         await updateDoc(doc(messagesCol(), row.id), { deleted_at: serverTimestamp(), deleted_by: state.me.id, pinned: false });
         onRemoved(row.id);
@@ -219,15 +275,17 @@ function actionButtons(row) {
   return out;
 }
 
-/** Delegates' clients permanently erase messages (and their media) deleted more than 30 days ago. */
+/** Moderators' clients permanently erase messages (and their media) deleted more than 30 days ago. */
 export async function purgeExpired() {
   const cutoff = Timestamp.fromMillis(Date.now() - 30 * 864e5);
-  const old = await getDocs(query(messagesCol(), where('deleted_at', '<', cutoff), limit(100))).catch(() => null);
-  for (const d of old?.docs || []) {
-    const row = plain(d);
-    const payload = await decryptRow(row);
-    if (payload?.file?.id) await deleteFileChunks(payload.file);
-    await deleteDoc(d.ref).catch(() => {});
+  for (const ch of channelsFor().filter((c) => moderates(c))) {
+    const old = await getDocs(query(sub(state.cls.id, ch), where('deleted_at', '<', cutoff), limit(100))).catch(() => null);
+    for (const d of old?.docs || []) {
+      const row = { ...plain(d), channel: ch };
+      const payload = await decryptRow(row);
+      if (payload?.file?.id) await deleteFileChunks(payload.file);
+      await deleteDoc(d.ref).catch(() => {});
+    }
   }
 }
 
@@ -372,7 +430,7 @@ async function postPayload(payload) {
   if (!key) throw new Error('Clé de la classe pas encore reçue. Attends qu\'un membre en ligne te la transmette.');
   const epoch = state.cls.key_epoch;
   const ref = doc(messagesCol());
-  const enc = await encryptJSON(key, payload, `msg|${state.cls.id}|${epoch}|${state.me.id}`);
+  const enc = await encryptJSON(key, payload, aadFor({ epoch, user_id: state.me.id, channel }));
   decrypted.set(ref.id, payload);
   // The rate document lets the security rules enforce one message per second (anti-spam).
   const batch = writeBatch(db);

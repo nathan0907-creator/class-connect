@@ -1,11 +1,11 @@
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, getDocs, onSnapshot, query, where, collection, writeBatch, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { configured, auth, db, userRef, classRef, sub, plain, friendly, startAnalytics } from './fb.js';
-import { state, emit, on, isDelegate, canPublish } from './state.js';
+import { state, emit, on, isDelegate, isTeacher, canPublish } from './state.js';
 import { unlockIdentity, storePrivateKey, loadPrivateKey, clearKeys } from './crypto.js';
 import { loadKeys, shareNeeded, currentKey } from './keyring.js';
 import { initAuthFlow } from './authflow.js';
-import { initChat, startChat, stopChat, purgeExpired } from './chat.js';
+import { initChat, startChat, stopAllChat, purgeExpired } from './chat.js';
 import { startModeration, stopModeration } from './moderation.js';
 import { initStudy, startStudy, stopStudy } from './study.js';
 import { initTimetable, startSlots, stopSlots } from './timetable.js';
@@ -45,7 +45,7 @@ function showPanel(name) {
 function fillIdentity() {
   const me = state.me;
   $$('[data-me-name]').forEach((el) => { el.textContent = me?.display_name || ''; });
-  $$('[data-me-role]').forEach((el) => { el.textContent = isDelegate() ? '★ Délégué' : 'Élève'; });
+  $$('[data-me-role]').forEach((el) => { el.textContent = isTeacher() ? '🎓 Professeur' : isDelegate() ? '★ Délégué' : 'Élève'; });
   $$('[data-me-avatar]').forEach((el) => {
     const next = avatar(me, 38);
     next.dataset.meAvatar = '';
@@ -54,6 +54,7 @@ function fillIdentity() {
   $$('[data-class-name]').forEach((el) => { el.textContent = state.cls?.name || ''; });
   document.body.classList.toggle('is-delegate', isDelegate());
   document.body.classList.toggle('can-publish', canPublish());
+  document.body.classList.toggle('is-teacher', isTeacher());
   emit('me');
 }
 
@@ -116,7 +117,9 @@ function bindClassForms() {
     try {
       const invite = await getDoc(doc(db, 'invites', code));
       if (!invite.exists()) throw new Error('Code d\'invitation inconnu');
-      await updateDoc(userRef(state.me.id), { class_id: invite.get('class_id'), status: 'pending', role: 'student', invite_code: code });
+      const role = invite.get('role') === 'teacher' ? 'teacher' : 'student';
+      await updateDoc(userRef(state.me.id), { class_id: invite.get('class_id'), status: 'pending', role, invite_code: code });
+      if (role === 'teacher') toast('Code professeur reconnu 🎓 Le délégué doit valider ta demande.', 'success', 6000);
       join.reset();
       formError(join, '');
       await route();
@@ -219,7 +222,7 @@ async function enterApp() {
   await loadKeys();
   updateE2EEStatus();
   shareNeeded();
-  if (isDelegate()) {
+  if (isDelegate() || isTeacher()) {
     startModeration();
     purgeExpired().catch(() => {});
   } else {
@@ -268,7 +271,7 @@ function startClass(cid) {
 function stopClass() {
   classUnsubs.forEach((u) => u());
   classUnsubs = [];
-  stopChat();
+  stopAllChat();
   stopSlots();
   stopProposals();
   stopPresence();

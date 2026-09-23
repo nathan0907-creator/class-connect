@@ -7,7 +7,7 @@ import {
   doc, serverTimestamp, Timestamp,
 } from 'firebase/firestore';
 import { sub, plain } from './fb.js';
-import { state, emit, memberName } from './state.js';
+import { state, emit, memberName, isDelegate, isTeacher, CHANNELS } from './state.js';
 import { decryptMessage } from './chat.js';
 import { h, icon, modal, toast, fmtDay, fmtTime } from './ui.js';
 
@@ -20,6 +20,13 @@ export const REASONS = {
   autre: 'Autre',
 };
 const RETENTION_DAYS = 30;
+const MODERATORS = {
+  messages: 'aux délégués de la classe',
+  mixed_messages: 'aux délégués et aux professeurs',
+  staff_messages: 'aux professeurs de la classe',
+};
+/** Channels whose reports the current member handles. */
+const moderatedChannels = () => (isTeacher() ? ['mixed_messages', 'staff_messages'] : isDelegate() ? ['messages', 'mixed_messages'] : []);
 export let reports = [];
 let unsub = null;
 
@@ -35,13 +42,13 @@ function describe(payload) {
 }
 
 async function collectEvidence(row) {
-  const col = sub(state.cls.id, 'messages');
+  const col = sub(state.cls.id, row.channel || 'messages');
   const at = Timestamp.fromMillis(row.created_at);
   const [before, after] = await Promise.all([
     getDocs(query(col, orderBy('created_at'), endBefore(at), limitToLast(10))),
     getDocs(query(col, orderBy('created_at'), startAfter(at), limit(10))),
   ]);
-  const rows = [...before.docs.map(plain), row, ...after.docs.map(plain)];
+  const rows = [...before.docs.map(plain), row, ...after.docs.map(plain)].map((r) => ({ ...r, channel: row.channel }));
   return Promise.all(rows.map(async (r) => ({
     message_id: r.id,
     user_id: r.user_id,
@@ -67,7 +74,7 @@ export function openReport(row) {
       h('label.field', h('span', 'Précisions'), comment),
       h('div.report-notice',
         h('p', icon('lock'), ' Ton appareil va déchiffrer ce message et les 10 messages avant/après (même supprimés) pour les transmettre ',
-          h('b', 'aux délégués de la classe'), '. La personne signalée n\'est pas prévenue. Le signalement est effacé automatiquement après 30 jours.'),
+          h('b', MODERATORS[row.channel || 'messages']), '. La personne signalée n\'est pas prévenue. Le signalement est effacé automatiquement après 30 jours.'),
         h('p', '🆘 En danger ou harcelé·e ? Parles-en à un adulte de confiance et appelle le ', h('b', '3018'),
           ' (gratuit, anonyme, 7j/7). Contenu illégal : ', h('a', { href: 'https://www.internet-signalement.gouv.fr', target: '_blank', rel: 'noopener' }, 'PHAROS'), '.'))),
     actions: [
@@ -75,6 +82,7 @@ export function openReport(row) {
       { label: 'Envoyer le signalement', variant: 'btn-danger', onClick: async () => {
         const evidence = await collectEvidence(row);
         const report = {
+          channel: row.channel || 'messages',
           reporter_id: state.me.id, reported_id: row.user_id, message_id: row.id, reason: reason.value,
           comment: comment.value.trim(), evidence, status: 'open', handled_by: null,
           created_at: serverTimestamp(), expire_at: Timestamp.fromMillis(Date.now() + RETENTION_DAYS * 864e5),
@@ -96,30 +104,35 @@ export function openReport(row) {
 // ------------------------------------------------------------ delegate follow-up
 export function startModeration() {
   stopModeration();
-  const q = query(sub(state.cls.id, 'reports'), orderBy('created_at', 'desc'), limit(50));
+  const channels = moderatedChannels();
+  if (!channels.length) return;
+  // Filtered by channel so the query only returns reports this member is allowed to read.
+  const q = query(sub(state.cls.id, 'reports'), where('channel', 'in', channels), limit(100));
+  let purged = false;
   unsub = onSnapshot(q, (snap) => {
-    reports = snap.docs.map(plain);
+    reports = snap.docs.map(plain).sort((a, b) => b.created_at - a.created_at);
     emit('reports');
+    if (!purged) {
+      purged = true;
+      const expired = snap.docs.filter((d) => plain(d).expire_at < Date.now());
+      Promise.allSettled(expired.map((d) => deleteDoc(d.ref)));
+    }
   }, () => {});
-  purgeExpiredReports();
 }
 export function stopModeration() { unsub?.(); unsub = null; reports = []; }
-
-async function purgeExpiredReports() {
-  const old = await getDocs(query(sub(state.cls.id, 'reports'), where('expire_at', '<', Timestamp.now()), limit(50))).catch(() => null);
-  await Promise.allSettled((old?.docs || []).map((d) => deleteDoc(d.ref)));
-}
 
 export function reportsCard() {
   const open = reports.filter((r) => r.status === 'open');
   return h('div.admin-card.card.span-2',
     h('h3', icon('flag'), ' Signalements ', open.length ? h('b.count', open.length) : null),
-    h('p.muted', 'Preuves transmises par les élèves (messages déchiffrés + contexte). Conservées 30 jours puis effacées automatiquement.'),
+    h('p.muted', isTeacher()
+      ? 'Signalements des canaux « Profs & élèves » et « Salle des profs ». Conservés 30 jours puis effacés automatiquement.'
+      : 'Preuves transmises par les membres (messages déchiffrés + contexte). Conservées 30 jours puis effacées automatiquement.'),
     reports.length
       ? h('div.pending-list', reports.map((r) => h(`div.pending-item.report-item${r.status === 'open' ? '.open' : ''}`,
           h('div.pi-info',
             h('b', `${REASONS[r.reason] || r.reason} — visant ${memberName(r.reported_id)}`),
-            h('small', `Signalé par ${memberName(r.reporter_id)} · ${fmtDay(r.created_at)} · expire le ${new Date(r.expire_at).toLocaleDateString('fr-FR')}`)),
+            h('small', `${CHANNELS[r.channel]?.label || ''} · signalé par ${memberName(r.reporter_id)} · ${fmtDay(r.created_at)} · expire le ${new Date(r.expire_at).toLocaleDateString('fr-FR')}`)),
           h('span.role-badge', { class: r.status === 'open' ? '' : 'student' }, r.status === 'open' ? 'À traiter' : 'Traité'),
           h('button.btn.btn-sm.btn-ghost', { onclick: () => showReport(r) }, 'Voir'))))
       : h('p.muted', 'Aucun signalement. 🎉'));
@@ -156,7 +169,7 @@ function downloadEvidence(r) {
   const lines = [
     'CLASS CONNECT — EXTRAIT DE SIGNALEMENT',
     '======================================',
-    `Classe : ${state.cls.name}`,
+    `Classe : ${state.cls.name} — canal « ${CHANNELS[r.channel]?.label || 'Classe'} »`,
     `Motif : ${REASONS[r.reason] || r.reason}`,
     `Personne signalée : ${memberName(r.reported_id)} (identifiant ${r.reported_id})`,
     `Signalé par : ${memberName(r.reporter_id)} (identifiant ${r.reporter_id})`,

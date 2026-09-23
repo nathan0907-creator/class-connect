@@ -72,7 +72,7 @@ function miniSlot(s, cls = '') {
 
 function card(p) {
   const live = isLive(p);
-  const voters = [...state.members.values()].filter((m) => m.status === 'active').length || 1;
+  const voters = [...state.members.values()].filter((m) => m.status === 'active' && m.role !== 'teacher').length || 1;
   const total = p.yes + p.no + p.abstain;
   const pct = (n) => Math.min(100, (n / voters) * 100);
   const mine = myVotes.get(p.id);

@@ -203,7 +203,7 @@
         <form id="form-join" class="card choice-card tilt" novalidate>
           <div class="big-icon" aria-hidden="true"><i class="ico ico-rocket"></i></div>
           <h3>Rejoindre une classe</h3>
-          <p class="muted">Entre le code d'invitation donné par ton délégué.</p>
+          <p class="muted">Entre le code d'invitation donné par ton délégué. <b>Professeur ?</b> Utilise le code professeur.</p>
           <label class="field"><span>Code d'invitation</span>
             <input name="inviteCode" required placeholder="ABCD-EFGH" maxlength="9" autocomplete="off" class="code-input" autocapitalize="characters"></label>
           <button class="btn btn-primary btn-block" type="submit"><span>Rejoindre</span></button>
@@ -251,9 +251,9 @@
         <div class="nav-items">
           <button class="nav-item active" data-panel="chat" aria-current="page"><i class="ico ico-chat" aria-hidden="true"></i><span>Chat</span><b class="badge" data-badge="chat" aria-label="messages non lus"></b></button>
           <button class="nav-item" data-panel="timetable"><i class="ico ico-calendar" aria-hidden="true"></i><span>Emploi du temps</span></button>
-          <button class="nav-item" data-panel="votes"><i class="ico ico-vote" aria-hidden="true"></i><span>Votes</span><b class="badge" data-badge="votes" aria-label="votes en attente"></b></button>
+          <button class="nav-item student-only" data-panel="votes"><i class="ico ico-vote" aria-hidden="true"></i><span>Votes</span><b class="badge" data-badge="votes" aria-label="votes en attente"></b></button>
           <button class="nav-item" data-panel="study"><i class="ico ico-sparkles" aria-hidden="true"></i><span>Révisions IA</span></button>
-          <button class="nav-item" data-panel="members"><i class="ico ico-users" aria-hidden="true"></i><span>Équipage</span></button>
+          <button class="nav-item" data-panel="members"><i class="ico ico-users" aria-hidden="true"></i><span>Équipage</span><b class="badge" data-badge="members" aria-label="signalements à traiter"></b></button>
           <button class="nav-item delegate-only" data-panel="admin"><i class="ico ico-star" aria-hidden="true"></i><span>Délégué</span><b class="badge" data-badge="admin" aria-label="demandes en attente"></b></button>
         </div>
         <div class="side-footer">
@@ -271,11 +271,12 @@
         <section class="panel active" id="panel-chat" aria-labelledby="chat-title">
           <header class="panel-head">
             <div>
-              <h2 id="chat-title">Canal de bord</h2>
-              <p class="e2ee-line"><i class="ico ico-lock" aria-hidden="true"></i> Chiffré de bout en bout · <span data-online-count>0</span> en ligne</p>
+              <h2 id="chat-title" data-channel-title>Canal de bord</h2>
+              <p class="e2ee-line"><i class="ico ico-lock" aria-hidden="true"></i> Chiffré de bout en bout · <span data-channel-hint></span> · <span data-online-count>0</span> en ligne</p>
             </div>
             <div class="online-stack" data-online-stack></div>
           </header>
+          <div class="channel-tabs" role="tablist" aria-label="Canaux de discussion"></div>
           <div class="pinned-bar" hidden></div>
           <div class="chat-scroll">
             <div class="load-more" hidden><button class="btn btn-ghost btn-sm">Charger plus</button></div>
@@ -364,6 +365,7 @@
               <p class="muted">Compare les empreintes de sécurité en vrai pour vérifier qu'aucune clé n'a été substituée.</p>
             </div>
           </header>
+          <div class="teacher-reports"></div>
           <div class="member-grid"></div>
           <div class="danger-zone">
             <button class="btn btn-ghost" data-action="logout">Se déconnecter</button>

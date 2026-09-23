@@ -1,7 +1,7 @@
 import { doc, getDocs, query, where, updateDoc, writeBatch, deleteDoc } from 'firebase/firestore';
 import { reauthenticateWithCredential, EmailAuthProvider, deleteUser } from 'firebase/auth';
 import { auth, db, sub, classRef, userRef } from './fb.js';
-import { state, on, emit, isDelegate } from './state.js';
+import { state, on, emit, isDelegate, isTeacher } from './state.js';
 import { fingerprint, deriveAuthKey, clearKeys } from './crypto.js';
 import { sharesFor, shareRefFor, rotateKey } from './keyring.js';
 import { reportsCard, openReportsCount } from './moderation.js';
@@ -13,7 +13,7 @@ export function initMembers() {
   on('members', () => { renderMembers(); renderAdmin(); });
   on('presence', renderMembers);
   on('keys', renderAdmin);
-  on('reports', renderAdmin);
+  on('reports', () => { renderAdmin(); renderMembers(); });
 }
 
 const active = () => [...state.members.values()].filter((m) => m.status === 'active');
@@ -86,6 +86,7 @@ function deleteAccount() {
 }
 
 function roleBadge(m) {
+  if (m.role === 'teacher') return h('span.role-badge.teacher', '🎓 Professeur');
   if (m.role === 'delegate') return h('span.role-badge', '★ Délégué');
   if (m.trusted) return h('span.role-badge.trusted', '✓ Confiance');
   return h('span.role-badge.student', 'Élève');
@@ -101,9 +102,15 @@ async function toggleTrusted(m) {
   catch (err) { toastError(err); }
 }
 
+const RANK = { teacher: 0, delegate: 1, student: 2 };
+
 function renderMembers() {
   const grid = $('#panel-members .member-grid');
-  const list = active().sort((a, b) => (b.role === 'delegate') - (a.role === 'delegate') || a.display_name.localeCompare(b.display_name));
+  const list = active().sort((a, b) => RANK[a.role] - RANK[b.role] || a.display_name.localeCompare(b.display_name));
+  // Teachers handle reports from the shared channel and the staff room from here.
+  const teacherBox = $('#panel-members .teacher-reports');
+  teacherBox.replaceChildren(...(isTeacher() ? [reportsCard()] : []));
+  $('[data-badge="members"]').textContent = isTeacher() && openReportsCount() ? openReportsCount() : '';
   grid.replaceChildren(...list.map((m) => h(`div.member.card.tilt${state.online.has(m.id) ? '.online' : ''}`,
     h('div.member-avatar', avatar(m, 56), h('span.orbit')),
     h('div.member-info',
@@ -138,6 +145,34 @@ function inviteCode() {
 }
 export { inviteCode };
 
+/** One invite code (students or teachers) with copy / (re)generate buttons. */
+function codeBlock(title, field, role, hint) {
+  const current = state.cls[field];
+  const codeEl = h(`div.invite-code${role === 'teacher' ? '.teacher' : ''}`, current || '— — — —');
+  const regenerate = async () => {
+    if (current && !(await confirmDialog('Nouveau code ?', 'L\'ancien code ne fonctionnera plus.', { danger: false }))) return;
+    try {
+      const code = inviteCode();
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'invites', code), { class_id: state.cls.id, role });
+      batch.update(classRef(state.cls.id), { [field]: code });
+      if (current) batch.delete(doc(db, 'invites', current));
+      await batch.commit();
+      state.cls[field] = code;
+      codeEl.textContent = code;
+      renderAdmin();
+    } catch (err) { toastError(err); }
+  };
+  return h('div.invite-block',
+    h('b', title), h('small.muted', hint), codeEl,
+    h('div.btn-row',
+      current ? h('button.btn.btn-primary.btn-sm', { onclick: async () => {
+        try { await navigator.clipboard.writeText(current); toast('Code copié 📋', 'success'); }
+        catch { toast('Copie impossible, sélectionne le code', 'error'); }
+      } }, h('span', 'Copier')) : null,
+      h(`button.btn.btn-sm.${current ? 'btn-ghost' : 'btn-primary'}`, { onclick: regenerate }, h('span', current ? 'Régénérer' : 'Créer le code'))));
+}
+
 function renderAdmin() {
   const root = $('#panel-admin .admin-grid');
   const pend = pending();
@@ -145,35 +180,18 @@ function renderAdmin() {
   $('[data-badge="admin"]').textContent = isDelegate() && toHandle ? toHandle : '';
   if (!isDelegate() || !state.cls) { root.replaceChildren(); return; }
 
-  const codeEl = h('div.invite-code', state.cls.invite_code);
   const invite = h('div.admin-card.card.tilt.span-2',
-    h('h3', icon('rocket'), ' Invitation'),
-    h('p.muted', 'Partage ce code à tes camarades. Chaque demande devra être validée ici.'),
-    codeEl,
-    h('div.btn-row',
-      h('button.btn.btn-primary.btn-sm', { onclick: async () => {
-        try { await navigator.clipboard.writeText(state.cls.invite_code); toast('Code copié 📋', 'success'); }
-        catch { toast('Copie impossible, sélectionne le code', 'error'); }
-      } }, h('span', 'Copier')),
-      h('button.btn.btn-ghost.btn-sm', { onclick: async () => {
-        if (!(await confirmDialog('Nouveau code ?', 'L\'ancien code ne fonctionnera plus.', { danger: false }))) return;
-        try {
-          const code = inviteCode();
-          const batch = writeBatch(db);
-          batch.set(doc(db, 'invites', code), { class_id: state.cls.id });
-          batch.update(classRef(state.cls.id), { invite_code: code });
-          batch.delete(doc(db, 'invites', state.cls.invite_code));
-          await batch.commit();
-          state.cls.invite_code = code;
-          codeEl.textContent = code;
-        } catch (err) { toastError(err); }
-      } }, 'Régénérer')));
+    h('h3', icon('rocket'), ' Invitations'),
+    h('p.muted', 'Chaque demande devra être validée ici. Vérifie en vrai l\'identité des professeurs avant de les accepter.'),
+    h('div.invite-grid',
+      codeBlock('Code élèves', 'invite_code', 'student', 'À partager avec tes camarades.'),
+      codeBlock('Code professeurs', 'teacher_code', 'teacher', 'À donner uniquement aux professeurs : ils accéderont à la salle des profs et au canal Profs & élèves.')));
 
   const pendingCard = h('div.admin-card.card.tilt.span-2',
     h('h3', icon('users'), ' Demandes en attente ', pend.length ? h('b.count', pend.length) : null),
     pend.length ? h('div.pending-list', pend.map((m) => h('div.pending-item',
       avatar(m, 40),
-      h('div.pi-info', h('b', m.display_name), h('small', '@' + m.username)),
+      h('div.pi-info', h('b', m.display_name), h('small', '@' + m.username), m.role === 'teacher' ? roleBadge(m) : null),
       h('button.btn.btn-sm.btn-ghost', { onclick: () => showFingerprint(m), title: 'Empreinte de sécurité', 'aria-label': 'Empreinte de sécurité' }, icon('lock')),
       h('button.btn.btn-sm.btn-ghost', { onclick: () => removeMember(m, false) }, 'Refuser'),
       h('button.btn.btn-sm.btn-primary', { onclick: (e) => approve(m, e.currentTarget) }, h('span', 'Accepter')))))
@@ -185,11 +203,13 @@ function renderAdmin() {
     others.length ? h('div.crew-list', others.map((m) => h('div.crew-item',
       avatar(m, 34),
       h('div.pi-info', h('b', m.display_name), roleBadge(m)),
-      m.role !== 'delegate'
+      m.role === 'student'
         ? h('button.btn.btn-sm.btn-ghost', { onclick: () => toggleTrusted(m), title: 'Les membres de confiance peuvent publier des cours pour l\'IA' },
           m.trusted ? 'Retirer confiance' : 'Confiance')
         : null,
-      h('button.btn.btn-sm.btn-ghost', { onclick: () => setRole(m) }, m.role === 'delegate' ? 'Retirer délégué' : 'Nommer délégué'),
+      m.role !== 'teacher'
+        ? h('button.btn.btn-sm.btn-ghost', { onclick: () => setRole(m) }, m.role === 'delegate' ? 'Retirer délégué' : 'Nommer délégué')
+        : null,
       h('button.btn.btn-sm.btn-danger', { onclick: () => removeMember(m, true) }, 'Exclure'))))
       : h('p.muted', 'Personne d\'autre pour l\'instant.'));
 
