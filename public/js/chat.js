@@ -513,6 +513,7 @@ async function sendText() {
 async function sendFile(original) {
   const kind = original.type.startsWith('video/') ? 'video' : original.type.startsWith('image/') ? 'image' : null;
   if (!kind) return toast('Seules les images, GIFs et vidéos sont acceptés', 'error');
+  if (!navigator.onLine) return toast('Hors ligne : les images et vidéos s\'envoient une fois le réseau revenu', 'error');
   const key = currentKey();
   if (!key) return toast('Clé de la classe pas encore reçue', 'error');
 

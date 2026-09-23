@@ -32,6 +32,10 @@
   <link rel="icon" href="img/logo.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
   <link rel="manifest" href="site.webmanifest">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Class Connect">
 
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
@@ -39,7 +43,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Inter:wght@400;600;700&display=swap">
   <link rel="stylesheet" href="css/style.css">
-  <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/","firebase/app":"https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js","firebase/auth":"https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js","firebase/firestore":"https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js","firebase/database":"https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js","firebase/app-check":"https://www.gstatic.com/firebasejs/12.19.0/firebase-app-check.js","firebase/analytics":"https://www.gstatic.com/firebasejs/12.19.0/firebase-analytics.js","firebase/ai":"https://www.gstatic.com/firebasejs/12.19.0/firebase-ai.js","katex":"https://cdn.jsdelivr.net/npm/katex@0.18.7/dist/katex.mjs","katex/auto-render":"https://cdn.jsdelivr.net/npm/katex@0.18.7/dist/contrib/auto-render.mjs"}}</script>
+  <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/","firebase/app":"https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js","firebase/auth":"https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js","firebase/firestore":"https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js","firebase/database":"https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js","firebase/app-check":"https://www.gstatic.com/firebasejs/12.19.0/firebase-app-check.js","firebase/analytics":"https://www.gstatic.com/firebasejs/12.19.0/firebase-analytics.js","firebase/ai":"https://www.gstatic.com/firebasejs/12.19.0/firebase-ai.js","firebase/messaging":"https://www.gstatic.com/firebasejs/12.19.0/firebase-messaging.js","katex":"https://cdn.jsdelivr.net/npm/katex@0.18.7/dist/katex.mjs","katex/auto-render":"https://cdn.jsdelivr.net/npm/katex@0.18.7/dist/contrib/auto-render.mjs"}}</script>
   <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js" crossorigin>
   <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js" crossorigin>
   <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js" crossorigin>
@@ -258,6 +262,7 @@
           <button class="nav-item delegate-only" data-panel="admin"><i class="ico ico-star" aria-hidden="true"></i><span>Délégué</span><b class="badge" data-badge="admin" aria-label="demandes en attente"></b></button>
         </div>
         <div class="side-footer">
+          <div class="offline-pill" data-offline role="status" hidden><i class="ico ico-lock" aria-hidden="true"></i><span>Hors ligne · envoi au retour du réseau</span></div>
           <div class="e2ee-status" data-e2ee><i class="ico ico-lock" aria-hidden="true"></i><span>Chiffrement actif</span></div>
           <div class="me-card">
             <div class="avatar" data-me-avatar></div>

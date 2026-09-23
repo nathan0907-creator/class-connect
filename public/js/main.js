@@ -1,6 +1,6 @@
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, getDocs, onSnapshot, query, where, collection, writeBatch, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { configured, auth, db, userRef, classRef, sub, plain, friendly, startAnalytics } from './fb.js';
+import { configured, auth, db, userRef, classRef, sub, plain, friendly, startAnalytics, clearOfflineData } from './fb.js';
 import { state, emit, on, isDelegate, isDeputy, isTeacher, isPrincipal, canPublish } from './state.js';
 import { unlockIdentity, storePrivateKey, loadPrivateKey, clearKeys } from './crypto.js';
 import { loadKeys, shareNeeded, currentKey } from './keyring.js';
@@ -15,7 +15,8 @@ import { initVotes, startProposals, stopProposals } from './votes.js';
 import { initMembers, inviteCode } from './members.js';
 import { startPresence, stopPresence } from './presence.js';
 import { initConsent } from './consent.js';
-import { initNotify } from './notify.js';
+import { initNotify, syncPush, stopPush } from './notify.js';
+import { initInstall } from './install.js';
 import { $, $$, h, toast, toastError, enableTilt, busy, avatar } from './ui.js';
 
 let authFlow = null;
@@ -106,8 +107,10 @@ function bindUnlock() {
 async function logout() {
   stopClass();
   stopMe();
+  await stopPush();
   try { await signOut(auth); } catch { /* offline */ }
   await clearKeys();
+  await clearOfflineData();
   location.reload();
 }
 
@@ -262,6 +265,7 @@ async function enterApp() {
     stopModeration();
   }
   show('app');
+  syncPush();
 }
 
 function startClass(cid) {
@@ -315,9 +319,22 @@ function stopClass() {
   liveClassId = null;
 }
 
+// ------------------------------------------------------------ offline
+function watchNetwork() {
+  const update = () => {
+    document.body.classList.toggle('offline', !navigator.onLine);
+    $('[data-offline]').hidden = navigator.onLine;
+  };
+  window.addEventListener('online', () => { update(); toast('De retour en ligne 🛰️ Les messages en attente partent.', 'success'); });
+  window.addEventListener('offline', () => { update(); toast('Hors ligne : tu peux relire la classe, tes messages partiront au retour du réseau.', 'info', 6000); });
+  update();
+}
+
 // ------------------------------------------------------------ boot
 async function boot() {
   initConsent({ onGranted: startAnalytics });
+  initInstall();
+  watchNetwork();
   if (captureInvite()) {
     setTimeout(() => toast('✉️ Invitation reçue ! Connecte-toi ou crée ton compte : ta demande pour rejoindre la classe partira automatiquement.', 'info', 9000), 800);
   }

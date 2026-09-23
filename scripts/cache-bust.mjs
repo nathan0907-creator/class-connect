@@ -28,4 +28,21 @@ for (const f of fs.readdirSync(path.join(root, 'js')).filter((n) => n.endsWith('
     .replace(/(import\(\s*')(\.\/[\w.-]+\.js)('\s*\))/g, `$1$2?v=${version}$3`));
 }
 
+// Service worker: new version (so browsers update it) + the files to keep for offline use.
+const swFile = path.join(root, 'sw.js');
+if (fs.existsSync(swFile)) {
+  const index = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  const cdn = [...new Set([...index.matchAll(/"(https:\/\/(?:www\.gstatic\.com|cdn\.jsdelivr\.net)\/[^"]+)"/g)].map((m) => m[1]))]
+    .filter((u) => !u.endsWith('/'));
+  const local = [
+    './', 'index.html', 'cgu.html', 'confidentialite.html', 'site.webmanifest', 'favicon.ico',
+    `css/style.css?v=${version}`,
+    ...fs.readdirSync(path.join(root, 'js')).filter((n) => n.endsWith('.js')).map((n) => `js/${n}?v=${version}`),
+    ...fs.readdirSync(path.join(root, 'img')).map((n) => `img/${n}`),
+  ];
+  rewrite(swFile, (s) => s
+    .replace("const VERSION = 'dev';", `const VERSION = '${version}';`)
+    .replace('const PRECACHE = [];', `const PRECACHE = ${JSON.stringify([...local, ...cdn])};`));
+}
+
 console.log(`cache-bust: version ${version}, ${changed} fichier(s) modifié(s)`);

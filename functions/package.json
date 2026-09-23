@@ -1,0 +1,13 @@
+{
+  "name": "class-connect-functions",
+  "private": true,
+  "description": "Notifications push de Class Connect (Firebase Cloud Functions)",
+  "main": "index.js",
+  "engines": {
+    "node": "22"
+  },
+  "dependencies": {
+    "firebase-admin": "^14.4.0",
+    "firebase-functions": "^7.4.0"
+  }
+}

@@ -1368,3 +1368,30 @@ body.is-teacher .student-only { display: none !important; }
 .reaction-pop button { width: 36px; height: 36px; border: 0; border-radius: 50%; background: none; font-size: 20px; cursor: pointer; transition: transform .15s var(--spring), background .15s; }
 .reaction-pop button:hover, .reaction-pop button:focus-visible { transform: scale(1.3) translateY(-3px); background: rgba(255, 255, 255, .08); }
 @media (max-width: 520px) { .reaction-pop { left: 0; } .msg.mine .reaction-pop { right: 0; } .reaction-pop button { width: 32px; height: 32px; font-size: 18px; } }
+
+/* ---------------------------------------------------------------- installable app & offline */
+.install-banner {
+  position: fixed; z-index: 90; left: 50%; top: max(14px, env(safe-area-inset-top)); width: min(560px, calc(100% - 32px));
+  display: flex; align-items: center; gap: 14px; padding: 12px 14px; border-radius: 18px;
+  background: rgba(16, 12, 42, .94); border: 1px solid rgba(150, 130, 255, .35);
+  box-shadow: 0 22px 50px -18px rgba(0, 0, 0, .95), 0 0 34px -12px rgba(124, 92, 255, .7);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  transform: translate(-50%, -140%) rotateX(40deg); opacity: 0; transition: transform .6s var(--spring), opacity .4s;
+}
+.install-banner.in { transform: translate(-50%, 0); opacity: 1; }
+.install-icon img { display: block; border-radius: 12px; animation: installFloat 3s ease-in-out infinite; }
+@keyframes installFloat { 50% { transform: translateY(-3px) rotate(-4deg); } }
+.install-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: 13px; color: var(--muted); }
+.install-text b { color: var(--text); font-size: 15px; }
+.install-actions { display: flex; gap: 6px; flex: none; }
+@media (max-width: 520px) {
+  .install-banner { flex-wrap: wrap; }
+  .install-text { flex-basis: calc(100% - 60px); }
+  .install-actions { width: 100%; justify-content: flex-end; }
+}
+.offline-pill {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 8px; padding: 7px 10px; border-radius: 10px; font-size: 12px; font-weight: 600;
+  color: var(--gold); background: rgba(255, 207, 107, .08); border: 1px solid rgba(255, 207, 107, .3);
+}
+.offline-pill[hidden] { display: none; }
+@media (prefers-reduced-motion: reduce) { .install-banner { transition: opacity .2s; } .install-icon img { animation: none; } }

@@ -1,6 +1,9 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, doc, collection } from 'firebase/firestore';
+import {
+  getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, terminate, clearIndexedDbPersistence,
+  doc, collection,
+} from 'firebase/firestore';
 import { getDatabase } from 'firebase/database';
 import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
 import { FIREBASE_CONFIG, RECAPTCHA_SITE_KEY } from './config.js';
@@ -15,7 +18,18 @@ if (app && RECAPTCHA_SITE_KEY) {
 }
 
 export const auth = app ? getAuth(app) : null;
-export const db = app ? getFirestore(app) : null;
+// Offline mode: Firestore keeps what was already loaded (messages stay encrypted on the device) and queues what
+// is sent without network. Falls back to the memory cache where IndexedDB is unavailable (private browsing…).
+function makeDb() {
+  try { return initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) }); }
+  catch { return getFirestore(app); }
+}
+export const db = app ? makeDb() : null;
+/** Logout: erase the offline copy of the class from this device. */
+export async function clearOfflineData() {
+  if (!db) return;
+  try { await terminate(db); await clearIndexedDbPersistence(db); } catch { /* another tab still uses it */ }
+}
 export const rtdb = app && FIREBASE_CONFIG.databaseURL ? getDatabase(app) : null;
 
 /** Google Analytics (via Firebase) — only called after the visitor accepts cookies. */

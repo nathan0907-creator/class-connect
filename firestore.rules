@@ -82,6 +82,19 @@ service cloud.firestore {
       allow delete: if signedIn() && resource.data.uid == uid();
     }
 
+    // ---------------------------------------------------------------- push notification tokens (one per device)
+    // Only read by the "pushOnMessage" Cloud Function (admin access); never readable from the site.
+    match /push_tokens/{id} {
+      allow read: if false;
+      allow create, update: if signedIn()
+        && (resource == null || resource.data.uid == uid())
+        && request.resource.data.keys().hasOnly(['uid', 'token', 'updated_at'])
+        && request.resource.data.uid == uid()
+        && str(request.resource.data.token, 20, 4096)
+        && request.resource.data.updated_at == request.time;
+      allow delete: if signedIn() && resource.data.uid == uid();
+    }
+
     // ---------------------------------------------------------------- private keys (encrypted with the password)
     match /private/{userId} {
       allow read: if signedIn() && userId == uid();
