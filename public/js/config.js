@@ -7,16 +7,16 @@
 //  sur App Check et sur le chiffrement de bout en bout.
 // ──────────────────────────────────────────────────────────────────────
 export const FIREBASE_CONFIG = {
-  apiKey: '',
-  authDomain: '',
-  projectId: '',
-  storageBucket: '',
-  messagingSenderId: '',
-  appId: '',
-  // Optionnel — statistiques (Google Analytics), chargées uniquement après accord cookies.
-  measurementId: '',
-  // Optionnel — présence « en ligne » et « X écrit… » (Realtime Database).
-  databaseURL: '',
+  apiKey: 'AIzaSyA5mzVaTQYjh71Zf8D0PoFwfsYwViiFoE0',
+  authDomain: 'class-connectv3.firebaseapp.com',
+  projectId: 'class-connectv3',
+  storageBucket: 'class-connectv3.firebasestorage.app',
+  messagingSenderId: '595535956311',
+  appId: '1:595535956311:web:aac14184ed7a3f44249612',
+  // Statistiques (Google Analytics), chargées uniquement après accord cookies.
+  measurementId: 'G-731WCVC28G',
+  // Présence « en ligne » et « X écrit… » (Realtime Database).
+  databaseURL: 'https://class-connectv3-default-rtdb.europe-west1.firebasedatabase.app',
 };
 
 // Optionnel mais recommandé — anti-spam : clé de site reCAPTCHA v3 pour Firebase App Check.
