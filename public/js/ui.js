@@ -1,5 +1,6 @@
 // Small DOM toolkit: element builder, toasts, modals, 3D tilt, formatting.
 import { friendly } from './fb.js';
+import { state } from './state.js';
 
 export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -40,10 +41,17 @@ function append(el, children) {
 
 export const icon = (name) => h(`i.ico.ico-${name}`);
 
-export function avatar(profile, size = 36) {
+const PHOTO_RE = /^data:image\/(webp|jpeg|png);base64,[A-Za-z0-9+/=]+$/;
+/** Round avatar: the member's (decrypted) profile photo, or their initials. `photo` overrides it (profile editor preview). */
+export function avatar(profile, size = 36, photo = undefined) {
   const name = profile?.display_name || '?';
   const initials = name.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
-  return h('div.avatar', { style: { '--c': profile?.color || '#7c5cff', width: size + 'px', height: size + 'px', fontSize: size * 0.38 + 'px' } }, initials);
+  const src = photo !== undefined ? photo : state.profiles?.get(profile?.id)?.photo;
+  const style = { '--c': profile?.color || '#7c5cff', width: size + 'px', height: size + 'px', fontSize: size * 0.38 + 'px' };
+  if (src && PHOTO_RE.test(src)) {
+    return h('div.avatar.has-photo', { style: { ...style, backgroundImage: `url("${src}")` }, role: 'img', 'aria-label': name });
+  }
+  return h('div.avatar', { style }, initials);
 }
 
 // ---- toasts

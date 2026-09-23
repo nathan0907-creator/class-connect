@@ -310,6 +310,29 @@ service cloud.firestore {
         allow delete: if isCouncilStaff();
       }
 
+      // Profiles, end-to-end encrypted with the class key.
+      function validProfileDoc(d, max) {
+        return d.keys().hasOnly(['epoch', 'iv', 'ciphertext', 'updated_by', 'updated_at'])
+          && d.epoch == get(classPath(cid)).data.key_epoch
+          && d.updated_by == uid() && d.updated_at == request.time
+          && str(d.iv, 10, 32) && str(d.ciphertext, 10, max);
+      }
+      // Photo + bio: visible to the whole class, written by the person only.
+      match /profiles/{userId} {
+        allow read: if isActiveMember(cid);
+        allow create, update: if isActiveMember(cid) && userId == uid() && validProfileDoc(request.resource.data, 200000);
+        allow delete: if isActiveMember(cid) && (userId == uid() || isDelegate(cid));
+      }
+      // Real name ("vrai nom"): seen and set by the person, the teachers and the delegates (class council).
+      match /names/{userId} {
+        function namesStaff() { return isTeacher(cid) || isDelegate(cid); }
+        allow read: if (isActiveMember(cid) && userId == uid()) || namesStaff();
+        allow create, update: if ((isActiveMember(cid) && userId == uid())
+            || (namesStaff() && get(userPath(userId)).data.class_id == cid))
+          && validProfileDoc(request.resource.data, 2000);
+        allow delete: if (isActiveMember(cid) && userId == uid()) || namesStaff();
+      }
+
       // Encrypted media, split into ~900 KB chunks.
       match /chunks/{chunkId} {
         allow read: if isActiveMember(cid);

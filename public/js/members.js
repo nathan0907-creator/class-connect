@@ -6,12 +6,15 @@ import { fingerprint, deriveAuthKey, clearKeys } from './crypto.js';
 import { sharesFor, shareRefFor, rotateKey } from './keyring.js';
 import { reportsCard, openReportsCount } from './moderation.js';
 import { showInvite, shareInvite } from './invite.js';
+import { realName, sortName, showProfile, openProfileEditor, openRealNameEditor, eraseProfileOps } from './profiles.js';
 import { $, $$, h, icon, avatar, modal, toast, toastError, confirmDialog, enableTilt, busy } from './ui.js';
 
 export function initMembers() {
   $$('[data-action="leave"]').forEach((b) => b.addEventListener('click', leave));
   $$('[data-action="delete-account"]').forEach((b) => b.addEventListener('click', deleteAccount));
   on('members', () => { renderMembers(); renderAdmin(); });
+  on('profiles', () => { renderMembers(); renderAdmin(); });
+  $$('[data-action="edit-profile"]').forEach((b) => b.addEventListener('click', openProfileEditor));
   on('presence', renderMembers);
   on('keys', renderAdmin);
   on('reports', () => { renderAdmin(); renderMembers(); });
@@ -35,6 +38,7 @@ export async function leave() {
     if (state.me.status === 'active') {
       const mine = await getDocs(query(sub(state.cls.id, 'shares'), where('user_id', '==', state.me.id)));
       mine.docs.forEach((d) => batch.delete(d.ref));
+      eraseProfileOps(batch, state.cls.id, state.me.id);
     }
     batch.update(userRef(state.me.id), { class_id: null, status: 'none', role: 'student', trusted: false, principal: false });
     await batch.commit();
@@ -68,6 +72,7 @@ function deleteAccount() {
           if (state.me.status === 'active') {
             const mine = await getDocs(query(sub(state.cls.id, 'shares'), where('user_id', '==', state.me.id)));
             mine.docs.forEach((d) => batch.delete(d.ref));
+            eraseProfileOps(batch, state.cls.id, state.me.id);
           }
           batch.update(userRef(state.me.id), { class_id: null, status: 'none', role: 'student', trusted: false, principal: false });
           await batch.commit();
@@ -108,18 +113,27 @@ const RANK = { teacher: 0, delegate: 1, deputy: 2, student: 3 };
 
 function renderMembers() {
   const grid = $('#panel-members .member-grid');
-  const list = active().sort((a, b) => RANK[a.role] - RANK[b.role] || a.display_name.localeCompare(b.display_name));
+  const list = active().sort((a, b) => RANK[a.role] - RANK[b.role] || sortName(a).localeCompare(sortName(b), 'fr'));
+  const staffView = isDelegate() || isTeacher();
   // Teachers handle reports from the shared channel and the staff room from here.
   const teacherBox = $('#panel-members .teacher-reports');
   teacherBox.replaceChildren(...(isTeacher() ? [reportsCard()] : []));
   $('[data-badge="members"]').textContent = isTeacher() && openReportsCount() ? openReportsCount() : '';
-  grid.replaceChildren(...list.map((m) => h(`div.member.card.tilt${state.online.has(m.id) ? '.online' : ''}`,
-    h('div.member-avatar', avatar(m, 56), h('span.orbit')),
-    h('div.member-info',
-      h('b', m.display_name, m.id === state.me.id ? h('small.you', ' (toi)') : null),
-      h('small', '@' + m.username),
-      roleBadge(m)),
-    h('button.btn.btn-sm.btn-ghost', { onclick: () => showFingerprint(m) }, icon('lock'), h('span', 'Empreinte')))));
+  grid.replaceChildren(...list.map((m) => {
+    const bio = state.profiles.get(m.id)?.bio;
+    const rn = (staffView || m.id === state.me.id) ? realName(m.id) : '';
+    return h(`div.member.card.tilt${state.online.has(m.id) ? '.online' : ''}`,
+      h('button.member-avatar', { type: 'button', title: 'Voir le profil', 'aria-label': `Profil de ${m.display_name}`, onclick: () => showProfile(m) }, avatar(m, 56), h('span.orbit')),
+      h('div.member-info',
+        h('b', m.display_name, m.id === state.me.id ? h('small.you', ' (toi)') : null),
+        h('small', '@' + m.username, rn ? h('span.real-name', ' · ', rn) : null),
+        roleBadge(m),
+        bio ? h('p.member-bio', bio) : null),
+      h('div.member-actions',
+        m.id === state.me.id ? h('button.btn.btn-sm.btn-primary', { onclick: openProfileEditor }, icon('edit'), h('span', 'Mon profil')) : null,
+        staffView && m.id !== state.me.id ? h('button.btn.btn-sm.btn-ghost', { onclick: () => openRealNameEditor(m), title: 'Vrai nom (conseil de classe)' }, icon('edit'), h('span', rn ? 'Vrai nom' : 'Ajouter le nom')) : null,
+        h('button.btn.btn-sm.btn-ghost', { onclick: () => showFingerprint(m) }, icon('lock'), h('span', 'Empreinte'))));
+  }));
   enableTilt(grid);
 
   const onlineMembers = list.filter((m) => state.online.has(m.id));
@@ -274,6 +288,7 @@ async function removeMember(m, wasActive) {
     if (wasActive) {
       const theirs = await getDocs(query(sub(state.cls.id, 'shares'), where('user_id', '==', m.id)));
       theirs.docs.forEach((d) => batch.delete(d.ref));
+      eraseProfileOps(batch, state.cls.id, m.id);
     }
     batch.update(userRef(m.id), { class_id: null, status: 'none', role: 'student', trusted: false, principal: false });
     await batch.commit();

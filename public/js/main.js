@@ -18,6 +18,7 @@ import { initConsent } from './consent.js';
 import { initNotify, syncPush, stopPush } from './notify.js';
 import { initInstall } from './install.js';
 import { initGuide } from './guide.js';
+import { initProfiles, startProfiles, stopProfiles } from './profiles.js';
 import { $, $$, h, toast, toastError, enableTilt, busy, avatar } from './ui.js';
 
 let authFlow = null;
@@ -259,6 +260,7 @@ async function enterApp() {
   shareNeeded();
   // Rights may have changed (e.g. promoted to delegate): refresh the role-dependent listeners.
   startCouncil();
+  startProfiles();
   if (isDelegate() || isTeacher()) {
     startModeration();
     purgeExpired().catch(() => {});
@@ -317,6 +319,7 @@ function stopClass() {
   stopModeration();
   stopStudy();
   stopCouncil();
+  stopProfiles();
   liveClassId = null;
 }
 
@@ -371,12 +374,14 @@ async function boot() {
   initMembers();
   initStudy();
   initCouncil();
+  initProfiles();
   initNotify();
 
   $$('.nav-item').forEach((b) => b.addEventListener('click', () => showPanel(b.dataset.panel)));
   on('goto', showPanel);
   on('reroute', route);
   on('keys', updateE2EEStatus);
+  on('profiles', fillIdentity);
 
   onAuthStateChanged(auth, () => {
     if (state.authFlowBusy) return;

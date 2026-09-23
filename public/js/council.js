@@ -6,6 +6,11 @@ import { sub, plain } from './fb.js';
 import { state, on, isTeacher, isDelegate } from './state.js';
 import { generateClassKey, wrapClassKey, unwrapClassKey, encryptJSON, decryptJSON } from './crypto.js';
 import { $, h, icon, avatar, toast, toastError, confirmDialog, busy } from './ui.js';
+import { realName, sortName } from './profiles.js';
+
+/** Real name first (easier to find when typing the results), pseudo second. */
+const label = (m) => realName(m.id) || m.display_name;
+const byName = (a, b) => sortName(a).localeCompare(sortName(b), 'fr');
 
 export const PERIODS = { T1: '1er trimestre', T2: '2e trimestre', T3: '3e trimestre' };
 /** Records saved before the rename still say "Compliments": show them as "Tableau d'honneur". */
@@ -31,6 +36,8 @@ export function initCouncil() {
   root = $('#panel-council');
   on('members', () => { render(); if (isStaff()) rewrapMissing(); });
   on('me', render);
+  // Real names arrive (decrypted) after the members: refresh, unless results are being typed.
+  on('profiles', () => { if (!root.querySelector('.council-form')?.contains(document.activeElement)) render(); });
 }
 
 export function startCouncil() {
@@ -132,7 +139,7 @@ function studentView() {
 const fmtAvg = (n) => (n == null || n === '' ? '—' : Number(n).toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 2 }));
 
 function teacherView() {
-  const list = students().sort((a, b) => a.display_name.localeCompare(b.display_name, 'fr'));
+  const list = students().sort(byName);
   const recFor = (m) => records.get(recordId(period, m.id));
   const done = list.filter((m) => recFor(m)?.data);
   const avgs = done.map((m) => Number(recFor(m).data.average)).filter((n) => !Number.isNaN(n));
@@ -141,14 +148,16 @@ function teacherView() {
   const periodSel = h('select', { 'aria-label': 'Période', onchange: (e) => { period = e.target.value; render(); } },
     Object.entries(PERIODS).map(([v, l]) => h('option', { value: v, selected: v === period }, l)));
   const searchInput = h('input.council-search', {
-    type: 'search', placeholder: 'Rechercher un élève…', value: search, 'aria-label': 'Rechercher un élève',
+    type: 'search', placeholder: 'Rechercher (nom, prénom ou pseudo)…', value: search, 'aria-label': 'Rechercher un élève',
     oninput: (e) => { search = e.target.value; renderList(); },
   });
   const listEl = h('div.council-list', { role: 'listbox', 'aria-label': 'Élèves' });
 
   function renderList() {
     const q = search.trim().toLowerCase();
-    const shown = list.filter((m) => !q || m.display_name.toLowerCase().includes(q) || m.username.includes(q));
+    const norm = (t) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    const nq = norm(q);
+    const shown = list.filter((m) => !q || [m.display_name, m.username, realName(m.id)].some((t) => t && norm(t).includes(nq)));
     listEl.replaceChildren(...shown.map((m) => {
       const r = recFor(m);
       return h(`button.council-item${m.id === selectedId ? '.active' : ''}`, {
@@ -156,7 +165,7 @@ function teacherView() {
         onclick: () => { selectedId = m.id; render(); },
       },
       avatar(m, 32),
-      h('span.ci-name', h('b', m.display_name), h('small', '@' + m.username)),
+      h('span.ci-name', h('b', label(m)), h('small', realName(m.id) ? `@${m.username} · ${m.display_name}` : '@' + m.username)),
       r?.data ? h('span.ci-avg', fmtAvg(r.data.average)) : h('span.ci-todo', 'à saisir'));
     }));
     if (!shown.length) listEl.append(h('p.muted.small', q ? 'Aucun élève ne correspond.' : 'Aucun élève dans la classe.'));
@@ -195,17 +204,17 @@ function editor(student, recFor) {
     busy(save, true);
     try {
       await saveRecord(student.id, {
-        v: 1, name: student.display_name, average: Math.round(avg * 100) / 100, mention: mention.value,
+        v: 1, name: label(student), average: Math.round(avg * 100) / 100, mention: mention.value,
         appreciation: appreciation.value.trim(), author: state.me.display_name, period,
       });
       toast(`Résultats de ${student.display_name} enregistrés 🔐`, 'success');
-      const next = students().sort((a, b) => a.display_name.localeCompare(b.display_name, 'fr'))
+      const next = students().sort(byName)
         .find((m) => !records.get(recordId(period, m.id))?.data && m.id !== student.id);
       if (next) selectedId = next.id;
     } catch (err) { toastError(err); }
     finally { busy(save, false); }
   } },
-  h('div.cf-head', avatar(student, 48), h('div', h('h3', student.display_name), h('small.muted', `@${student.username} · ${PERIODS[period]}`))),
+  h('div.cf-head', avatar(student, 48), h('div', h('h3', label(student)), h('small.muted', `@${student.username}${realName(student.id) ? ' · ' + student.display_name : ''} · ${PERIODS[period]}`))),
   h('div.row', h('label.field', h('span', 'Moyenne générale (/20)'), average), h('label.field', h('span', 'Mention'), mention)),
   h('label.field', h('span', 'Appréciation'), appreciation), counter,
   h('p.hint', icon('lock'), ` Chiffré pour ${student.display_name}, les professeurs et les délégués uniquement.`),

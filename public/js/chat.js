@@ -96,6 +96,7 @@ export function initChat() {
   on('typing', ({ id, channel: ch }) => { if (ch === channel) showTyping(id); });
   on('keys', redecryptFailed);
   on('members', refreshAuthors);
+  on('profiles', refreshAuthors);
   on('panel', (name) => { if (name === 'chat') { setUnread(0); scrollToBottom(); } });
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden && root.classList.contains('active')) setUnread(0);
@@ -303,6 +304,7 @@ function refreshAuthors() {
     const b = el.querySelector('.msg-head b');
     b.textContent = author.display_name;
     b.style.color = author.color;
+    el.querySelector('.msg-avatar')?.replaceChildren(avatar(author, 36));
   }
 }
 
