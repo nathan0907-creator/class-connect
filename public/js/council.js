@@ -1,9 +1,9 @@
 // Class council ("conseil de classe") results: average, appraisal and mention per student and period.
-// Every record has its own AES key, wrapped (ECDH) for the student concerned and for each teacher only,
-// so neither other students, delegates nor the server can read anyone's results.
+// Every record has its own AES key, wrapped (ECDH) for the student concerned and for each teacher and delegate only,
+// so neither other students nor the server can read anyone's results.
 import { onSnapshot, query, where, doc, setDoc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { sub, plain } from './fb.js';
-import { state, on, isTeacher } from './state.js';
+import { state, on, isTeacher, isDelegate } from './state.js';
 import { generateClassKey, wrapClassKey, unwrapClassKey, encryptJSON, decryptJSON } from './crypto.js';
 import { $, h, icon, avatar, toast, toastError, confirmDialog, busy } from './ui.js';
 
@@ -21,11 +21,13 @@ const recordId = (p, studentId) => `${p}_${studentId}`;
 const aad = (id) => `council|${state.cls.id}|${id}`;
 const wrapInfo = (id) => `council:${id}`;
 const students = () => [...state.members.values()].filter((m) => m.status === 'active' && m.role !== 'teacher');
-const teachers = () => [...state.members.values()].filter((m) => m.status === 'active' && m.role === 'teacher');
+/** Teachers and delegates enter and read every result. */
+const staff = () => [...state.members.values()].filter((m) => m.status === 'active' && ['teacher', 'delegate'].includes(m.role));
+const isStaff = () => isTeacher() || isDelegate();
 
 export function initCouncil() {
   root = $('#panel-council');
-  on('members', () => { render(); if (isTeacher()) rewrapMissing(); });
+  on('members', () => { render(); if (isStaff()) rewrapMissing(); });
   on('me', render);
 }
 
@@ -33,7 +35,7 @@ export function startCouncil() {
   stopCouncil();
   const col = sub(state.cls.id, 'council');
   // Students may only query their own records (enforced by the rules).
-  const q = isTeacher() ? col : query(col, where('student_id', '==', state.me.id));
+  const q = isStaff() ? col : query(col, where('student_id', '==', state.me.id));
   unsub = onSnapshot(q, async (snap) => {
     const next = new Map();
     for (const d of snap.docs) {
@@ -43,7 +45,7 @@ export function startCouncil() {
     }
     records = next;
     render();
-    if (isTeacher()) rewrapMissing();
+    if (isStaff()) rewrapMissing();
   }, toastError);
 }
 export function stopCouncil() { unsub?.(); unsub = null; records = new Map(); selectedId = null; }
@@ -66,11 +68,11 @@ async function wrapFor(key, id, member) {
   return { iv: w.iv, wrapped: w.wrapped, from_public_key: state.me.public_key, to_public_key: member.public_key };
 }
 
-/** Recipients of a record: the student concerned + every teacher of the class. */
+/** Recipients of a record: the student concerned + every teacher and delegate of the class. */
 async function recipientsKeys(key, id, studentId) {
   const keys = {};
   const student = state.members.get(studentId);
-  for (const m of [student, ...teachers()].filter(Boolean)) keys[m.id] = await wrapFor(key, id, m);
+  for (const m of [student, ...staff()].filter(Boolean)) keys[m.id] = await wrapFor(key, id, m);
   return keys;
 }
 
@@ -86,14 +88,14 @@ async function saveRecord(studentId, payload) {
 }
 
 let rewrapping = false;
-/** A new teacher (or a student whose keys were reset) gets access to existing records automatically. */
+/** A new teacher or delegate (or a student whose keys were reset) gets access to existing records automatically. */
 async function rewrapMissing() {
   if (rewrapping || !records.size) return;
   rewrapping = true;
   try {
     for (const [id, rec] of records) {
       if (!rec.key) continue;
-      const needed = [state.members.get(rec.row.student_id), ...teachers()].filter(Boolean)
+      const needed = [state.members.get(rec.row.student_id), ...staff()].filter(Boolean)
         .filter((m) => rec.row.keys?.[m.id]?.to_public_key !== m.public_key);
       if (!needed.length) continue;
       const keys = { ...rec.row.keys };
@@ -106,14 +108,14 @@ async function rewrapMissing() {
 // ------------------------------------------------------------ rendering
 function render() {
   if (!root || !state.me) return;
-  $('.council-body', root).replaceChildren(isTeacher() ? teacherView() : studentView());
+  $('.council-body', root).replaceChildren(isStaff() ? teacherView() : studentView());
 }
 
 function studentView() {
   const mine = [...records.values()].filter((r) => r.row.student_id === state.me.id)
     .sort((a, b) => Object.keys(PERIODS).indexOf(a.row.period) - Object.keys(PERIODS).indexOf(b.row.period));
   if (!mine.length) {
-    return h('div.empty', icon('award'), h('p', 'Aucun résultat pour l\'instant. Tes professeurs les saisiront après le conseil de classe.'));
+    return h('div.empty', icon('award'), h('p', 'Aucun résultat pour l\'instant. Tes professeurs ou tes délégués les saisiront après le conseil de classe.'));
   }
   return h('div.council-cards', mine.map((r) => r.data
     ? h('article.council-card.card',
@@ -121,8 +123,8 @@ function studentView() {
         h('div.cc-average', h('span', fmtAvg(r.data.average)), h('small', '/20')),
         r.data.appreciation ? h('blockquote', r.data.appreciation) : h('p.muted', 'Pas d\'appréciation.'),
         h('small.muted', `Saisi par ${r.data.author || 'un professeur'}`))
-    : h('article.council-card.card', h('b', PERIODS[r.row.period]), h('p.muted', icon('lock'), ' Résultat chiffré : un professeur doit te le retransmettre.'))),
-  h('p.hint', icon('lock'), ' Tes résultats sont chiffrés de bout en bout : seuls toi et tes professeurs pouvez les lire.'));
+    : h('article.council-card.card', h('b', PERIODS[r.row.period]), h('p.muted', icon('lock'), ' Résultat chiffré : un professeur ou un délégué doit te le retransmettre (il suffit qu\'il ouvre cet onglet).'))),
+  h('p.hint', icon('lock'), ' Tes résultats sont chiffrés de bout en bout : seuls toi, tes professeurs et les délégués pouvez les lire.'));
 }
 
 const fmtAvg = (n) => (n == null || n === '' ? '—' : Number(n).toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 2 }));
@@ -204,7 +206,7 @@ function editor(student, recFor) {
   h('div.cf-head', avatar(student, 48), h('div', h('h3', student.display_name), h('small.muted', `@${student.username} · ${PERIODS[period]}`))),
   h('div.row', h('label.field', h('span', 'Moyenne générale (/20)'), average), h('label.field', h('span', 'Mention'), mention)),
   h('label.field', h('span', 'Appréciation'), appreciation), counter,
-  h('p.hint', icon('lock'), ` Chiffré pour ${student.display_name} et les professeurs uniquement.`),
+  h('p.hint', icon('lock'), ` Chiffré pour ${student.display_name}, les professeurs et les délégués uniquement.`),
   h('div.btn-row',
     save,
     rec ? h('button.btn.btn-ghost', { type: 'button', onclick: async () => {

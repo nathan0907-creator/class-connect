@@ -272,9 +272,10 @@ service cloud.firestore {
         allow delete: if isActiveMember(cid) && (resource.data.uploader_id == uid() || isDelegate(cid));
       }
 
-      // Class council results. Each record is end-to-end encrypted for the student concerned and the teachers only:
-      // other students, delegates and the server cannot read it. Only teachers write.
+      // Class council results. Each record is end-to-end encrypted for the student concerned, the teachers and the
+      // delegates only: other students and the server cannot read it. Teachers and delegates write.
       match /council/{rid} {
+        function isCouncilStaff() { return isTeacher(cid) || isDelegate(cid); }
         function validRecord(d) {
           return d.keys().hasOnly(['student_id', 'period', 'author_id', 'updated_at', 'iv', 'ciphertext', 'keys'])
             && d.student_id is string && d.period in ['T1', 'T2', 'T3', 'S1', 'S2']
@@ -285,9 +286,9 @@ service cloud.firestore {
             && get(userPath(d.student_id)).data.class_id == cid
             && get(userPath(d.student_id)).data.role != 'teacher';
         }
-        allow read: if isTeacher(cid) || (isActiveMember(cid) && resource.data.student_id == uid());
-        allow create, update: if isTeacher(cid) && validRecord(request.resource.data);
-        allow delete: if isTeacher(cid);
+        allow read: if isCouncilStaff() || (isActiveMember(cid) && resource.data.student_id == uid());
+        allow create, update: if isCouncilStaff() && validRecord(request.resource.data);
+        allow delete: if isCouncilStaff();
       }
 
       // Encrypted media, split into ~900 KB chunks.

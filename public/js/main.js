@@ -230,6 +230,8 @@ async function enterApp() {
   await loadKeys();
   updateE2EEStatus();
   shareNeeded();
+  // Rights may have changed (e.g. promoted to delegate): refresh the role-dependent listeners.
+  startCouncil();
   if (isDelegate() || isTeacher()) {
     startModeration();
     purgeExpired().catch(() => {});
