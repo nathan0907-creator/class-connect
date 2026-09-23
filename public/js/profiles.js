@@ -123,6 +123,41 @@ async function photoFrom(file) {
   return webp.startsWith('data:image/webp') ? webp : canvas.toDataURL('image/jpeg', 0.85);
 }
 
+// ------------------------------------------------------------ funny avatars (drawn once, then saved like a photo)
+const FUN_AVATARS = [
+  ['👽', '#3dffa8', '#0b6b4f'], ['🤖', '#9fb8ff', '#3a4ee8'], ['👾', '#c77dff', '#4a1c8f'], ['🚀', '#7ae6ff', '#1f4fd6'],
+  ['🛸', '#5fd4ff', '#2b1c6b'], ['🦄', '#ff9ee8', '#8f3aff'], ['🐸', '#b4ff5c', '#1f8a3a'], ['🐙', '#ff8a8a', '#8f1c4a'],
+  ['🦖', '#8aff9e', '#0f6b5a'], ['🐧', '#bfe8ff', '#1c3a6b'], ['🦊', '#ffcf6b', '#d6531f'], ['🐼', '#e8e8ff', '#3a3a5c'],
+  ['🐵', '#ffd6a5', '#8f5a1c'], ['🦥', '#e0c9a6', '#5c4a2e'], ['🐌', '#fff1a0', '#8f7a1c'], ['🦆', '#ffe066', '#1f8a8a'],
+  ['🐢', '#a0ffd0', '#1c6b4f'], ['👻', '#f0f0ff', '#6c4cff'], ['🥑', '#c6ff6b', '#3a6b1c'], ['🍕', '#ffb547', '#b3261e'],
+  ['🌮', '#ffd166', '#e0457b'], ['😎', '#ffe066', '#ff7a1c'], ['🤡', '#ff9ee8', '#ff4d6d'], ['💩', '#ffcf6b', '#6b3a1c'],
+];
+
+/** Emoji on a round gradient with a few stars, as a small image (same format as a photo). */
+function funAvatar([emoji, light, dark]) {
+  const S = PHOTO_PX;
+  const canvas = Object.assign(document.createElement('canvas'), { width: S, height: S });
+  const ctx = canvas.getContext('2d');
+  const g = ctx.createRadialGradient(S * 0.35, S * 0.3, S * 0.05, S / 2, S / 2, S * 0.75);
+  g.addColorStop(0, light);
+  g.addColorStop(1, dark);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, S, S);
+  ctx.fillStyle = 'rgba(255, 255, 255, .75)';
+  for (const [x, y, r] of [[0.16, 0.2, 3], [0.82, 0.16, 2.5], [0.88, 0.7, 2], [0.12, 0.78, 2.5], [0.7, 0.88, 1.5]]) {
+    ctx.beginPath(); ctx.arc(S * x, S * y, r * (S / 96), 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.font = `${Math.round(S * 0.58)}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.shadowColor = 'rgba(0, 0, 0, .35)';
+  ctx.shadowBlur = S * 0.05;
+  ctx.shadowOffsetY = S * 0.02;
+  ctx.fillText(emoji, S / 2, S * 0.55);
+  const webp = canvas.toDataURL('image/webp', 0.85);
+  return webp.startsWith('data:image/webp') ? webp : canvas.toDataURL('image/png');
+}
+
 // ------------------------------------------------------------ editors
 export function openProfileEditor() {
   const me = state.me;
@@ -142,6 +177,16 @@ export function openProfileEditor() {
   } });
   const removeBtn = h('button.btn.btn-ghost.btn-sm', { type: 'button', onclick: () => { photo = ''; renderPreview(); } }, 'Retirer');
 
+  const funGrid = h('div.fun-avatars', { role: 'listbox', 'aria-label': 'Avatars rigolos' }, FUN_AVATARS.map((a) => h('button.fun-avatar', {
+    type: 'button', role: 'option', title: 'Choisir cet avatar', 'aria-label': `Avatar ${a[0]}`,
+    style: { background: `radial-gradient(circle at 35% 30%, ${a[1]}, ${a[2]})` },
+    onclick: (e) => {
+      photo = funAvatar(a);
+      renderPreview();
+      funGrid.querySelectorAll('.fun-avatar').forEach((b) => b.classList.toggle('active', b === e.currentTarget));
+    },
+  }, a[0])));
+
   const displayName = h('input', { value: me.display_name, maxLength: 40, required: true, 'aria-label': 'Pseudo affiché' });
   const bio = h('textarea', { rows: 3, maxLength: BIO_MAX, placeholder: 'Ex. Fan d\'astronomie, capitaine de l\'équipe de hand 🤾', 'aria-label': 'Bio' });
   bio.value = current.bio || '';
@@ -156,6 +201,7 @@ export function openProfileEditor() {
     h('div.profile-photo-row', preview,
       h('div.btn-row', h('button.btn.btn-primary.btn-sm', { type: 'button', onclick: () => fileInput.click() }, icon('image'), h('span', 'Choisir une photo')), removeBtn),
       fileInput),
+    h('div.field', h('span', 'Ou choisis un avatar rigolo'), funGrid),
     h('label.field', h('span', 'Pseudo affiché'), displayName),
     h('label.field', h('span', 'Statut / humeur'), status), presets,
     h('label.field', h('span', 'Bio'), bio), bioCount,
