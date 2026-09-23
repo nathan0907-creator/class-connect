@@ -39,10 +39,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Inter:wght@400;600;700&display=swap">
   <link rel="stylesheet" href="css/style.css">
-  <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/","firebase/app":"https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js","firebase/auth":"https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js","firebase/firestore":"https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js","firebase/database":"https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js","firebase/app-check":"https://www.gstatic.com/firebasejs/10.14.1/firebase-app-check.js","firebase/analytics":"https://www.gstatic.com/firebasejs/10.14.1/firebase-analytics.js"}}</script>
-  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
-  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
-  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+  <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/","firebase/app":"https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js","firebase/auth":"https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js","firebase/firestore":"https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js","firebase/database":"https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js","firebase/app-check":"https://www.gstatic.com/firebasejs/12.19.0/firebase-app-check.js","firebase/analytics":"https://www.gstatic.com/firebasejs/12.19.0/firebase-analytics.js","firebase/ai":"https://www.gstatic.com/firebasejs/12.19.0/firebase-ai.js","katex":"https://cdn.jsdelivr.net/npm/katex@0.18.7/dist/katex.mjs","katex/auto-render":"https://cdn.jsdelivr.net/npm/katex@0.18.7/dist/contrib/auto-render.mjs"}}</script>
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js" crossorigin>
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js" crossorigin>
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js" crossorigin>
   <script type="module" src="js/main.js"></script>
 </head>
 <body>
@@ -252,6 +252,7 @@
           <button class="nav-item active" data-panel="chat" aria-current="page"><i class="ico ico-chat" aria-hidden="true"></i><span>Chat</span><b class="badge" data-badge="chat" aria-label="messages non lus"></b></button>
           <button class="nav-item" data-panel="timetable"><i class="ico ico-calendar" aria-hidden="true"></i><span>Emploi du temps</span></button>
           <button class="nav-item" data-panel="votes"><i class="ico ico-vote" aria-hidden="true"></i><span>Votes</span><b class="badge" data-badge="votes" aria-label="votes en attente"></b></button>
+          <button class="nav-item" data-panel="study"><i class="ico ico-sparkles" aria-hidden="true"></i><span>Révisions IA</span></button>
           <button class="nav-item" data-panel="members"><i class="ico ico-users" aria-hidden="true"></i><span>Équipage</span></button>
           <button class="nav-item delegate-only" data-panel="admin"><i class="ico ico-star" aria-hidden="true"></i><span>Délégué</span><b class="badge" data-badge="admin" aria-label="demandes en attente"></b></button>
         </div>
@@ -324,6 +325,36 @@
             <button data-filter="closed" role="tab">Terminés</button>
           </div>
           <div class="proposals"></div>
+        </section>
+
+        <section class="panel" id="panel-study" aria-labelledby="study-title">
+          <header class="panel-head">
+            <div>
+              <h2 id="study-title">Révisions IA</h2>
+              <p class="muted">L'assistant se base uniquement sur vos cours et reprend les méthodes du cahier.</p>
+            </div>
+            <button class="btn btn-primary can-publish-only" data-action="new-course"><span>Ajouter un cours</span></button>
+          </header>
+          <div class="study-layout">
+            <aside class="course-lib" aria-label="Bibliothèque de cours">
+              <div class="lib-head">
+                <h3><i class="ico ico-book" aria-hidden="true"></i> Bibliothèque</h3>
+                <select class="subject-filter" aria-label="Filtrer par matière"></select>
+              </div>
+              <div class="course-list"></div>
+              <p class="selection-info muted small" aria-live="polite"></p>
+            </aside>
+            <div class="study-main">
+              <div class="seg study-tools" role="tablist" aria-label="Outils de révision">
+                <button class="active" data-study-tool="sheet" role="tab">Fiche</button>
+                <button data-study-tool="quiz" role="tab">Quiz</button>
+                <button data-study-tool="exam" role="tab">Évaluation</button>
+                <button data-study-tool="ask" role="tab">Question</button>
+              </div>
+              <div class="study-options"></div>
+              <div class="study-output" aria-live="polite"></div>
+            </div>
+          </div>
         </section>
 
         <section class="panel" id="panel-members" aria-labelledby="members-title">

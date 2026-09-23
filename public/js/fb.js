@@ -7,6 +7,7 @@ import { FIREBASE_CONFIG, RECAPTCHA_SITE_KEY } from './config.js';
 
 export const configured = Boolean(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.projectId);
 const app = configured ? initializeApp(FIREBASE_CONFIG) : null;
+export const firebaseApp = app;
 
 // Anti-abuse: App Check proves requests come from this site, not from a script reusing the API key.
 if (app && RECAPTCHA_SITE_KEY) {

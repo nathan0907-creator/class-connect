@@ -18,6 +18,8 @@ service cloud.firestore {
     function me() { return get(userPath(uid())).data; }
     function isActiveMember(cid) { return signedIn() && exists(userPath(uid())) && me().class_id == cid && me().status == 'active'; }
     function isDelegate(cid) { return isActiveMember(cid) && me().role == 'delegate'; }
+    function canPublishCourses(cid) { return isActiveMember(cid) && (me().role == 'delegate' || me().get('trusted', false) == true); }
+    function notTrusted(d) { return d.get('trusted', false) == false; }
     function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
     function onlyChanged(keys) { return changed().hasOnly(keys); }
     function str(v, min, max) { return v is string && v.size() >= min && v.size() <= max; }
@@ -67,7 +69,7 @@ service cloud.firestore {
     // ---------------------------------------------------------------- users
     function userKeys() {
       return request.resource.data.keys().hasOnly(['username', 'display_name', 'color', 'public_key', 'class_id',
-        'role', 'status', 'created_at', 'invite_code']);
+        'role', 'status', 'created_at', 'invite_code', 'trusted']);
     }
     function selfUpdate(userId) {
       let b = resource.data;
@@ -84,8 +86,9 @@ service cloud.firestore {
             && a.status == 'active' && a.role == 'delegate' && a.class_id is string
             && !exists(classPath(a.class_id))
             && getAfter(classPath(a.class_id)).data.created_by == uid())
-        // leave the class
-        || (onlyChanged(['class_id', 'status', 'role', 'invite_code']) && a.class_id == null && a.status == 'none' && a.role == 'student')
+        // leave the class (the "trusted" flag is dropped)
+        || (onlyChanged(['class_id', 'status', 'role', 'invite_code', 'trusted']) && a.class_id == null && a.status == 'none'
+            && a.role == 'student' && notTrusted(a))
       );
     }
     function delegateUpdate(userId) {
@@ -93,8 +96,11 @@ service cloud.firestore {
       let a = request.resource.data;
       return userId != uid() && b.class_id != null && isDelegate(b.class_id) && (
         (onlyChanged(['status']) && b.status == 'pending' && a.status == 'active')
-        || (onlyChanged(['class_id', 'status', 'role']) && a.class_id == null && a.status == 'none' && a.role == 'student')
+        || (onlyChanged(['class_id', 'status', 'role', 'trusted']) && a.class_id == null && a.status == 'none'
+            && a.role == 'student' && notTrusted(a))
         || (onlyChanged(['role']) && b.status == 'active' && a.role in ['student', 'delegate'])
+        // mark a member as trusted (may publish courses for the AI)
+        || (onlyChanged(['trusted']) && b.status == 'active' && a.trusted is bool)
       );
     }
 
@@ -105,6 +111,7 @@ service cloud.firestore {
       allow create: if signedIn() && userId == uid() && userKeys()
         && request.resource.data.class_id == null && request.resource.data.role == 'student'
         && request.resource.data.status == 'none' && request.resource.data.created_at == request.time
+        && notTrusted(request.resource.data)
         && str(request.resource.data.display_name, 1, 40) && str(request.resource.data.public_key, 50, 400)
         && getAfter(/databases/$(database)/documents/usernames/$(request.resource.data.username)).data.uid == uid();
       allow update: if signedIn() && (selfUpdate(userId) || delegateUpdate(userId));
@@ -213,6 +220,19 @@ service cloud.firestore {
           && onlyChanged(['status', 'handled_by'])
           && request.resource.data.status in ['open', 'handled'] && request.resource.data.handled_by == uid();
         allow delete: if isActiveMember(cid) && resource.data.expire_at < request.time;
+      }
+
+      // Course library for the revision AI (encrypted like messages). Delegates and trusted members publish.
+      match /courses/{courseId} {
+        allow read: if isActiveMember(cid);
+        allow create: if canPublishCourses(cid)
+          && request.resource.data.keys().hasOnly(['uploader_id', 'epoch', 'iv', 'ciphertext', 'created_at'])
+          && request.resource.data.uploader_id == uid()
+          && request.resource.data.epoch == get(classPath(cid)).data.key_epoch
+          && request.resource.data.created_at == request.time
+          && str(request.resource.data.iv, 10, 32) && str(request.resource.data.ciphertext, 10, 60000);
+        allow update: if false;
+        allow delete: if isActiveMember(cid) && (resource.data.uploader_id == uid() || isDelegate(cid));
       }
 
       // Encrypted media, split into ~900 KB chunks.

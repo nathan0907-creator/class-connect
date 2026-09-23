@@ -22,6 +22,11 @@ export const FIREBASE_CONFIG = {
 // Optionnel mais recommandé — anti-spam : clé de site reCAPTCHA v3 pour Firebase App Check.
 export const RECAPTCHA_SITE_KEY = '';
 
+// Assistant de révision (Firebase AI Logic → Gemini Developer API, offre gratuite sans facturation).
+// Le modèle de secours est utilisé si le premier est saturé (quota gratuit atteint).
+export const AI_MODEL = 'gemini-3.8-flash';
+export const AI_FALLBACK_MODEL = 'gemini-3.5-flash-lite';
+
 // Optionnel : clé API GIPHY (developers.giphy.com) pour la recherche de GIFs.
 // Sans clé, on peut toujours envoyer des GIFs depuis son appareil.
 export const GIPHY_API_KEY = 'gItZUnu59yAAE3N0jfkL2c5Kfl5AXfAn';

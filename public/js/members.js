@@ -35,7 +35,7 @@ export async function leave() {
       const mine = await getDocs(query(sub(state.cls.id, 'shares'), where('user_id', '==', state.me.id)));
       mine.docs.forEach((d) => batch.delete(d.ref));
     }
-    batch.update(userRef(state.me.id), { class_id: null, status: 'none', role: 'student' });
+    batch.update(userRef(state.me.id), { class_id: null, status: 'none', role: 'student', trusted: false });
     await batch.commit();
     emit('reroute');
   } catch (err) { toastError(err); }
@@ -68,7 +68,7 @@ function deleteAccount() {
             const mine = await getDocs(query(sub(state.cls.id, 'shares'), where('user_id', '==', state.me.id)));
             mine.docs.forEach((d) => batch.delete(d.ref));
           }
-          batch.update(userRef(state.me.id), { class_id: null, status: 'none', role: 'student' });
+          batch.update(userRef(state.me.id), { class_id: null, status: 'none', role: 'student', trusted: false });
           await batch.commit();
         }
         const batch = writeBatch(db);
@@ -86,7 +86,19 @@ function deleteAccount() {
 }
 
 function roleBadge(m) {
-  return m.role === 'delegate' ? h('span.role-badge', '★ Délégué') : h('span.role-badge.student', 'Élève');
+  if (m.role === 'delegate') return h('span.role-badge', '★ Délégué');
+  if (m.trusted) return h('span.role-badge.trusted', '✓ Confiance');
+  return h('span.role-badge.student', 'Élève');
+}
+
+async function toggleTrusted(m) {
+  const on = !m.trusted;
+  const ok = await confirmDialog(on ? `Accorder la confiance à ${m.display_name} ?` : `Retirer la confiance à ${m.display_name} ?`,
+    on ? 'Il pourra publier des cours dans la bibliothèque utilisée par l\'assistant de révision IA.'
+      : 'Il ne pourra plus publier de cours (ceux déjà publiés restent).', { danger: !on });
+  if (!ok) return;
+  try { await updateDoc(userRef(m.id), { trusted: on }); toast(on ? `${m.display_name} peut maintenant publier des cours 📚` : 'Confiance retirée', 'success'); }
+  catch (err) { toastError(err); }
 }
 
 function renderMembers() {
@@ -173,6 +185,10 @@ function renderAdmin() {
     others.length ? h('div.crew-list', others.map((m) => h('div.crew-item',
       avatar(m, 34),
       h('div.pi-info', h('b', m.display_name), roleBadge(m)),
+      m.role !== 'delegate'
+        ? h('button.btn.btn-sm.btn-ghost', { onclick: () => toggleTrusted(m), title: 'Les membres de confiance peuvent publier des cours pour l\'IA' },
+          m.trusted ? 'Retirer confiance' : 'Confiance')
+        : null,
       h('button.btn.btn-sm.btn-ghost', { onclick: () => setRole(m) }, m.role === 'delegate' ? 'Retirer délégué' : 'Nommer délégué'),
       h('button.btn.btn-sm.btn-danger', { onclick: () => removeMember(m, true) }, 'Exclure'))))
       : h('p.muted', 'Personne d\'autre pour l\'instant.'));
@@ -223,7 +239,7 @@ async function removeMember(m, wasActive) {
       const theirs = await getDocs(query(sub(state.cls.id, 'shares'), where('user_id', '==', m.id)));
       theirs.docs.forEach((d) => batch.delete(d.ref));
     }
-    batch.update(userRef(m.id), { class_id: null, status: 'none', role: 'student' });
+    batch.update(userRef(m.id), { class_id: null, status: 'none', role: 'student', trusted: false });
     await batch.commit();
     if (wasActive) {
       await rotateKey();

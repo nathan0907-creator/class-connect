@@ -1,19 +1,18 @@
 import {
-  query, orderBy, limit, startAfter, where, onSnapshot, getDocs, getDoc, setDoc, updateDoc, deleteDoc, doc,
-  serverTimestamp, Bytes, writeBatch, Timestamp,
+  query, orderBy, limit, startAfter, where, onSnapshot, getDocs, updateDoc, deleteDoc, doc,
+  serverTimestamp, writeBatch, Timestamp,
 } from 'firebase/firestore';
 import { openReport } from './moderation.js';
 import { db, sub, plain } from './fb.js';
 import { state, on, isDelegate, memberName } from './state.js';
-import { encryptJSON, decryptJSON, encryptBytes, decryptBytes } from './crypto.js';
+import { encryptJSON, decryptJSON } from './crypto.js';
+import { MAX_FILE, uploadEncrypted, downloadDecrypted, deleteFileChunks, compressImage } from './media.js';
 import { currentKey } from './keyring.js';
 import { sendTyping } from './presence.js';
 import { GIPHY_API_KEY } from './config.js';
 import { $, h, icon, avatar, toast, toastError, fmtTime, fmtDay, fmtSize, linkify, confirmDialog } from './ui.js';
 
 const PAGE = 50;
-const MAX_FILE = 15 * 1024 * 1024;
-const CHUNK = 900_000;
 const GROUP_MS = 5 * 60 * 1000;
 const EMOJIS = ['😀','😂','🥹','😍','😎','🤔','😴','😭','😡','🤯','🥳','🤝','👍','👎','👏','🙏','💪','🔥','✨','🚀','🌌','🪐','⭐','🌙','☄️','👽','🛸','🌍','❤️','💜','💙','💯','✅','❌','⚠️','📚','📝','📅','⏰','🎉','🎮','⚽','🍕','☕','🎧','📸','🤫','👀'];
 
@@ -227,10 +226,7 @@ export async function purgeExpired() {
   for (const d of old?.docs || []) {
     const row = plain(d);
     const payload = await decryptRow(row);
-    if (payload?.file?.id) {
-      await Promise.allSettled(Array.from({ length: payload.file.chunks }, (_, n) =>
-        deleteDoc(sub(state.cls.id, 'chunks', `${payload.file.id}_${n}`))));
-    }
+    if (payload?.file?.id) await deleteFileChunks(payload.file);
     await deleteDoc(d.ref).catch(() => {});
   }
 }
@@ -291,18 +287,6 @@ const mediaObserver = new IntersectionObserver((entries) => {
   }
 }, { rootMargin: '300px' });
 
-async function downloadFile(file) {
-  const parts = await Promise.all(Array.from({ length: file.chunks }, async (_, n) => {
-    const snap = await getDoc(sub(state.cls.id, 'chunks', `${file.id}_${n}`));
-    if (!snap.exists()) throw new Error('Morceau manquant');
-    return snap.get('data').toUint8Array();
-  }));
-  const out = new Uint8Array(parts.reduce((s, p) => s + p.length, 0));
-  let offset = 0;
-  for (const p of parts) { out.set(p, offset); offset += p.length; }
-  return out.buffer;
-}
-
 function mediaEl({ t, file }, epoch) {
   const box = h(`div.media.loading${t === 'video' ? '.video' : ''}`, { style: ratio(file) },
     h('div.media-lock', icon('lock'), h('small', `${t === 'video' ? 'Vidéo' : 'Image'} chiffrée · ${fmtSize(file.size || 0)}`)));
@@ -310,7 +294,7 @@ function mediaEl({ t, file }, epoch) {
     try {
       let url = mediaCache.get(file.id);
       if (!url) {
-        const plainBytes = await decryptBytes(state.classKeys.get(epoch), file.iv, await downloadFile(file));
+        const plainBytes = await downloadDecrypted(file, state.classKeys.get(epoch));
         url = URL.createObjectURL(new Blob([plainBytes], { type: file.mime }));
         mediaCache.set(file.id, url);
       }
@@ -432,47 +416,16 @@ async function sendFile(original) {
     if (file.size > MAX_FILE) throw new Error(`Fichier trop lourd (${fmtSize(file.size)}, 15 Mo max)`);
     const dims = await mediaSize(file, kind);
     label.textContent = 'Chiffrement…';
-    const { iv, data } = await encryptBytes(key, await file.arrayBuffer());
-    const bytes = new Uint8Array(data);
-    const chunks = Math.ceil(bytes.length / CHUNK);
-    const fileId = doc(sub(state.cls.id, 'chunks')).id;
-    for (let n = 0; n < chunks; n++) {
-      label.textContent = `Envoi chiffré… ${Math.round((n / chunks) * 100)} %`;
-      bar.style.width = (n / chunks) * 100 + '%';
-      await setDoc(sub(state.cls.id, 'chunks', `${fileId}_${n}`), {
-        uploader: state.me.id, n, data: Bytes.fromUint8Array(bytes.subarray(n * CHUNK, (n + 1) * CHUNK)),
-      });
-    }
-    bar.style.width = '100%';
-    mediaCache.set(fileId, URL.createObjectURL(file));
-    await postPayload({ v: 1, t: kind, file: {
-      id: fileId, chunks, iv, mime: file.type, name: original.name.slice(0, 120), size: file.size, ...dims,
-    } });
+    const desc = await uploadEncrypted(file, key, (p) => {
+      label.textContent = `Envoi chiffré… ${Math.round(p * 100)} %`;
+      bar.style.width = p * 100 + '%';
+    });
+    mediaCache.set(desc.id, URL.createObjectURL(file));
+    await postPayload({ v: 1, t: kind, file: { ...desc, name: original.name.slice(0, 120), ...dims } });
   } catch (err) {
     toastError(err);
   } finally {
     pending.remove();
-  }
-}
-
-/** Downscales large photos (GIFs are kept intact to preserve animation). */
-async function compressImage(file) {
-  if (file.type === 'image/gif' || file.type === 'image/svg+xml') return file;
-  try {
-    const bmp = await createImageBitmap(file);
-    const max = 2048;
-    const scale = Math.min(1, max / Math.max(bmp.width, bmp.height));
-    if (scale === 1 && file.size < 1.2 * 1024 * 1024) { bmp.close(); return file; }
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.round(bmp.width * scale);
-    canvas.height = Math.round(bmp.height * scale);
-    canvas.getContext('2d').drawImage(bmp, 0, 0, canvas.width, canvas.height);
-    bmp.close();
-    let blob = await new Promise((r) => canvas.toBlob(r, 'image/webp', 0.85));
-    if (!blob || blob.type !== 'image/webp') blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.85));
-    return blob && blob.size < file.size ? new File([blob], file.name, { type: blob.type }) : file;
-  } catch {
-    return file;
   }
 }
 

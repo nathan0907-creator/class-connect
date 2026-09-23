@@ -1,12 +1,13 @@
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, getDocs, onSnapshot, query, where, collection, writeBatch, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { configured, auth, db, userRef, classRef, sub, plain, friendly, startAnalytics } from './fb.js';
-import { state, emit, on, isDelegate } from './state.js';
+import { state, emit, on, isDelegate, canPublish } from './state.js';
 import { unlockIdentity, storePrivateKey, loadPrivateKey, clearKeys } from './crypto.js';
 import { loadKeys, shareNeeded, currentKey } from './keyring.js';
 import { initAuthFlow } from './authflow.js';
 import { initChat, startChat, stopChat, purgeExpired } from './chat.js';
 import { startModeration, stopModeration } from './moderation.js';
+import { initStudy, startStudy, stopStudy } from './study.js';
 import { initTimetable, startSlots, stopSlots } from './timetable.js';
 import { initVotes, startProposals, stopProposals } from './votes.js';
 import { initMembers, inviteCode } from './members.js';
@@ -52,6 +53,7 @@ function fillIdentity() {
   });
   $$('[data-class-name]').forEach((el) => { el.textContent = state.cls?.name || ''; });
   document.body.classList.toggle('is-delegate', isDelegate());
+  document.body.classList.toggle('can-publish', canPublish());
   emit('me');
 }
 
@@ -200,6 +202,9 @@ function watchMe() {
         toast(after.role === 'delegate' ? 'Tu es maintenant délégué ⭐' : 'Tu n\'es plus délégué');
       }
       route();
+    } else if (!!before.trusted !== !!after.trusted) {
+      fillIdentity();
+      toast(after.trusted ? 'Tu peux maintenant publier des cours pour l\'IA 📚' : 'Tu ne peux plus publier de cours');
     }
   });
 }
@@ -255,6 +260,7 @@ function startClass(cid) {
   startChat();
   startSlots();
   startProposals();
+  startStudy();
   startPresence(cid);
   return membersReady;
 }
@@ -267,6 +273,7 @@ function stopClass() {
   stopProposals();
   stopPresence();
   stopModeration();
+  stopStudy();
   liveClassId = null;
 }
 
@@ -302,6 +309,7 @@ async function boot() {
   initTimetable();
   initVotes();
   initMembers();
+  initStudy();
 
   $$('.nav-item').forEach((b) => b.addEventListener('click', () => showPanel(b.dataset.panel)));
   on('goto', showPanel);

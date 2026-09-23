@@ -15,6 +15,7 @@ La station spatiale de ta classe : **chat chiffré de bout en bout** (texte, ima
 | 🚀 **Connexion « mission »** | Un seul champ (pseudo ou e-mail) et un bouton « Décoller ». La fusée décolle, le pseudo est embarqué. Pseudo inconnu → création de compte (mot de passe + e-mail facultatif) ; pseudo connu → mot de passe (+ « mot de passe oublié »). Atterrissage sur Mars : « Compte créé ! » ou « Connexion réussie ». Bouton retour à chaque étape. |
 | 🛡️ **Chiffrement E2E** | Messages et médias chiffrés AES-256-GCM dans le navigateur ; clés de classe distribuées par ECDH P-256. Firebase ne stocke que du charabia. |
 | 💬 **Chat** | Temps réel, images (compressées), vidéos (≤ 15 Mo), GIFs (import ou recherche GIPHY), emojis, glisser-déposer, épinglage, « X écrit… », présence en ligne. |
+| 🧠 **Révisions IA** | Bibliothèque de cours chiffrée (PDF, photos du cahier, texte) publiée par les délégués et membres « de confiance ». Gemini génère fiches, quiz QCM, évaluations notées /20 et répond aux questions **uniquement à partir de ces cours**, avec les méthodes du cahier. |
 | 🗳️ **Votes** | Ajout / modification / suppression de cours, vote secret pour/contre/abstention, compte à rebours. |
 | ⭐ **Délégué** | Valide les membres, exclut (avec renouvellement de la clé), nomme des délégués, adopte les propositions (appliquées automatiquement). |
 | 🌌 **3D** | Galaxie, planète à anneaux, astéroïdes, nébuleuses, étoiles filantes, saut en hyperespace, transitions 3D. |
@@ -34,6 +35,9 @@ La station spatiale de ta classe : **chat chiffré de bout en bout** (texte, ima
 6. **Authentication → Paramètres → Domaines autorisés** : ajoute `TON-PSEUDO.github.io`.
 7. *(Recommandé, anti-spam)* **App Check** : enregistre l'app avec **reCAPTCHA v3** (clé gratuite sur
    [google.com/recaptcha/admin](https://www.google.com/recaptcha/admin)), colle la clé de site dans `RECAPTCHA_SITE_KEY`, puis active l'application forcée pour Firestore.
+
+8. **Assistant de révision IA** : **Build → AI Logic → Commencer → Gemini Developer API** (gratuit, sans facturation).
+   Modèles utilisés : `gemini-3.8-flash`, avec `gemini-3.5-flash-lite` en secours (modifiables dans `config.js`).
 
 ### 2. GitHub Pages
 
