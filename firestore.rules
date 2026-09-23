@@ -194,7 +194,7 @@ service cloud.firestore {
 
       // Harassment reports: evidence decrypted by the reporter's device, kept 30 days.
       match /reports/{rid} {
-        function validEvidence(list) { return list is list && list.size() >= 1 && list.size() <= 25; }
+        function validEvidence(items) { return items is list && items.size() >= 1 && items.size() <= 25; }
         allow read: if isActiveMember(cid) && (isDelegate(cid) || resource.data.reporter_id == uid());
         allow create: if isActiveMember(cid)
           && request.resource.data.keys().hasOnly(['reporter_id', 'reported_id', 'message_id', 'reason', 'comment',
