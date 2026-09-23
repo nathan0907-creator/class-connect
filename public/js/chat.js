@@ -90,6 +90,16 @@ export function initChat() {
   });
 
   $('.load-more button', root).addEventListener('click', loadOlder);
+  bindLongPress();
+  replyBar = h('div.reply-bar', { hidden: true });
+  $('.composer', root).before(replyBar);
+  textarea.addEventListener('input', saveDraft);
+  textarea.addEventListener('keydown', (e) => { if (e.key === 'Escape' && replyTo) cancelReply(); });
+  jumpBtn = h('button.jump-bottom', { type: 'button', hidden: true, 'aria-label': 'Revenir aux derniers messages', onclick: () => scrollToBottom(true) }, '↓', h('b'));
+  $('.chat-scroll', root).after(jumpBtn);
+  scroller.addEventListener('scroll', updateJump, { passive: true });
+  // Double click (computer) = ❤️, like the double tap on a phone.
+  list.addEventListener('dblclick', (e) => { const el = e.target.closest('.msg'); if (el?._row && !e.target.closest('a, button, video, img')) { window.getSelection()?.removeAllRanges(); doubleTapLove(el); } });
   buildEmojiPicker();
   buildGifPicker();
 
@@ -141,6 +151,9 @@ function openChannel(ch) {
   watchTyping(ch);
   list.replaceChildren();
   decrypted.clear();
+  cancelReply();
+  restoreDraft();
+  newBelow = 0;
   oldestSnap = null;
   let first = true;
 
@@ -194,6 +207,19 @@ function onIncoming(row) {
     }
   }
   if (atBottom || row.user_id === state.me.id) scrollToBottom(true);
+  else if (row.user_id !== state.me.id) { newBelow++; updateJump(); }
+  decryptRow(row).then((p) => { if (isParty(p)) { const el = list.querySelector(`[data-id="${row.id}"] .bubble`); if (el) setTimeout(() => confetti(el), 250); } });
+}
+
+// ------------------------------------------------------------ "back to the latest messages" button
+let jumpBtn;
+let newBelow = 0;
+function updateJump() {
+  if (!jumpBtn) return;
+  const away = !nearBottom();
+  if (!away) newBelow = 0;
+  jumpBtn.hidden = !away;
+  jumpBtn.querySelector('b').textContent = newBelow ? (newBelow > 99 ? '99+' : newBelow) : '';
 }
 
 function onModified(row) {
@@ -308,26 +334,146 @@ function refreshAuthors() {
   }
 }
 
-function actionButtons(row) {
-  const out = [h('button.icon-btn', { title: 'Réagir', 'aria-label': 'Réagir', onclick: (e) => openReactionPicker(e.currentTarget, row) }, icon('smile'))];
+/** What can be done with a message (shared by the hover buttons and the phone long-press sheet). */
+function messageActions(row) {
+  const out = [{ icon: 'reply', label: 'Répondre', run: () => startReply(row) }];
+  const text = decrypted.get(row.id)?.text;
+  if (text) {
+    out.push({ icon: 'edit', label: 'Copier le texte', run: () => navigator.clipboard.writeText(text).then(() => toast('Texte copié 📋'), () => toast('Copie impossible', 'error')), sheetOnly: true });
+  }
   if (moderates(row.channel)) {
-    out.push(h('button.icon-btn', { title: 'Épingler / désépingler', onclick: () => {
-      updateDoc(doc(messagesCol(), row.id), { pinned: !row.pinned }).catch(toastError);
-    } }, icon('pin')));
+    out.push({ icon: 'pin', label: row.pinned ? 'Désépingler' : 'Épingler', title: 'Épingler / désépingler',
+      run: () => updateDoc(doc(messagesCol(), row.id), { pinned: !row.pinned }).catch(toastError) });
   }
   if (row.user_id !== state.me.id) {
-    out.push(h('button.icon-btn', { title: 'Signaler ce message', 'aria-label': 'Signaler ce message', onclick: () => openReport(row) }, icon('flag')));
+    out.push({ icon: 'flag', label: 'Signaler', title: 'Signaler ce message', run: () => openReport(row) });
   }
   if (row.user_id === state.me.id || moderates(row.channel)) {
-    out.push(h('button.icon-btn', { title: 'Supprimer', 'aria-label': 'Supprimer', onclick: async () => {
+    out.push({ icon: 'trash', label: 'Supprimer', danger: true, run: async () => {
       if (!(await confirmDialog('Supprimer le message ?', 'Il disparaîtra pour tout le canal. Par sécurité (harcèlement), il reste conservé chiffré 30 jours et peut être joint à un signalement.'))) return;
       try {
         await updateDoc(doc(messagesCol(), row.id), { deleted_at: serverTimestamp(), deleted_by: state.me.id, pinned: false });
         onRemoved(row.id);
       } catch (err) { toastError(err); }
-    } }, icon('trash')));
+    } });
   }
   return out;
+}
+
+function actionButtons(row) {
+  return [
+    h('button.icon-btn', { title: 'Réagir', 'aria-label': 'Réagir', onclick: (e) => openReactionPicker(e.currentTarget, row) }, icon('smile')),
+    ...messageActions(row).filter((a) => !a.sheetOnly).map((a) => h('button.icon-btn', {
+      title: a.title || a.label, 'aria-label': a.title || a.label, onclick: a.run,
+    }, icon(a.icon))),
+  ];
+}
+
+// ------------------------------------------------------------ phone: long press → options sheet
+const isTouch = () => matchMedia('(hover: none) and (pointer: coarse)').matches;
+
+function openMessageSheet(el) {
+  const row = el._row;
+  closeMessageSheet();
+  navigator.vibrate?.(12);
+  el.classList.add('held');
+  const close = () => closeMessageSheet();
+  const mine = row.reactions?.[state.me.id];
+  const sheet = h('div.msg-sheet', { role: 'dialog', 'aria-label': 'Options du message' },
+    h('div.sheet-grip'),
+    h('div.sheet-reactions', REACTIONS.map((e) => h(`button${e === mine ? '.mine' : ''}`, {
+      type: 'button', 'aria-label': `Réagir ${e}`, onclick: () => { close(); react(row, e); },
+    }, e))),
+    h('div.sheet-actions', messageActions(row).map((a) => h(`button.sheet-action${a.danger ? '.danger' : ''}`, {
+      type: 'button', onclick: () => { close(); a.run(); },
+    }, icon(a.icon), h('span', a.label)))),
+    h('button.sheet-cancel', { type: 'button', onclick: close }, 'Annuler'));
+  const backdrop = h('div.sheet-backdrop', { onclick: (e) => { if (e.target === backdrop) close(); } }, sheet);
+  document.body.append(backdrop);
+  requestAnimationFrame(() => backdrop.classList.add('open'));
+  history.pushState({ ccSheet: true }, '');
+}
+function closeMessageSheet(fromHistory = false) {
+  const backdrop = document.querySelector('.sheet-backdrop');
+  document.querySelectorAll('.msg.held').forEach((m) => m.classList.remove('held'));
+  if (!backdrop) return;
+  backdrop.classList.remove('open');
+  setTimeout(() => backdrop.remove(), 250);
+  if (!fromHistory && history.state?.ccSheet) history.back();
+}
+// The phone's back button closes the sheet instead of leaving the app.
+window.addEventListener('popstate', () => closeMessageSheet(true));
+
+/**
+ * Phone gestures on messages, like in messaging apps:
+ *  - long press (≈ 0.45 s without moving) → options sheet
+ *  - swipe right → reply
+ *  - double tap → ❤️
+ */
+function bindLongPress() {
+  let timer = null;
+  let start = null;
+  let el = null;
+  let swiping = false;
+  let held = false;
+  let lastTap = { id: null, t: 0 };
+  const SWIPE = 64;
+  const bodyOf = (m) => m?.querySelector('.msg-body');
+  const resetSwipe = (m) => {
+    const b = bodyOf(m);
+    if (b) { b.style.transition = 'transform .25s var(--spring)'; b.style.transform = ''; setTimeout(() => { b.style.transition = ''; }, 260); }
+    m?.classList.remove('swipe-ready');
+    swiping = false;
+  };
+  const cancelTimer = () => { clearTimeout(timer); timer = null; };
+
+  list.addEventListener('pointerdown', (e) => {
+    held = false;
+    if (e.pointerType === 'mouse' || !isTouch()) return;
+    const m = e.target.closest('.msg');
+    if (!m?._row || m.classList.contains('pending') || e.target.closest('a, button, video')) { el = null; return; }
+    el = m;
+    start = { x: e.clientX, y: e.clientY, t: Date.now() };
+    swiping = false;
+    timer = setTimeout(() => { timer = null; held = true; openMessageSheet(m); }, 450);
+  }, true);
+
+  list.addEventListener('pointermove', (e) => {
+    if (!el || !start) return;
+    const dx = e.clientX - start.x;
+    const dy = e.clientY - start.y;
+    if (Math.hypot(dx, dy) > 10) cancelTimer();
+    if (!swiping && dx > 14 && Math.abs(dy) < dx * 0.6) swiping = true;
+    if (swiping) {
+      bodyOf(el).style.transform = `translateX(${Math.max(0, Math.min(dx, SWIPE + 24))}px)`;
+      const ready = dx >= SWIPE;
+      if (ready && !el.classList.contains('swipe-ready')) navigator.vibrate?.(8);
+      el.classList.toggle('swipe-ready', ready);
+    }
+  });
+
+  const end = (e) => {
+    cancelTimer();
+    if (!el || !start) return;
+    const m = el;
+    if (swiping) {
+      if (e.type === 'pointerup' && e.clientX - start.x >= SWIPE) startReply(m._row);
+      resetSwipe(m);
+    } else if (e.type === 'pointerup' && !held && Date.now() - start.t < 250 && Math.hypot(e.clientX - start.x, e.clientY - start.y) < 10) {
+      // Two quick taps on the same message = ❤️
+      const now = Date.now();
+      if (lastTap.id === m._row.id && now - lastTap.t < 320) { lastTap = { id: null, t: 0 }; doubleTapLove(m); }
+      else lastTap = { id: m._row.id, t: now };
+    }
+    el = null;
+    start = null;
+  };
+  ['pointerup', 'pointercancel'].forEach((t) => list.addEventListener(t, end));
+
+  // The finger lifting after a long press must not also "click" (e.g. open the photo viewer).
+  list.addEventListener('click', (e) => { if (held) { held = false; e.preventDefault(); e.stopPropagation(); } }, true);
+  // Android fires "contextmenu" on long press: keep our sheet instead of the browser menu.
+  list.addEventListener('contextmenu', (e) => { if (isTouch() && e.target.closest('.msg')) e.preventDefault(); });
 }
 
 /** Moderators' clients permanently erase messages (and their media) deleted more than 30 days ago. */
@@ -379,8 +525,81 @@ async function fillBubble(el, row) {
   }
   if (payload.text) parts.push(h('div.text', linkify(payload.text)));
   if (isOnlyEmoji(payload.text) && parts.length === 1) bubble.classList.add('jumbo');
+  // Quoted message (reply): tap to jump to the original.
+  if (payload.reply?.id) {
+    parts.unshift(h('button.reply-quote', { type: 'button', onclick: () => jumpTo(payload.reply.id) },
+      h('b', memberName(payload.reply.user_id)), h('span', String(payload.reply.text || '…').slice(0, 140))));
+  }
   bubble.classList.toggle('has-media', payload.t !== 'text');
   bubble.replaceChildren(...parts);
+  // @pseudo mentions of me are highlighted.
+  const me = state.me;
+  el.classList.toggle('mentions-me', row.user_id !== me.id && !!payload.text
+    && new RegExp(`@(${escapeRe(me.username)}|${escapeRe(me.display_name)})\\b`, 'i').test(payload.text));
+}
+const escapeRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// ------------------------------------------------------------ replies
+let replyTo = null;
+let replyBar;
+function startReply(row) {
+  const p = decrypted.get(row.id);
+  const preview = !p ? 'message chiffré' : p.text || (p.t === 'video' ? '🎬 Vidéo' : p.t === 'gif' ? 'GIF' : '🖼️ Photo');
+  replyTo = { id: row.id, user_id: row.user_id, text: preview.slice(0, 120) };
+  replyBar.replaceChildren(icon('reply'),
+    h('div', h('b', `Réponse à ${memberName(row.user_id)}`), h('span', replyTo.text)),
+    h('button.icon-btn', { type: 'button', title: 'Annuler la réponse', 'aria-label': 'Annuler la réponse', onclick: cancelReply }, '✕'));
+  replyBar.hidden = false;
+  root.classList.add('replying');
+  textarea.focus();
+}
+function cancelReply() { replyTo = null; if (replyBar) replyBar.hidden = true; root?.classList.remove('replying'); }
+
+// ------------------------------------------------------------ drafts (kept per channel on this device)
+const draftKey = () => `cc-draft-${state.cls?.id}-${channel}`;
+const saveDraft = () => { try { if (textarea.value.trim()) localStorage.setItem(draftKey(), textarea.value); else localStorage.removeItem(draftKey()); } catch { /* ignore */ } };
+function restoreDraft() {
+  let v = '';
+  try { v = localStorage.getItem(draftKey()) || ''; } catch { /* ignore */ }
+  textarea.value = v;
+  textarea.style.height = 'auto';
+  if (v) textarea.style.height = Math.min(textarea.scrollHeight, 160) + 'px';
+}
+
+// ------------------------------------------------------------ fun details
+/** Confetti burst from an element (🎉 messages). */
+function confetti(from) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const r = from.getBoundingClientRect();
+  const colors = ['#7c5cff', '#00d4ff', '#ff4fd8', '#ffcf6b', '#3dffa8'];
+  const box = h('div.confetti', { style: { left: r.left + r.width / 2 + 'px', top: r.top + r.height / 2 + 'px' } });
+  for (let i = 0; i < 28; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const d = 60 + Math.random() * 110;
+    box.append(h('i', { style: {
+      background: colors[i % colors.length], '--x': Math.cos(a) * d + 'px', '--y': Math.sin(a) * d - 40 + 'px',
+      '--r': Math.random() * 720 - 360 + 'deg', animationDelay: Math.random() * 80 + 'ms',
+    } }));
+  }
+  document.body.append(box);
+  setTimeout(() => box.remove(), 1400);
+}
+const isParty = (p) => !!p?.text && /🎉|🥳/.test(p.text) && p.text.length <= 40;
+
+/** Heart burst on double tap. */
+function heartBurst(el) {
+  const b = el.querySelector('.bubble');
+  if (!b) return;
+  const heart = h('span.heart-burst', '❤️');
+  b.append(heart);
+  setTimeout(() => heart.remove(), 900);
+}
+function doubleTapLove(el) {
+  const row = el._row;
+  heartBurst(el);
+  navigator.vibrate?.(8);
+  // Like Instagram: a double tap only ever adds the heart (use the reaction chip to remove it).
+  if (row.reactions?.[state.me.id] !== '❤️') react(row, '❤️');
 }
 
 function redecryptFailed() {
@@ -502,12 +721,17 @@ async function postPayload(payload) {
 async function sendText() {
   const text = textarea.value.trim();
   if (!text) return;
+  const reply = replyTo;
   textarea.value = '';
   textarea.style.height = 'auto';
+  cancelReply();
+  saveDraft();
   try {
-    await postPayload({ v: 1, t: 'text', text });
+    await postPayload({ v: 1, t: 'text', text, ...(reply ? { reply } : {}) });
   } catch (err) {
     textarea.value = text;
+    if (reply) { replyTo = reply; replyBar.hidden = false; root.classList.add('replying'); }
+    saveDraft();
     toastError(err);
   }
 }

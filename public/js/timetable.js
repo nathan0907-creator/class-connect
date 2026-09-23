@@ -17,6 +17,41 @@ export function initTimetable() {
   btn.addEventListener('click', () => { if (isDelegate()) openSlotForm({ mode: 'add' }); });
   on('me', render);
   setInterval(() => { if ($('#panel-timetable').classList.contains('active')) render(); }, 60_000);
+  $('[data-next-class]')?.addEventListener('click', () => emit('goto', 'timetable'));
+  setInterval(renderNextClass, 30_000);
+}
+
+// ------------------------------------------------------------ "next class" chip (chat header)
+const hhmm = (min) => `${Math.floor(min / 60)}h${String(min % 60).padStart(2, '0')}`;
+/** Current or next class, with a human sentence: "Maths dans 12 min · B204". */
+export function nextClass(now = new Date()) {
+  const today = (now.getDay() + 6) % 7;   // 0 = Monday
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const current = slots.find((s) => s.day === today && toMin(s.start_at) <= nowMin && nowMin < toMin(s.end_at));
+  if (current) return { slot: current, now: true, text: `En cours : ${current.subject} · jusqu'à ${hhmm(toMin(current.end_at))}` };
+  for (let i = 0; i < 7; i++) {
+    const d = (today + i) % 7;
+    const next = slots.filter((s) => s.day === d && (i > 0 || toMin(s.start_at) > nowMin))
+      .sort((a, b) => a.start_at.localeCompare(b.start_at))[0];
+    if (!next) continue;
+    const start = toMin(next.start_at);
+    const when = i === 0
+      ? (start - nowMin <= 90 ? `dans ${start - nowMin} min` : `à ${hhmm(start)}`)
+      : `${i === 1 ? 'demain' : DAYS[d].toLowerCase()} à ${hhmm(start)}`;
+    return { slot: next, now: false, text: `${next.subject} ${when}` };
+  }
+  return null;
+}
+function renderNextClass() {
+  const chip = $('[data-next-class]');
+  if (!chip) return;
+  const n = nextClass();
+  chip.hidden = !n;
+  if (!n) return;
+  chip.classList.toggle('now', n.now);
+  chip.style.setProperty('--c', n.slot.color);
+  chip.replaceChildren(h('i.dot'), h('span', n.text + (n.slot.room ? ` · ${n.slot.room}` : '')));
+  chip.title = 'Voir l\'emploi du temps';
 }
 
 export function startSlots() {
@@ -24,6 +59,7 @@ export function startSlots() {
   unsub = onSnapshot(slotsCol(), (snap) => {
     slots = snap.docs.map(plain).sort((a, b) => a.day - b.day || a.start_at.localeCompare(b.start_at));
     render();
+    renderNextClass();
     emit('slots:loaded');
   }, toastError);
 }
