@@ -1,5 +1,5 @@
 // Installable app: service worker registration + an install invitation shown at every start until the app is installed.
-import { h, icon, toast } from './ui.js';
+import { $$, h, icon, modal, toast } from './ui.js';
 
 const INSTALLED = 'cc-installed';
 let deferred = null;   // Chrome / Edge / Samsung "beforeinstallprompt" event
@@ -13,6 +13,11 @@ export function initInstall() {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch((err) => console.warn('Service worker', err));
   }
+  // "Installer l'application" button (Équipage tab): hidden once the app runs installed.
+  $$('[data-action="install"]').forEach((b) => {
+    b.hidden = standalone();
+    b.addEventListener('click', installFromButton);
+  });
   if (standalone()) { remember('1'); return; }
   // Uninstalled since last time: the browser offers the install again, so do we.
   window.addEventListener('beforeinstallprompt', (e) => {
@@ -25,6 +30,7 @@ export function initInstall() {
     remember('1');
     deferred = null;
     hideBanner();
+    $$('[data-action="install"]').forEach((b) => { b.hidden = true; });
     toast('Class Connect est installé 🚀 Retrouve-le sur ton écran d\'accueil.', 'success', 6000);
   });
   // Safari (iPhone / iPad) has no install button: explain how to do it by hand.
@@ -55,6 +61,26 @@ function hideBanner() {
   banner = null;
   b.classList.remove('in');
   setTimeout(() => b.remove(), 400);
+}
+
+/** The browser's own install prompt when available, otherwise step-by-step instructions for this device. */
+function installFromButton() {
+  if (standalone()) return toast('L\'application est déjà installée 🚀');
+  if (deferred) return install();
+  const ios = isIOS();
+  const android = /android/i.test(navigator.userAgent);
+  const steps = ios
+    ? ['Ouvre ce site dans Safari (pas dans une autre appli).', 'Touche Partager : le carré avec une flèche ↑ en bas de l\'écran.', 'Choisis « Sur l\'écran d\'accueil », puis « Ajouter ».']
+    : android
+      ? ['Touche le menu ⋮ en haut à droite de Chrome.', 'Choisis « Installer l\'application » (ou « Ajouter à l\'écran d\'accueil »).', 'Confirme avec « Installer ».']
+      : ['Dans Chrome ou Edge, clique sur l\'icône d\'installation ⊕ à droite de la barre d\'adresse.', 'Ou ouvre le menu ⋮ puis « Installer Class Connect… ».', 'Firefox ne sait pas installer d\'applis : utilise Chrome ou Edge.'];
+  modal({
+    title: '📲 Installer l\'application',
+    body: h('div',
+      h('p.muted', 'Une fois installée, Class Connect s\'ouvre en plein écran depuis ton écran d\'accueil, marche hors ligne et peut te notifier même fermée.'),
+      h('ol.guide-steps', steps.map((s, i) => h('li.guide-step', h('span.guide-num', String(i + 1)), h('div', h('p', s)))))),
+    actions: [{ label: 'Compris !', variant: 'btn-primary' }],
+  });
 }
 
 async function install() {
