@@ -281,8 +281,8 @@ export function initAuthFlow({ onSuccess }) {
     $('[data-pilot]', pass).textContent = ctx.label;
     if (ctx.mode === 'register') {
       // Started with an e-mail → ask for a pseudo; started with a pseudo → offer the optional e-mail.
-      $('[data-only="pseudo"]', pass).hidden = !!ctx.username;
-      $('[data-only="email"]', pass).hidden = !!ctx.email;
+      $$('[data-only="pseudo"]', pass).forEach((el) => { el.hidden = !!ctx.username; });
+      $$('[data-only="email"]', pass).forEach((el) => { el.hidden = !!ctx.email; });
       $('[data-back]', pass).textContent = ctx.username ? '← Changer de pseudo' : '← Changer d\'adresse';
     }
     await Promise.all([cargo(input), stage.launch(ctx.mode === 'login' ? 'Décollage !' : 'Nouveau pilote : décollage !')]);

@@ -1,6 +1,6 @@
 // Notifications for new messages: shown by the page while it is open in the background, and by push messages
 // (service worker) when the app is closed. Opt-in, remembered per device.
-import { $$, toast } from './ui.js';
+import { $$, h, icon, toast } from './ui.js';
 import { enablePush, disablePush } from './push.js';
 
 const KEY = 'cc-notify';
@@ -14,7 +14,38 @@ function renderToggles() {
     b.title = on ? 'Notifications activées (cliquer pour couper)' : 'Activer les notifications';
     b.setAttribute('aria-label', b.title);
     b.setAttribute('aria-pressed', String(on));
+    const label = b.querySelector('[data-notify-label]');
+    if (label) label.textContent = on ? 'Notifications activées' : 'Activer les notifications';
   });
+  if (notifyOn()) hidePrompt();
+}
+
+// ------------------------------------------------------------ "Activate notifications?" banner
+// Shown each time the app opens until notifications are on (browsers only allow the request after a tap).
+let prompt = null;
+let promptShown = false;
+export function askNotifications() {
+  if (promptShown || !supported() || notifyOn() || Notification.permission === 'denied') return;
+  // Wait for the install banner to be answered first, so the two don't overlap.
+  if (document.querySelector('.install-banner')) return setTimeout(askNotifications, 2000);
+  promptShown = true;
+  prompt = h('aside.install-banner.notify-banner', { role: 'dialog', 'aria-label': 'Activer les notifications' },
+    h('div.install-icon.bell-icon', icon('bell')),
+    h('div.install-text',
+      h('b', 'Active les notifications'),
+      h('span', 'Sois prévenu des nouveaux messages de ta classe, même quand l\'appli est fermée.')),
+    h('div.install-actions',
+      h('button.btn.btn-primary.btn-sm', { type: 'button', onclick: () => { hidePrompt(); toggle(); } }, h('span', 'Activer')),
+      h('button.btn.btn-ghost.btn-sm', { type: 'button', onclick: hidePrompt }, 'Plus tard')));
+  document.body.append(prompt);
+  requestAnimationFrame(() => prompt?.classList.add('in'));
+}
+function hidePrompt() {
+  if (!prompt) return;
+  const p = prompt;
+  prompt = null;
+  p.classList.remove('in');
+  setTimeout(() => p.remove(), 400);
 }
 
 export function initNotify() {
@@ -28,6 +59,7 @@ export function initNotify() {
 /** Called once signed in: refreshes this device's push registration (tokens change over time). */
 export function syncPush() {
   if (notifyOn()) enablePush().catch((err) => console.warn('Push', err));
+  else setTimeout(askNotifications, 2500);
 }
 /** Never blocks a logout for long when offline (the deletion then happens on the next connection). */
 export const stopPush = () => Promise.race([disablePush().catch(() => {}), new Promise((r) => setTimeout(r, 3000))]);

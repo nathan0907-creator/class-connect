@@ -17,6 +17,7 @@ import { startPresence, stopPresence } from './presence.js';
 import { initConsent } from './consent.js';
 import { initNotify, syncPush, stopPush } from './notify.js';
 import { initInstall } from './install.js';
+import { initGuide } from './guide.js';
 import { $, $$, h, toast, toastError, enableTilt, busy, avatar } from './ui.js';
 
 let authFlow = null;
@@ -334,6 +335,7 @@ function watchNetwork() {
 async function boot() {
   initConsent({ onGranted: startAnalytics });
   initInstall();
+  initGuide();
   watchNetwork();
   if (captureInvite()) {
     setTimeout(() => toast('✉️ Invitation reçue ! Connecte-toi ou crée ton compte : ta demande pour rejoindre la classe partira automatiquement.', 'info', 9000), 800);

@@ -5,6 +5,7 @@
   <script>if (location.protocol === 'http:' && !/^(localhost|127\.|\[::1\])/.test(location.hostname)) location.replace('https:' + location.href.slice(5));</script>
   <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <script>/* Installed app opened in "desktop site" mode on a phone: force the phone layout. */(function(){var m=document.querySelector('meta[name=viewport]'),w=screen.width;if(navigator.maxTouchPoints>0&&w&&w<=900&&window.innerWidth>w*1.15)m.setAttribute('content','width='+w+', initial-scale=1, viewport-fit=cover');})();</script>
   <title>Class Connect — La messagerie chiffrée de ta classe</title>
   <meta name="description" content="Class Connect : le chat de classe chiffré de bout en bout (texte, images, vidéos, GIFs), les votes sur l'emploi du temps et un espace délégué. Gratuit, dans un univers spatial 3D.">
   <meta name="cc-base" content="">
@@ -133,9 +134,10 @@
             <label class="field"><span>Pseudo ou adresse e-mail</span>
               <input name="identifier" autocomplete="username" required maxlength="120" autocapitalize="off" spellcheck="false"
                      placeholder="ex. astro_lea ou lea@mail.fr" aria-describedby="id-hint"></label>
-            <p class="hint" id="id-hint">Nouveau ? Choisis simplement un pseudo, on crée ton compte.</p>
+            <p class="hint" id="id-hint"><b>Déjà inscrit ?</b> Ton pseudo ou ton e-mail. <b>Nouveau ?</b> Invente un pseudo : on crée ton compte en 2 étapes.</p>
             <label class="hp" aria-hidden="true">Site web <input name="website" tabindex="-1" autocomplete="off"></label>
             <button class="btn btn-primary btn-block btn-cta" type="submit"><span>Décoller</span> <i class="ico ico-rocket" aria-hidden="true"></i></button>
+            <button type="button" class="link-btn guide-link" data-guide="create">❓ Besoin d'aide pour créer ou connecter ton compte ?</button>
           </form>
 
           <!-- Step 2a: existing account -->
@@ -146,6 +148,7 @@
             <label class="field"><span>Mot de passe</span>
               <input name="password" type="password" autocomplete="current-password" required></label>
             <button type="button" class="link-btn" data-forgot>Mot de passe oublié ?</button>
+            <p class="hint">Ce n'est pas toi ? Touche « Retour » et vérifie ton pseudo. <button type="button" class="link-btn inline" data-guide="forgot">Comment récupérer mon compte ?</button></p>
             <button class="btn btn-primary btn-block" type="submit"><span>Se connecter</span></button>
           </form>
 
@@ -163,11 +166,13 @@
               <input name="confirm" type="password" autocomplete="new-password" required minlength="8"></label>
             <label class="field" data-only="email"><span>Adresse e-mail <em>(facultatif)</em></span>
               <input name="email" type="email" autocomplete="email" maxlength="120" placeholder="pour récupérer ton mot de passe"></label>
+            <p class="hint" data-only="email">Conseillé : sans e-mail, un mot de passe oublié ne peut pas être récupéré.</p>
             <label class="check"><input type="checkbox" name="terms" required>
               <span>J'accepte les <a href="cgu.html" target="_blank" rel="noopener">CGU</a> et la <a href="confidentialite.html" target="_blank" rel="noopener">politique de confidentialité</a>.</span></label>
             <p class="hint"><i class="ico ico-lock" aria-hidden="true"></i> Ton mot de passe chiffre tes clés sur ton appareil : il n'est jamais envoyé en clair.</p>
             <label class="hp" aria-hidden="true">Site web <input name="website" tabindex="-1" autocomplete="off"></label>
             <button class="btn btn-primary btn-block" type="submit"><span>Créer mon compte</span></button>
+            <button type="button" class="link-btn guide-link" data-guide="create">❓ Comment remplir ce formulaire ?</button>
           </form>
 
           <div class="step" data-step="busy" role="status">
@@ -192,9 +197,11 @@
       <div class="big-icon" aria-hidden="true"><i class="ico ico-lock"></i></div>
       <h2 id="unlock-title">Déverrouiller tes clés</h2>
       <p class="muted">Salut <b data-me-name></b> ! Entre ton mot de passe pour déchiffrer tes clés sur cet appareil.</p>
+      <p class="hint">Ça arrive sur un nouvel appareil ou après avoir vidé le navigateur : c'est le <b>même mot de passe</b> que pour te connecter.</p>
       <label class="field"><span>Mot de passe</span><input name="password" type="password" autocomplete="current-password" required></label>
       <button class="btn btn-primary btn-block" type="submit"><span>Déverrouiller</span></button>
       <button class="btn btn-ghost btn-block" type="button" data-action="logout">Changer de compte</button>
+      <button type="button" class="link-btn guide-link" data-guide="login">❓ Besoin d'aide ?</button>
       <p class="form-error" role="alert"></p>
     </form>
   </section>
@@ -203,6 +210,12 @@
   <section id="view-class" class="view" aria-labelledby="class-title">
     <div class="class-choice">
       <h2 class="section-title" id="class-title">Rejoins ta galaxie, <span data-me-name></span></h2>
+      <ol class="journey" aria-label="Étapes">
+        <li class="done"><span>✓</span> Compte créé</li>
+        <li class="current"><span>2</span> Rejoindre ta classe</li>
+        <li><span>3</span> Validation par un délégué</li>
+      </ol>
+      <p class="muted journey-note">Tu as reçu un <b>lien</b> ou un <b>QR code</b> ? Ouvre-le simplement : ta demande part toute seule. Sinon, entre le code ci-dessous.</p>
       <div class="choice-grid">
         <form id="form-join" class="card choice-card tilt" novalidate>
           <div class="big-icon" aria-hidden="true"><i class="ico ico-rocket"></i></div>
@@ -225,6 +238,7 @@
       <div class="btn-row">
         <button class="btn btn-ghost" data-action="logout">Se déconnecter</button>
         <button class="btn btn-ghost" data-action="delete-account">Supprimer mon compte</button>
+        <button class="btn btn-ghost" data-guide="join">❓ Aide</button>
       </div>
     </div>
   </section>
@@ -236,6 +250,12 @@
       <h2 id="pending-title">En attente d'amarrage…</h2>
       <p class="muted">Ta demande pour rejoindre <b data-class-name></b> a été envoyée. Un délégué doit la valider et te transmettre la clé de chiffrement.</p>
       <p class="muted small" data-pending-delegates></p>
+      <ol class="journey" aria-label="Étapes">
+        <li class="done"><span>✓</span> Compte créé</li>
+        <li class="done"><span>✓</span> Demande envoyée</li>
+        <li class="current"><span>3</span> Validation</li>
+      </ol>
+      <p class="hint">Tu peux fermer l'appli : dès que ta demande est acceptée, tu entres dans la classe (tout de suite si l'appli est ouverte).</p>
       <button class="btn btn-ghost btn-block" data-action="leave">Annuler la demande</button>
       <button class="btn btn-ghost btn-block" data-action="logout">Se déconnecter</button>
     </div>
@@ -385,6 +405,8 @@
           <div class="teacher-reports"></div>
           <div class="member-grid"></div>
           <div class="danger-zone">
+            <button class="btn btn-ghost notify-btn" data-action="notify" hidden><i class="ico ico-bell" aria-hidden="true"></i> <span data-notify-label>Notifications</span></button>
+            <button class="btn btn-ghost" data-guide="login">❓ Guide</button>
             <button class="btn btn-ghost" data-action="logout">Se déconnecter</button>
             <button class="btn btn-ghost" data-action="leave">Quitter la classe</button>
             <button class="btn btn-danger" data-action="delete-account">Supprimer mon compte</button>
