@@ -5,6 +5,7 @@ import { state, on, emit, isDelegate, isTeacher, MAX_DELEGATES } from './state.j
 import { fingerprint, deriveAuthKey, clearKeys } from './crypto.js';
 import { sharesFor, shareRefFor, rotateKey } from './keyring.js';
 import { reportsCard, openReportsCount } from './moderation.js';
+import { showInvite, shareInvite } from './invite.js';
 import { $, $$, h, icon, avatar, modal, toast, toastError, confirmDialog, enableTilt, busy } from './ui.js';
 
 export function initMembers() {
@@ -167,10 +168,12 @@ function codeBlock(title, field, role, hint) {
   return h('div.invite-block',
     h('b', title), h('small.muted', hint), codeEl,
     h('div.btn-row',
-      current ? h('button.btn.btn-primary.btn-sm', { onclick: async () => {
+      current ? h('button.btn.btn-primary.btn-sm', { onclick: () => showInvite(current, state.cls.name, role) }, icon('send'), h('span', 'Lien & QR code')) : null,
+      current ? h('button.btn.btn-ghost.btn-sm', { onclick: () => shareInvite(current, state.cls.name, role) }, navigator.share ? 'Partager' : 'Copier le lien') : null,
+      current ? h('button.btn.btn-ghost.btn-sm', { onclick: async () => {
         try { await navigator.clipboard.writeText(current); toast('Code copié 📋', 'success'); }
         catch { toast('Copie impossible, sélectionne le code', 'error'); }
-      } }, h('span', 'Copier')) : null,
+      } }, 'Copier le code') : null,
       h(`button.btn.btn-sm.${current ? 'btn-ghost' : 'btn-primary'}`, { onclick: regenerate }, h('span', current ? 'Régénérer' : 'Créer le code'))));
 }
 

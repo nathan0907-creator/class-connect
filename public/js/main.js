@@ -9,6 +9,7 @@ import { initChat, startChat, stopAllChat, purgeExpired } from './chat.js';
 import { startModeration, stopModeration } from './moderation.js';
 import { initStudy, startStudy, stopStudy } from './study.js';
 import { initCouncil, startCouncil, stopCouncil } from './council.js';
+import { captureInvite, pendingInvite, clearInvite } from './invite.js';
 import { initTimetable, startSlots, stopSlots } from './timetable.js';
 import { initVotes, startProposals, stopProposals } from './votes.js';
 import { initMembers, inviteCode } from './members.js';
@@ -110,25 +111,35 @@ async function logout() {
 }
 
 // ------------------------------------------------------------ class selection
+/** Sends a join request with an invite code (typed, or coming from an invitation link). */
+async function joinWithCode(raw) {
+  const join = $('#form-join');
+  const btn = join.querySelector('[type=submit]');
+  const code = String(raw || '').trim().toUpperCase();
+  join.elements.inviteCode.value = code;
+  if (!/^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(code)) return formError(join, 'Le code ressemble à ABCD-EFGH');
+  busy(btn, true);
+  try {
+    const invite = await getDoc(doc(db, 'invites', code));
+    if (!invite.exists()) throw new Error('Code d\'invitation inconnu ou expiré : demande un nouveau lien à ton délégué');
+    const role = invite.get('role') === 'teacher' ? 'teacher' : 'student';
+    await updateDoc(userRef(state.me.id), { class_id: invite.get('class_id'), status: 'pending', role, invite_code: code });
+    clearInvite();
+    toast(role === 'teacher' ? 'Code professeur reconnu 🎓 Le délégué doit valider ta demande.' : 'Demande envoyée ! Un délégué doit la valider 🚀', 'success', 6000);
+    join.reset();
+    formError(join, '');
+    await route();
+  } catch (err) {
+    clearInvite();
+    formError(join, friendly(err));
+  } finally { busy(btn, false); }
+}
+
 function bindClassForms() {
   const join = $('#form-join');
-  join.addEventListener('submit', async (e) => {
+  join.addEventListener('submit', (e) => {
     e.preventDefault();
-    const btn = join.querySelector('[type=submit]');
-    const code = join.elements.inviteCode.value.trim().toUpperCase();
-    if (!/^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(code)) return formError(join, 'Le code ressemble à ABCD-EFGH');
-    busy(btn, true);
-    try {
-      const invite = await getDoc(doc(db, 'invites', code));
-      if (!invite.exists()) throw new Error('Code d\'invitation inconnu');
-      const role = invite.get('role') === 'teacher' ? 'teacher' : 'student';
-      await updateDoc(userRef(state.me.id), { class_id: invite.get('class_id'), status: 'pending', role, invite_code: code });
-      if (role === 'teacher') toast('Code professeur reconnu 🎓 Le délégué doit valider ta demande.', 'success', 6000);
-      join.reset();
-      formError(join, '');
-      await route();
-    } catch (err) { formError(join, friendly(err)); }
-    finally { busy(btn, false); }
+    joinWithCode(join.elements.inviteCode.value);
   });
 
   const create = $('#form-create');
@@ -181,7 +192,18 @@ async function route() {
     }
     fillIdentity();
 
-    if (!state.cls || state.me.status === 'none') { stopClass(); return show('class'); }
+    if (!state.cls || state.me.status === 'none') {
+      stopClass();
+      show('class');
+      // Arrived through an invitation link: send the join request straight away.
+      const invited = pendingInvite();
+      if (invited) setTimeout(() => joinWithCode(invited), 600);
+      return;
+    }
+    if (pendingInvite()) {
+      clearInvite();
+      toast('Tu fais déjà partie d\'une classe : quitte-la d\'abord pour utiliser une autre invitation.', 'info', 7000);
+    }
     if (state.me.status === 'pending') {
       stopClass();
       const members = (await getDocs(query(collection(db, 'users'), where('class_id', '==', state.cls.id)))).docs.map(plain);
@@ -295,6 +317,9 @@ function stopClass() {
 // ------------------------------------------------------------ boot
 async function boot() {
   initConsent({ onGranted: startAnalytics });
+  if (captureInvite()) {
+    setTimeout(() => toast('✉️ Invitation reçue ! Connecte-toi ou crée ton compte : ta demande pour rejoindre la classe partira automatiquement.', 'info', 9000), 800);
+  }
   // The 3D scene is loaded after the UI so the first paint stays fast; a stub stands in meanwhile.
   state.space = { mode: 'auth', setMode(m) { this.mode = m; }, warpJump: () => Promise.resolve(), pulse() {} };
   const startSpace = () => import('./space.js').then(({ createSpace }) => {

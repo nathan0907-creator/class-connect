@@ -1333,3 +1333,11 @@ body.is-teacher .student-only { display: none !important; }
 .subject-chip.empty { color: var(--muted); border-style: dashed; }
 .subject-chip.add { color: #7fe3ff; border-style: dashed; border-color: rgba(0, 212, 255, .4); }
 .study-placeholder b { font-family: var(--font-display); letter-spacing: .06em; color: #fff; }
+
+/* invitation link & QR */
+.invite-modal { display: grid; gap: 14px; justify-items: center; text-align: center; }
+.qr-wrap { padding: 12px; border-radius: 16px; background: #fff; box-shadow: 0 0 40px -10px rgba(124, 92, 255, .8); }
+.qr-canvas { display: block; width: 240px; height: 240px; image-rendering: pixelated; }
+.invite-link { width: 100%; padding: 10px 12px; border-radius: 10px; background: rgba(0, 0, 0, .35); border: 1px solid var(--border); overflow-x: auto; }
+.invite-link code { background: none; white-space: nowrap; font-size: 13px; color: #9fe8ff; user-select: all; }
+.invite-modal .btn-row { justify-content: center; }
