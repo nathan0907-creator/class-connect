@@ -6,7 +6,7 @@ import { fingerprint, deriveAuthKey, clearKeys } from './crypto.js';
 import { sharesFor, shareRefFor, rotateKey } from './keyring.js';
 import { reportsCard, openReportsCount } from './moderation.js';
 import { showInvite, shareInvite } from './invite.js';
-import { realName, sortName, showProfile, openProfileEditor, openRealNameEditor, eraseProfileOps } from './profiles.js';
+import { realName, sortName, showProfile, openProfileEditor, openRealNameEditor, eraseProfileOps, statusOf, isBirthday } from './profiles.js';
 import { $, $$, h, icon, avatar, modal, toast, toastError, confirmDialog, enableTilt, busy } from './ui.js';
 
 export function initMembers() {
@@ -125,9 +125,11 @@ function renderMembers() {
     return h(`div.member.card.tilt${state.online.has(m.id) ? '.online' : ''}`,
       h('button.member-avatar', { type: 'button', title: 'Voir le profil', 'aria-label': `Profil de ${m.display_name}`, onclick: () => showProfile(m) }, avatar(m, 56), h('span.orbit')),
       h('div.member-info',
-        h('b', m.display_name, m.id === state.me.id ? h('small.you', ' (toi)') : null),
+        h('b', m.display_name, isBirthday(m.id) ? h('span.bday-tag', { title: 'C\'est son anniversaire !' }, ' 🎂') : null,
+          m.id === state.me.id ? h('small.you', ' (toi)') : null),
         h('small', '@' + m.username, rn ? h('span.real-name', ' · ', rn) : null),
         roleBadge(m),
+        statusOf(m.id) ? h('span.member-status', statusOf(m.id)) : null,
         bio ? h('p.member-bio', bio) : null),
       h('div.member-actions',
         m.id === state.me.id ? h('button.btn.btn-sm.btn-primary', { onclick: openProfileEditor }, icon('edit'), h('span', 'Mon profil')) : null,

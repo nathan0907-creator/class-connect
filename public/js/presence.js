@@ -7,6 +7,7 @@ let offs = [];
 let typingOffs = [];
 let cid = null;
 let typingChannel = null;
+let wantedChannel = null;   // channel opened before presence was started
 let lastTyping = 0;
 
 export function startPresence(classId) {
@@ -24,12 +25,15 @@ export function startPresence(classId) {
     state.online = new Set(Object.keys(snap.val() || {}));
     emit('presence');
   }));
+  // The chat opens its channel before presence starts: begin watching typing now.
+  if (wantedChannel) watchTyping(wantedChannel);
 }
 
 /** Follows "X is typing…" for one chat channel only. */
 export function watchTyping(channel) {
   typingOffs.forEach((off) => off());
   typingOffs = [];
+  wantedChannel = channel;
   if (!rtdb || !cid) return;
   typingChannel = channel;
   const uid = state.me.id;

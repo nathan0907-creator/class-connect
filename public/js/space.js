@@ -298,6 +298,7 @@ export class Space {
       side: THREE.BackSide, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
     }));
     this.planetGroup.add(atmo);
+    this.atmoMat = atmo.material;
 
     // Rings
     const inner = R * 1.4, outer = R * 2.45;
@@ -392,6 +393,21 @@ export class Space {
   }
 
   // ------------------------------------------------------------ public API
+  /** Colour theme (see js/theme.js): planet, atmosphere, rings and nebulae. */
+  setTheme(t) {
+    if (!t?.planet) return;
+    const set = (u, c) => u.value.set(c);
+    ['cA', 'cB', 'cC', 'cD'].forEach((k, i) => set(this.planetMat.uniforms[k], t.planet[i]));
+    set(this.atmoMat.uniforms.c, t.atmo);
+    ['cA', 'cB', 'cC'].forEach((k, i) => set(this.ringMat.uniforms[k], t.rings[i]));
+    this.nebulae.forEach((sp, i) => {
+      const old = sp.material.map;
+      sp.material.map = this.nebulaTexture(t.nebulae[i % t.nebulae.length]);
+      sp.material.needsUpdate = true;
+      old?.dispose();
+    });
+  }
+
   setMode(name) {
     this.mode = MODES[name] || MODES.auth;
   }
@@ -511,6 +527,6 @@ export function createSpace(canvas) {
   } catch (err) {
     console.warn('WebGL indisponible', err);
     document.body.classList.add('no-webgl');
-    return { setMode() {}, warpJump: () => Promise.resolve(), pulse() {} };
+    return { setMode() {}, setTheme() {}, warpJump: () => Promise.resolve(), pulse() {} };
   }
 }

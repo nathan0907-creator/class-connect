@@ -11,6 +11,7 @@ import { deriveAuthKey, createIdentity, unlockIdentity, storePrivateKey } from '
 import { resetIdentity } from './keyring.js';
 import { state } from './state.js';
 import { $, $$, h, toast } from './ui.js';
+import { birthdayPicker, rememberBirthday } from './profiles.js';
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -352,10 +353,14 @@ export function initAuthFlow({ onSuccess }) {
   }
 
   // Step 2b — new account
+  const bday = birthdayPicker();
+  $('[data-bday-field]', regPass).append(bday.el);
   regPass.addEventListener('submit', async (e) => {
     e.preventDefault();
     const f = regPass.elements;
     if (botLike(regPass)) return error('Doucement, pilote… réessaie.');
+    let birthday = '';
+    try { birthday = bday.value(); } catch (err) { return error(err.message); }
     const username = ctx.username || f.pseudo.value.trim();
     if (!USERNAME_RE.test(username)) return error('Pseudo : 3 à 24 caractères (lettres, chiffres, _ . -)');
     if (f.password.value.length < 8) return error('Mot de passe : 8 caractères minimum');
@@ -376,7 +381,11 @@ export function initAuthFlow({ onSuccess }) {
         return true;
       },
     });
-    if (ok) regPass.reset();
+    if (ok) {
+      // Saved (encrypted) in the profile as soon as a class is joined.
+      rememberBirthday(birthday);
+      regPass.reset();
+    }
   });
 
   // Step 2a — login

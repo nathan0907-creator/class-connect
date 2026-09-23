@@ -91,7 +91,7 @@ async function preview(d) {
     const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromB64(d.iv), additionalData: new TextEncoder().encode(aad) }, key, fromB64(d.ciphertext));
     const p = JSON.parse(new TextDecoder().decode(plain));
     if (p.text) return p.text.length > 180 ? p.text.slice(0, 177) + '…' : p.text;
-    return p.t === 'video' ? '🎬 Vidéo' : p.t === 'gif' ? 'GIF' : p.t === 'image' ? '🖼️ Photo' : null;
+    return p.t === 'audio' ? '🎤 Message vocal' : p.t === 'video' ? '🎬 Vidéo' : p.t === 'gif' ? 'GIF' : p.t === 'image' ? '🖼️ Photo' : null;
   } catch { return null; }
 }
 

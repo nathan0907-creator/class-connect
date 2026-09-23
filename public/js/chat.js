@@ -4,6 +4,8 @@ import {
 } from 'firebase/firestore';
 import { openReport } from './moderation.js';
 import { notify } from './notify.js';
+import { recordVoice, voicePlayer, voiceSupported } from './voice.js';
+import { statusEmoji, isBirthday, birthdaysToday } from './profiles.js';
 import { db, sub, plain } from './fb.js';
 import { state, on, isDelegate, isDeputy, isTeacher, memberName, CHANNELS, channelsFor } from './state.js';
 import { encryptJSON, decryptJSON } from './crypto.js';
@@ -71,6 +73,7 @@ export function initChat() {
     if (tool === 'file') fileInput.click();
     if (tool === 'gif') togglePopover('.gif-pop');
     if (tool === 'emoji') togglePopover('.emoji-pop');
+    if (tool === 'voice') recordVoice($('.composer', root), sendVoice);
     if (tool === 'gif-upload') { closePopovers(); fileInput.accept = 'image/gif'; fileInput.click(); fileInput.accept = 'image/*,video/*'; }
   });
   document.addEventListener('click', (e) => {
@@ -90,6 +93,7 @@ export function initChat() {
   });
 
   $('.load-more button', root).addEventListener('click', loadOlder);
+  $('[data-tool="voice"]', root).hidden = !voiceSupported();
   bindLongPress();
   replyBar = h('div.reply-bar', { hidden: true });
   $('.composer', root).before(replyBar);
@@ -106,7 +110,7 @@ export function initChat() {
   on('typing', ({ id, channel: ch }) => { if (ch === channel) showTyping(id); });
   on('keys', redecryptFailed);
   on('members', refreshAuthors);
-  on('profiles', refreshAuthors);
+  on('profiles', () => { refreshAuthors(); renderBirthdays(); });
   on('panel', (name) => { if (name === 'chat') { setUnread(0); scrollToBottom(); } });
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden && root.classList.contains('active')) setUnread(0);
@@ -203,7 +207,7 @@ function onIncoming(row) {
     if (document.hidden) {
       // Decrypted locally: the notification never goes through a server.
       decryptRow(row).then((p) => notify(`${memberName(row.user_id)} · ${CHANNELS[channel].label}`,
-        !p ? 'Nouveau message chiffré' : p.text ? p.text.slice(0, 120) : p.t === 'video' ? '🎬 Vidéo' : p.t === 'gif' ? 'GIF' : '🖼️ Image', `cc-${channel}`));
+        !p ? 'Nouveau message chiffré' : p.text ? p.text.slice(0, 120) : p.t === 'audio' ? '🎤 Message vocal' : p.t === 'video' ? '🎬 Vidéo' : p.t === 'gif' ? 'GIF' : '🖼️ Image', `cc-${channel}`));
     }
   }
   if (atBottom || row.user_id === state.me.id) scrollToBottom(true);
@@ -276,6 +280,7 @@ function messageEl(row) {
   h('div.msg-body',
     h('div.msg-head',
       h('b', { style: { color: author?.color } }, memberName(row.user_id)),
+      h('span.head-extra', headExtra(row.user_id)),
       roleTag(author),
       h('time', fmtTime(row.created_at))),
     h('div.bubble', h('span.decrypting', icon('lock'), ' déchiffrement…')),
@@ -323,6 +328,32 @@ function openReactionPicker(btn, row) {
   setTimeout(() => document.addEventListener('pointerdown', off));
 }
 
+/** Status emoji + 🎂 on birthdays, next to the author's name. */
+const headExtra = (uid) => [statusEmoji(uid), isBirthday(uid) ? '🎂' : ''].filter(Boolean).join(' ');
+
+// ------------------------------------------------------------ birthdays: banner + confetti (once a day per device)
+function renderBirthdays() {
+  const people = birthdaysToday();
+  let banner = root.querySelector('.bday-banner');
+  if (!people.length) { banner?.remove(); return; }
+  const names = people.map((m) => (m.id === state.me.id ? 'toi' : m.display_name));
+  const text = people.length === 1 && people[0].id === state.me.id
+    ? 'Joyeux anniversaire ! Toute la classe te souhaite une super journée 🥳'
+    : `C'est l'anniversaire de ${names.join(', ').replace(/, ([^,]*)$/, ' et $1')} aujourd'hui ! Souhaite-${people.length > 1 ? 'leur' : 'lui'} 🎉`;
+  if (!banner) {
+    banner = h('div.bday-banner', { role: 'status' });
+    root.querySelector('.channel-tabs').after(banner);
+  }
+  banner.replaceChildren(h('span.bday-cake', '🎂'), h('span', text),
+    h('button.icon-btn', { type: 'button', 'aria-label': 'Fermer', onclick: () => banner.remove() }, '✕'));
+  const key = `cc-bday-${new Date().toDateString()}-${people.map((m) => m.id).join(',')}`;
+  let seen = false;
+  try { seen = localStorage.getItem(key) === '1'; localStorage.setItem(key, '1'); } catch { /* ignore */ }
+  if (!seen && root.classList.contains('active')) {
+    setTimeout(() => { confetti(banner); setTimeout(() => confetti(banner), 350); }, 400);
+  }
+}
+
 function refreshAuthors() {
   for (const el of list.querySelectorAll('.msg')) {
     const author = state.members.get(el.dataset.user);
@@ -330,6 +361,8 @@ function refreshAuthors() {
     const b = el.querySelector('.msg-head b');
     b.textContent = author.display_name;
     b.style.color = author.color;
+    const extra = el.querySelector('.head-extra');
+    if (extra) extra.textContent = headExtra(el.dataset.user);
     el.querySelector('.msg-avatar')?.replaceChildren(avatar(author, 36));
   }
 }
@@ -520,6 +553,8 @@ async function fillBubble(el, row) {
   if (payload.t === 'gif' && payload.gif?.url && /^https:\/\/[a-z0-9]+\.giphy\.com\//.test(payload.gif.url)) {
     parts.push(h('div.media.gif', { style: ratio(payload.gif) },
       h('img', { src: payload.gif.url, alt: payload.gif.title || 'GIF', loading: 'lazy' }), h('span.media-tag', 'GIF')));
+  } else if (payload.t === 'audio' && payload.file) {
+    parts.push(voicePlayer(payload.file, row.epoch));
   } else if ((payload.t === 'image' || payload.t === 'video') && payload.file) {
     parts.push(mediaEl(payload, row.epoch));
   }
@@ -544,7 +579,7 @@ let replyTo = null;
 let replyBar;
 function startReply(row) {
   const p = decrypted.get(row.id);
-  const preview = !p ? 'message chiffré' : p.text || (p.t === 'video' ? '🎬 Vidéo' : p.t === 'gif' ? 'GIF' : '🖼️ Photo');
+  const preview = !p ? 'message chiffré' : p.text || (p.t === 'audio' ? '🎤 Message vocal' : p.t === 'video' ? '🎬 Vidéo' : p.t === 'gif' ? 'GIF' : '🖼️ Photo');
   replyTo = { id: row.id, user_id: row.user_id, text: preview.slice(0, 120) };
   replyBar.replaceChildren(icon('reply'),
     h('div', h('b', `Réponse à ${memberName(row.user_id)}`), h('span', replyTo.text)),
@@ -681,7 +716,7 @@ async function renderPinned(rows) {
   rows.sort((a, b) => b.created_at - a.created_at);
   const items = await Promise.all(rows.map(async (r) => {
     const p = await decryptRow(r);
-    const preview = !p ? '🔒 message chiffré' : p.text || (p.t === 'video' ? '🎬 Vidéo' : p.t === 'gif' ? 'GIF' : '🖼️ Image');
+    const preview = !p ? '🔒 message chiffré' : p.text || (p.t === 'audio' ? '🎤 Message vocal' : p.t === 'video' ? '🎬 Vidéo' : p.t === 'gif' ? 'GIF' : '🖼️ Image');
     return h('button.pinned-item', { onclick: () => jumpTo(r.id) },
       icon('pin'), h('b', memberName(r.user_id)), h('span', preview.slice(0, 140)));
   }));
@@ -733,6 +768,27 @@ async function sendText() {
     if (reply) { replyTo = reply; replyBar.hidden = false; root.classList.add('replying'); }
     saveDraft();
     toastError(err);
+  }
+}
+
+/** Voice message: encrypted and uploaded like a photo, then posted (as a reply if one is being written). */
+async function sendVoice(blob, seconds) {
+  const key = currentKey();
+  if (!key) return toast('Clé de la classe pas encore reçue', 'error');
+  if (!navigator.onLine) return toast('Hors ligne : réessaie une fois le réseau revenu', 'error');
+  const reply = replyTo;
+  cancelReply();
+  const pending = h('div.msg.mine.pending', h('div.msg-avatar'), h('div.msg-body',
+    h('div.bubble', h('div.upload', h('div.spinner'), h('div.upload-info', h('span', 'Envoi du message vocal chiffré…'))))));
+  list.append(pending);
+  scrollToBottom(true);
+  try {
+    const desc = await uploadEncrypted(new File([blob], 'message-vocal', { type: blob.type }), key);
+    await postPayload({ v: 1, t: 'audio', file: { ...desc, duration: seconds }, ...(reply ? { reply } : {}) });
+  } catch (err) {
+    toastError(err);
+  } finally {
+    pending.remove();
   }
 }
 
@@ -848,10 +904,15 @@ function showTyping(id) {
   renderTyping();
 }
 function renderTyping() {
-  const names = [...typingTimers.keys()].map(memberName);
+  const ids = [...typingTimers.keys()];
+  const names = ids.map(memberName);
   const el = $('.typing', root);
-  el.replaceChildren(names.length ? h('span', h('i.dots', h('b'), h('b'), h('b')),
-    names.length === 1 ? ` ${names[0]} écrit…` : ` ${names.slice(0, 2).join(' et ')} écrivent…`) : '');
+  const who = names.length === 1 ? `${names[0]} écrit…`
+    : names.length === 2 ? `${names[0]} et ${names[1]} écrivent…`
+      : `${names[0]}, ${names[1]} et ${names.length - 2} autre${names.length > 3 ? 's' : ''} écrivent…`;
+  el.replaceChildren(names.length ? h('span.typing-pill',
+    h('span.typing-avatars', ids.slice(0, 3).map((id) => avatar(state.members.get(id), 20))),
+    h('i.dots', h('b'), h('b'), h('b')), h('span', who)) : '');
 }
 
 function setUnread(n) {

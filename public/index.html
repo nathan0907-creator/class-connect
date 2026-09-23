@@ -167,6 +167,7 @@
             <label class="field" data-only="email"><span>Adresse e-mail <em>(facultatif)</em></span>
               <input name="email" type="email" autocomplete="email" maxlength="120" placeholder="pour récupérer ton mot de passe"></label>
             <p class="hint" data-only="email">Conseillé : sans e-mail, un mot de passe oublié ne peut pas être récupéré.</p>
+            <div class="field" data-bday-field><span>Ton anniversaire <em>(jour et mois, pour fêter ça avec ta classe 🎂)</em></span></div>
             <label class="check"><input type="checkbox" name="terms" required>
               <span>J'accepte les <a href="cgu.html" target="_blank" rel="noopener">CGU</a> et la <a href="confidentialite.html" target="_blank" rel="noopener">politique de confidentialité</a>.</span></label>
             <p class="hint"><i class="ico ico-lock" aria-hidden="true"></i> Ton mot de passe chiffre tes clés sur ton appareil : il n'est jamais envoyé en clair.</p>
@@ -278,6 +279,7 @@
           <button class="nav-item student-only" data-panel="votes"><i class="ico ico-vote" aria-hidden="true"></i><span>Votes</span><b class="badge" data-badge="votes" aria-label="votes en attente"></b></button>
           <button class="nav-item" data-panel="council"><i class="ico ico-award" aria-hidden="true"></i><span data-short="Conseil">Conseil de classe</span></button>
           <button class="nav-item" data-panel="study"><i class="ico ico-sparkles" aria-hidden="true"></i><span data-short="Réviser">Révisions IA</span></button>
+          <button class="nav-item dm-nav" data-panel="dm"><i class="ico ico-mail" aria-hidden="true"></i><span data-dm-label>Privé</span><b class="badge" data-badge="dm" aria-label="messages privés non lus"></b></button>
           <button class="nav-item" data-panel="members"><i class="ico ico-users" aria-hidden="true"></i><span>Équipage</span><b class="badge" data-badge="members" aria-label="signalements à traiter"></b></button>
           <button class="nav-item delegate-only" data-panel="admin"><i class="ico ico-star" aria-hidden="true"></i><span>Délégué</span><b class="badge" data-badge="admin" aria-label="demandes en attente"></b></button>
         </div>
@@ -301,7 +303,7 @@
             <div>
               <h2 id="chat-title" data-channel-title>Canal de bord</h2>
               <p class="e2ee-line"><i class="ico ico-lock" aria-hidden="true"></i> Chiffré de bout en bout · <span data-channel-hint></span> · <span data-online-count>0</span> en ligne</p>
-              <button type="button" class="next-class" data-next-class hidden></button>
+              <div class="head-chips"><button type="button" class="next-class dm-shortcut" data-open-dm><span data-dm-label>✉️ Contacter les délégués</span><b class="badge" data-badge="dm"></b></button><button type="button" class="next-class" data-next-class hidden></button><button type="button" class="next-class next-event" data-next-event hidden></button></div>
             </div>
             <div class="online-stack" data-online-stack></div>
           </header>
@@ -316,6 +318,7 @@
             <div class="composer-tools">
               <button type="button" class="icon-btn" data-tool="file" title="Envoyer une image ou une vidéo" aria-label="Envoyer une image ou une vidéo"><i class="ico ico-image" aria-hidden="true"></i></button>
               <button type="button" class="icon-btn gif-btn" data-tool="gif" title="GIF" aria-label="Envoyer un GIF">GIF</button>
+              <button type="button" class="icon-btn" data-tool="voice" title="Message vocal" aria-label="Enregistrer un message vocal"><i class="ico ico-mic" aria-hidden="true"></i></button>
               <button type="button" class="icon-btn" data-tool="emoji" title="Emoji" aria-label="Insérer un emoji"><i class="ico ico-smile" aria-hidden="true"></i></button>
             </div>
             <textarea rows="1" placeholder="Message chiffré…" maxlength="4000" aria-label="Écrire un message"></textarea>
@@ -339,6 +342,7 @@
             </div>
             <button class="btn btn-primary delegate-only" data-action="new-slot"><span>Ajouter un cours</span></button>
           </header>
+          <div class="events-strip" data-events hidden></div>
           <div class="timetable-wrap"><div class="timetable"></div></div>
         </section>
 
@@ -397,6 +401,26 @@
           </div>
         </section>
 
+        <section class="panel" id="panel-dm" aria-labelledby="dm-title">
+          <header class="panel-head">
+            <div>
+              <h2 id="dm-title" data-dm-title>Contacter les délégués</h2>
+              <p class="muted">Conversation privée, chiffrée de bout en bout : seuls toi et les délégués la voyez (et le prof principal si tu l'invites).</p>
+            </div>
+          </header>
+          <div class="dm-layout">
+            <aside class="dm-inbox" aria-label="Conversations"></aside>
+            <div class="dm-view">
+              <div class="dm-head"></div>
+              <div class="dm-messages" role="log" aria-live="polite"></div>
+              <form class="dm-composer" hidden>
+                <textarea rows="1" maxlength="4000" placeholder="Message privé chiffré…" aria-label="Écrire un message privé"></textarea>
+                <button type="submit" class="send-btn" title="Envoyer" aria-label="Envoyer"><i class="ico ico-send" aria-hidden="true"></i></button>
+              </form>
+            </div>
+          </div>
+        </section>
+
         <section class="panel" id="panel-members" aria-labelledby="members-title">
           <header class="panel-head">
             <div>
@@ -408,6 +432,7 @@
           <div class="member-grid"></div>
           <div class="danger-zone">
             <button class="btn btn-ghost notify-btn" data-action="notify" hidden><i class="ico ico-bell" aria-hidden="true"></i> <span data-notify-label>Notifications</span></button>
+            <button class="btn btn-ghost" data-action="theme">🎨 Thème</button>
             <button class="btn btn-ghost" data-guide="login">❓ Guide</button>
             <button class="btn btn-ghost" data-action="logout">Se déconnecter</button>
             <button class="btn btn-ghost" data-action="leave">Quitter la classe</button>

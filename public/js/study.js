@@ -380,7 +380,7 @@ function showQuiz(out, quiz) {
       answered++;
       buttons.forEach((b, k) => { b.classList.toggle('correct', k === q.answer_index); b.disabled = true; });
       if (!good) buttons[c].classList.add('wrong');
-      feedback.replaceChildren(h('b', good ? '✔ Bonne réponse !' : '✘ Raté.'), ' ', renderMarkdown(q.explanation), q.source ? h('small.quiz-source', `Source : ${q.source}`) : null);
+      feedback.replaceChildren(h('b', good ? '✔ Bonne réponse !' : '✘ Raté.'), ' ', renderMarkdown(q.explanation), q.source ? h('small.quiz-source', `Source : ${q.source}`) : '');
       scoreEl.textContent = `${score} / ${questions.length}`;
       if (answered === questions.length) {
         scoreEl.classList.add('final');

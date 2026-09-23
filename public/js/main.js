@@ -19,6 +19,9 @@ import { initNotify, syncPush, stopPush } from './notify.js';
 import { initInstall } from './install.js';
 import { initGuide } from './guide.js';
 import { initProfiles, startProfiles, stopProfiles } from './profiles.js';
+import { initEvents, startEvents, stopEvents } from './events.js';
+import { initTheme, applyTheme } from './theme.js';
+import { initDM, startDM, stopDM, bindDMComposer } from './dm.js';
 import { $, $$, h, toast, toastError, enableTilt, busy, avatar } from './ui.js';
 
 let authFlow = null;
@@ -261,6 +264,7 @@ async function enterApp() {
   // Rights may have changed (e.g. promoted to delegate): refresh the role-dependent listeners.
   startCouncil();
   startProfiles();
+  startDM();
   if (isDelegate() || isTeacher()) {
     startModeration();
     purgeExpired().catch(() => {});
@@ -302,6 +306,7 @@ function startClass(cid) {
 
   startChat();
   startSlots();
+  startEvents();
   startProposals();
   startStudy();
   startCouncil();
@@ -314,12 +319,14 @@ function stopClass() {
   classUnsubs = [];
   stopAllChat();
   stopSlots();
+  stopEvents();
   stopProposals();
   stopPresence();
   stopModeration();
   stopStudy();
   stopCouncil();
   stopProfiles();
+  stopDM();
   liveClassId = null;
 }
 
@@ -339,6 +346,7 @@ async function boot() {
   initConsent({ onGranted: startAnalytics });
   initInstall();
   initGuide();
+  initTheme();
   watchNetwork();
   if (captureInvite()) {
     setTimeout(() => toast('✉️ Invitation reçue ! Connecte-toi ou crée ton compte : ta demande pour rejoindre la classe partira automatiquement.', 'info', 9000), 800);
@@ -349,6 +357,7 @@ async function boot() {
     const space = createSpace($('#space'));
     space.setMode(state.space.mode);
     state.space = space;
+    applyTheme();
     document.body.classList.add('space-ready');
   }).catch((err) => console.warn('3D indisponible', err));
   if ('requestIdleCallback' in window) requestIdleCallback(startSpace, { timeout: 1200 }); else setTimeout(startSpace, 300);
@@ -375,6 +384,9 @@ async function boot() {
   initStudy();
   initCouncil();
   initProfiles();
+  initEvents();
+  initDM();
+  bindDMComposer();
   initNotify();
 
   $$('.nav-item').forEach((b) => b.addEventListener('click', () => showPanel(b.dataset.panel)));

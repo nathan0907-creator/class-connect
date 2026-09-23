@@ -82,9 +82,6 @@ async function notifyClass(cid, channel, ch, msg) {
   const sender = users.get(msg.user_id);
   if (!sender || sender.class_id !== cid) return;
   const recipients = new Set([...users].filter(([uid, u]) => uid !== msg.user_id && u.class_id === cid && ch.canRead(u.role)).map(([uid]) => uid));
-  const targets = [...tokens].filter(([, t]) => recipients.has(t.uid));
-  if (!targets.length) return;
-
   const data = {
     title: `${sender.display_name || 'Quelqu\'un'} · ${ch.label}`,
     body: `Nouveau message chiffré dans ${classes.get(cid) || 'ta classe'}`,
@@ -96,6 +93,42 @@ async function notifyClass(cid, channel, ch, msg) {
   if (typeof msg.ciphertext === 'string' && msg.ciphertext.length <= 3000) {
     Object.assign(data, { cid, channel, epoch: String(msg.epoch), user_id: msg.user_id, iv: msg.iv, ciphertext: msg.ciphertext });
   }
+  await sendTo(recipients, data, `${classes.get(cid) || cid} · ${ch.label}`);
+}
+
+// ------------------------------------------------------------ private conversations ("Contacter les délégués")
+// Participants: the student, the delegates, and the head teachers if the student invited them.
+db.collectionGroup('dm').where('created_at', '>', startedAt).onSnapshot((snap) => {
+  for (const c of snap.docChanges()) {
+    if (c.type !== 'added') continue;
+    const thread = c.doc.ref.parent.parent;
+    const cid = thread?.parent.parent?.id;
+    if (cid) notifyDM(cid, thread, c.doc.data()).catch((err) => log('⚠ envoi :', err.message));
+  }
+}, (err) => {
+  log('⚠ écoute des messages privés interrompue :', err.message);
+  setTimeout(() => process.exit(1), 30000);
+});
+
+async function notifyDM(cid, threadRef, msg) {
+  const t = (await threadRef.get()).data();
+  const sender = users.get(msg.user_id);
+  if (!t || !sender || sender.class_id !== cid) return;
+  const recipients = new Set([t.student_id, ...[...users]
+    .filter(([, u]) => u.class_id === cid && (u.role === 'delegate' || (t.include_principal && u.role === 'teacher' && u.principal)))
+    .map(([uid]) => uid)]);
+  recipients.delete(msg.user_id);
+  await sendTo(recipients, {
+    title: `✉️ ${sender.display_name || 'Quelqu\'un'} · Message privé`,
+    body: 'Nouveau message privé chiffré (Contacter les délégués)',
+    tag: `cc-dm-${t.student_id}`,
+    url: SITE,
+  }, `${classes.get(cid) || cid} · message privé`);
+}
+
+async function sendTo(recipients, data, label) {
+  const targets = [...tokens].filter(([, t]) => recipients.has(t.uid));
+  if (!targets.length) return;
   const res = await getMessaging().sendEach(targets.map(([, t]) => ({
     token: t.token, data,
     webpush: { headers: { Urgency: 'high', TTL: String(24 * 3600) } },
@@ -105,7 +138,7 @@ async function notifyClass(cid, channel, ch, msg) {
   const dead = res.responses.map((r, i) => (!r.success && DEAD_TOKEN.has(r.error?.code) ? targets[i][0] : null)).filter(Boolean);
   await Promise.all(dead.map((id) => db.doc(`push_tokens/${id}`).delete().catch(() => {})));
   const errors = [...new Set(res.responses.filter((r) => !r.success).map((r) => r.error?.code || r.error?.message))];
-  log(`🔔 ${classes.get(cid) || cid} · ${ch.label} : ${res.successCount}/${targets.length} notification(s)${dead.length ? `, ${dead.length} appareil(s) oublié(s)` : ''}${errors.length ? ` · erreurs : ${errors.join(', ')}` : ''}`);
+  log(`🔔 ${label} : ${res.successCount}/${targets.length} notification(s)${dead.length ? `, ${dead.length} appareil(s) oublié(s)` : ''}${errors.length ? ` · erreurs : ${errors.join(', ')}` : ''}`);
   if (errors.some((e) => /auth|credential|invalid_grant|ACCOUNT_STATE/i.test(String(e)))) {
     log('   → La clé service-account.json est refusée par Google (supprimée ou désactivée ?) : génère-en une nouvelle (voir LISEZMOI.md).');
   }
