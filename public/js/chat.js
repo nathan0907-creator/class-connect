@@ -1,8 +1,9 @@
 import {
   query, orderBy, limit, startAfter, where, onSnapshot, getDocs, updateDoc, deleteDoc, doc,
-  serverTimestamp, writeBatch, Timestamp,
+  serverTimestamp, writeBatch, Timestamp, deleteField,
 } from 'firebase/firestore';
 import { openReport } from './moderation.js';
+import { notify } from './notify.js';
 import { db, sub, plain } from './fb.js';
 import { state, on, isDelegate, isDeputy, isTeacher, memberName, CHANNELS, channelsFor } from './state.js';
 import { encryptJSON, decryptJSON } from './crypto.js';
@@ -15,6 +16,8 @@ import { $, h, icon, avatar, toast, toastError, fmtTime, fmtDay, fmtSize, linkif
 const PAGE = 50;
 const GROUP_MS = 5 * 60 * 1000;
 const EMOJIS = ['😀','😂','🥹','😍','😎','🤔','😴','😭','😡','🤯','🥳','🤝','👍','👎','👏','🙏','💪','🔥','✨','🚀','🌌','🪐','⭐','🌙','☄️','👽','🛸','🌍','❤️','💜','💙','💯','✅','❌','⚠️','📚','📝','📅','⏰','🎉','🎮','⚽','🍕','☕','🎧','📸','🤫','👀'];
+/** Quick reactions (same list as the security rules). */
+const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🔥', '🎉', '🚀'];
 
 let root, list, scroller, textarea, fileInput, pinnedBar;
 let oldestSnap = null;
@@ -112,7 +115,11 @@ export function startChat(requested) {
     watchers.push(onSnapshot(query(sub(state.cls.id, ch), orderBy('created_at', 'desc'), limit(1)), (snap) => {
       if (first) { first = false; return; }
       const added = snap.docChanges().some((c) => c.type === 'added' && c.doc.get('user_id') !== state.me.id && !c.doc.get('deleted_at'));
-      if (added && ch !== channel) { unreadChannels.add(ch); renderChannelTabs(); setUnread(unread + 1); }
+      if (added && ch !== channel) {
+        unreadChannels.add(ch); renderChannelTabs(); setUnread(unread + 1);
+        const from = snap.docs[0]?.get('user_id');
+        notify(`Class Connect · ${CHANNELS[ch].label}`, `Nouveau message de ${memberName(from)}`, `cc-${ch}`);
+      }
     }, () => {}));
   }
 }
@@ -179,6 +186,11 @@ function onIncoming(row) {
   if (row.user_id !== state.me.id) {
     state.space.pulse();
     if (document.hidden || !root.classList.contains('active')) setUnread(unread + 1);
+    if (document.hidden) {
+      // Decrypted locally: the notification never goes through a server.
+      decryptRow(row).then((p) => notify(`${memberName(row.user_id)} · ${CHANNELS[channel].label}`,
+        !p ? 'Nouveau message chiffré' : p.text ? p.text.slice(0, 120) : p.t === 'video' ? '🎬 Vidéo' : p.t === 'gif' ? 'GIF' : '🖼️ Image', `cc-${channel}`));
+    }
   }
   if (atBottom || row.user_id === state.me.id) scrollToBottom(true);
 }
@@ -189,6 +201,8 @@ function onModified(row) {
   if (!el) return;
   el.classList.toggle('pinned', !!row.pinned);
   el._row.pinned = row.pinned;
+  el._row.reactions = row.reactions;
+  renderReactions(el);
   if (row.created_at && Number(el.dataset.ts) !== row.created_at) {
     el.dataset.ts = row.created_at;
     el.querySelector('.msg-head time').textContent = fmtTime(row.created_at);
@@ -237,11 +251,49 @@ function messageEl(row) {
       h('b', { style: { color: author?.color } }, memberName(row.user_id)),
       roleTag(author),
       h('time', fmtTime(row.created_at))),
-    h('div.bubble', h('span.decrypting', icon('lock'), ' déchiffrement…'))),
+    h('div.bubble', h('span.decrypting', icon('lock'), ' déchiffrement…')),
+    h('div.reactions')),
   h('div.msg-actions', actionButtons(row)));
   el._row = row;
   fillBubble(el, row);
+  renderReactions(el);
   return el;
+}
+
+// ------------------------------------------------------------ reactions
+function renderReactions(el) {
+  const all = el._row.reactions || {};
+  const counts = new Map();
+  for (const [uid, e] of Object.entries(all)) {
+    if (!REACTIONS.includes(e)) continue;
+    if (!counts.has(e)) counts.set(e, []);
+    counts.get(e).push(uid);
+  }
+  const mine = all[state.me.id];
+  el.querySelector('.reactions').replaceChildren(...REACTIONS.filter((e) => counts.has(e)).map((e) => {
+    const who = counts.get(e);
+    return h(`button.reaction${e === mine ? '.mine' : ''}`, {
+      type: 'button', title: who.map(memberName).join(', '),
+      'aria-label': `${e} ${who.length} — ${e === mine ? 'retirer ma réaction' : 'réagir'}`,
+      onclick: () => react(el._row, e),
+    }, e, h('b', who.length));
+  }));
+}
+
+/** Toggles my reaction (one per message; choosing another one replaces it). */
+function react(row, emoji) {
+  const mine = row.reactions?.[state.me.id];
+  updateDoc(doc(messagesCol(), row.id), { [`reactions.${state.me.id}`]: mine === emoji ? deleteField() : emoji }).catch(toastError);
+}
+
+function openReactionPicker(btn, row) {
+  document.querySelector('.reaction-pop')?.remove();
+  const pop = h('div.reaction-pop', { role: 'menu' }, REACTIONS.map((e) => h('button', {
+    type: 'button', role: 'menuitem', 'aria-label': `Réagir ${e}`, onclick: () => { pop.remove(); react(row, e); },
+  }, e)));
+  btn.closest('.msg').append(pop);
+  const off = (e) => { if (!pop.contains(e.target) && e.target !== btn) { pop.remove(); document.removeEventListener('pointerdown', off); } };
+  setTimeout(() => document.addEventListener('pointerdown', off));
 }
 
 function refreshAuthors() {
@@ -255,7 +307,7 @@ function refreshAuthors() {
 }
 
 function actionButtons(row) {
-  const out = [];
+  const out = [h('button.icon-btn', { title: 'Réagir', 'aria-label': 'Réagir', onclick: (e) => openReactionPicker(e.currentTarget, row) }, icon('smile'))];
   if (moderates(row.channel)) {
     out.push(h('button.icon-btn', { title: 'Épingler / désépingler', onclick: () => {
       updateDoc(doc(messagesCol(), row.id), { pinned: !row.pinned }).catch(toastError);

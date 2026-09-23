@@ -15,6 +15,7 @@ import { initVotes, startProposals, stopProposals } from './votes.js';
 import { initMembers, inviteCode } from './members.js';
 import { startPresence, stopPresence } from './presence.js';
 import { initConsent } from './consent.js';
+import { initNotify } from './notify.js';
 import { $, $$, h, toast, toastError, enableTilt, busy, avatar } from './ui.js';
 
 let authFlow = null;
@@ -351,6 +352,7 @@ async function boot() {
   initMembers();
   initStudy();
   initCouncil();
+  initNotify();
 
   $$('.nav-item').forEach((b) => b.addEventListener('click', () => showPanel(b.dataset.panel)));
   on('goto', showPanel);
