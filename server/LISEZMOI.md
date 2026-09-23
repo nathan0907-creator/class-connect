@@ -7,6 +7,38 @@ Il doit tourner sur un PC **allumé et connecté à Internet** en permanence (un
 - **Confidentiel** : les messages sont chiffrés de bout en bout, le serveur ne peut pas les lire. Il envoie seulement le pseudo de l'auteur et le nom du canal.
 - **Un seul PC à la fois** : ne le lance pas sur deux ordinateurs en même temps.
 
+## Sur Linux (Debian / Ubuntu, par SSH) — recommandé
+
+1. **Sur ton PC Windows**, télécharge la clé (voir l'étape 2 plus bas) : fichier `service-account.json` dans `Téléchargements`.
+2. **Connecte-toi au serveur** et récupère le dossier `server` :
+   ```bash
+   ssh utilisateur@ip-du-serveur
+   curl -L https://github.com/nathan0907-creator/class-connect/archive/refs/heads/main.tar.gz | tar xz
+   mv class-connect-main/server ~/class-connect-push && rm -rf class-connect-main
+   ```
+3. **Depuis Windows** (PowerShell), envoie la clé sur le serveur :
+   ```powershell
+   scp $env:USERPROFILE\Downloads\service-account.json utilisateur@ip-du-serveur:~/class-connect-push/
+   ```
+   Puis supprime-la de `Téléchargements` (elle n'a plus rien à faire sur ton PC).
+4. **Sur le serveur**, installe le service :
+   ```bash
+   cd ~/class-connect-push && bash installer-debian.sh
+   ```
+   Le script installe Node.js si besoin, protège la clé (`chmod 600`) et crée le service systemd
+   `class-connect-push` : il démarre à chaque allumage et redémarre tout seul s'il plante.
+5. Suivre ce qui se passe : `sudo journalctl -u class-connect-push -f` (Ctrl+C pour quitter, le service continue).
+
+Mettre à jour plus tard : refais l'étape 2 dans un dossier temporaire, copie `push-server.mjs` dans `~/class-connect-push/`,
+puis `sudo systemctl restart class-connect-push`.
+
+Si c'est un portable : pour qu'il ne se mette pas en veille capot fermé, mets `HandleLidSwitch=ignore` dans
+`/etc/systemd/logind.conf` puis `sudo systemctl restart systemd-logind`.
+
+---
+
+## Sur Windows
+
 ## 1. Installer Node.js sur le vieux PC
 
 Télécharge la version **LTS** sur https://nodejs.org et installe-la (tout par défaut).
