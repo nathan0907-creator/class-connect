@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <script>if (location.protocol === 'http:' && !/^(localhost|127\.|\[::1\])/.test(location.hostname)) location.replace('https:' + location.href.slice(5));</script>
+  <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Politique de confidentialité (RGPD) — Class Connect</title>
+  <meta name="description" content="Quelles données Class Connect collecte, pourquoi, combien de temps, et comment exercer tes droits RGPD.">
+  <link rel="canonical" href="https://nathan0907-creator.github.io/class-connect/confidentialite.html">
+  <meta name="theme-color" content="#05030f">
+  <meta property="og:title" content="Politique de confidentialité — Class Connect">
+  <meta property="og:description" content="Données collectées, finalités, durées de conservation et droits RGPD.">
+  <meta property="og:image" content="https://nathan0907-creator.github.io/class-connect/img/og-image.jpg">
+  <meta property="og:url" content="https://nathan0907-creator.github.io/class-connect/confidentialite.html">
+  <link rel="icon" href="favicon.ico" sizes="32x32">
+  <link rel="icon" href="img/logo.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+  <link rel="stylesheet" href="css/style.css">
+  <script type="module">import { initConsent } from './js/consent.js'; initConsent();</script>
+</head>
+<body class="doc-page">
+  <div class="doc">
+    <header class="doc-header">
+      <a class="doc-brand" href="./"><img src="img/logo.svg" alt="" width="36" height="36"> CLASS CONNECT</a>
+      <a class="btn btn-ghost btn-sm" href="./">← Retour au site</a>
+    </header>
+    <main class="card doc-card">
+      <h1>Politique de confidentialité</h1>
+      <p class="doc-meta">Dernière mise à jour : 23 septembre 2026</p>
+
+      <p>Class Connect est une messagerie de classe. Elle a été conçue pour collecter <b>le minimum de données</b> :
+      le contenu de tes messages, images et vidéos est <b>chiffré de bout en bout</b> sur ton appareil. Ni l'éditeur du site
+      ni ses hébergeurs ne peuvent le lire.</p>
+
+      <h2>1. Responsable du traitement</h2>
+      <p>Le responsable du traitement est l'éditeur du site Class Connect. Pour toute question ou demande liée à tes données,
+      contacte-le via <a href="https://github.com/nathan0907-creator/class-connect/issues" rel="noopener">la page du projet</a> (en précisant « RGPD » dans le titre,
+      sans y écrire d'informations personnelles : l'éditeur te recontactera).</p>
+
+      <h2>2. Données traitées</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Donnée</th><th>Pourquoi</th><th>Lisible par le serveur ?</th></tr></thead>
+        <tbody>
+          <tr><td>Pseudo, nom affiché, couleur d'avatar</td><td>T'identifier auprès de ta classe</td><td>Oui</td></tr>
+          <tr><td>Adresse e-mail (facultative)</td><td>Connexion et réinitialisation du mot de passe</td><td>Oui</td></tr>
+          <tr><td>Mot de passe</td><td>Authentification</td><td>Non : seule une empreinte dérivée (PBKDF2) est envoyée</td></tr>
+          <tr><td>Clé publique et clé privée chiffrée</td><td>Chiffrement de bout en bout</td><td>Clé privée : non (chiffrée avec ton mot de passe)</td></tr>
+          <tr><td>Messages, images, vidéos, GIFs importés</td><td>Service de messagerie</td><td><b>Non</b> (chiffrés AES-256)</td></tr>
+          <tr><td>Classe, rôle (élève/délégué), statut</td><td>Gestion de la classe</td><td>Oui</td></tr>
+          <tr><td>Emploi du temps, propositions, totaux des votes</td><td>Votes sur l'emploi du temps</td><td>Oui (ton vote individuel n'est visible que par toi)</td></tr>
+          <tr><td>Présence en ligne, indicateur « écrit… »</td><td>Confort d'utilisation</td><td>Oui, effacé à la déconnexion</td></tr>
+          <tr><td>Données techniques (adresse IP, navigateur)</td><td>Sécurité, anti-abus (App Check / reCAPTCHA)</td><td>Oui, par Google</td></tr>
+          <tr><td>Statistiques de visite</td><td>Mesure d'audience, <b>uniquement si tu l'acceptes</b></td><td>Oui, par Google Analytics</td></tr>
+        </tbody>
+      </table></div>
+
+      <h2>3. Bases légales</h2>
+      <ul>
+        <li><b>Exécution du contrat</b> (les <a href="cgu.html">CGU</a>) : compte, classe, messagerie, votes.</li>
+        <li><b>Intérêt légitime</b> : sécurité du service et lutte contre le spam.</li>
+        <li><b>Consentement</b> : mesure d'audience. Tu peux le retirer à tout moment via le lien « Cookies » en bas de page.</li>
+      </ul>
+
+      <h2>4. Destinataires et sous-traitants</h2>
+      <ul>
+        <li><b>Google Firebase</b> (Google Ireland Ltd) : authentification, base de données, sécurité, statistiques.</li>
+        <li><b>GitHub Pages</b> (GitHub Inc.) : hébergement des pages du site.</li>
+        <li><b>jsDelivr</b> et <b>Google Fonts</b> : fourniture de bibliothèques et de polices (ils voient ton adresse IP).</li>
+        <li><b>GIPHY</b> : uniquement si tu utilises la recherche de GIFs.</li>
+      </ul>
+      <p>Certains de ces prestataires peuvent traiter des données aux États-Unis. Ces transferts sont encadrés par le
+      <i>EU-US Data Privacy Framework</i> et/ou des clauses contractuelles types de la Commission européenne.
+      Les données ne sont jamais vendues ni utilisées à des fins publicitaires.</p>
+
+      <h2>5. Durées de conservation</h2>
+      <ul>
+        <li>Compte : jusqu'à sa suppression (bouton « Supprimer mon compte » dans l'onglet Équipage).</li>
+        <li>Messages et médias chiffrés : tant que la classe existe, ou jusqu'à leur suppression par l'auteur ou le délégué.</li>
+        <li>Présence en ligne : effacée dès la déconnexion.</li>
+        <li>Statistiques : 14 mois maximum.</li>
+      </ul>
+
+      <h2>6. Cookies et stockage local</h2>
+      <p>Le site utilise le stockage de ton navigateur <b>strictement nécessaire</b> au fonctionnement : session de connexion
+      Firebase, clé privée de chiffrement (IndexedDB, jamais transmise), et ton choix concernant les cookies. Ces éléments
+      ne nécessitent pas de consentement. Les cookies de mesure d'audience (<code>_ga</code>) ne sont déposés
+      <b>qu'après ton accord</b>, et supprimés si tu le retires.</p>
+
+      <h2>7. Sécurité</h2>
+      <p>Connexion HTTPS obligatoire, chiffrement de bout en bout (ECDH P-256 + AES-256-GCM), règles d'accès vérifiées
+      côté serveur, limitation anti-spam, et empreintes de sécurité pour vérifier les clés de tes camarades.
+      Conséquence : <b>si tu perds ton mot de passe, tes clés sont régénérées</b> et un membre de ta classe doit te
+      retransmettre l'accès aux messages.</p>
+
+      <h2>8. Mineurs</h2>
+      <p>Class Connect s'adresse à des élèves. Si tu as moins de 15 ans, parles-en à un parent ou responsable légal avant
+      de créer un compte : conformément à la loi française, son accord est nécessaire pour le traitement fondé sur le
+      consentement (statistiques).</p>
+
+      <h2>9. Tes droits</h2>
+      <p>Tu disposes d'un droit d'accès, de rectification, d'effacement, de limitation, d'opposition et de portabilité de
+      tes données, ainsi que du droit de retirer ton consentement et de définir des directives sur leur sort après ton décès.
+      Tu peux supprimer ton compte toi-même, ou contacter l'éditeur (voir §1). Si tu estimes que tes droits ne sont pas
+      respectés, tu peux adresser une réclamation à la <a href="https://www.cnil.fr/fr/plaintes" rel="noopener">CNIL</a>.</p>
+    </main>
+    <footer class="doc-footer">
+      <a href="./">Accueil</a><a href="cgu.html">CGU</a><a href="#" data-action="cookies">Gérer les cookies</a>
+    </footer>
+  </div>
+</body>
+</html>

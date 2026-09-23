@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://nathan0907-creator.github.io/class-connect/sitemap.xml

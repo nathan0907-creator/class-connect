@@ -1,0 +1,260 @@
+rules_version = '2';
+
+// ============================================================================
+//  Class Connect — règles de sécurité Firestore
+//  Toute l'autorisation est vérifiée ICI, côté serveur Google : le code du site
+//  ne fait qu'envoyer des requêtes que ces règles acceptent ou refusent.
+//  Le contenu des messages et des fichiers est chiffré de bout en bout : même
+//  avec un accès à la base, il est illisible.
+// ============================================================================
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------------------------------------------------------------- helpers
+    function signedIn() { return request.auth != null; }
+    function uid() { return request.auth.uid; }
+    function userPath(id) { return /databases/$(database)/documents/users/$(id); }
+    function classPath(cid) { return /databases/$(database)/documents/classes/$(cid); }
+    function me() { return get(userPath(uid())).data; }
+    function isActiveMember(cid) { return signedIn() && exists(userPath(uid())) && me().class_id == cid && me().status == 'active'; }
+    function isDelegate(cid) { return isActiveMember(cid) && me().role == 'delegate'; }
+    function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
+    function onlyChanged(keys) { return changed().hasOnly(keys); }
+    function str(v, min, max) { return v is string && v.size() >= min && v.size() <= max; }
+    function hhmm(v) { return v is string && v.matches('^([01][0-9]|2[0-3]):[0-5][0-9]$'); }
+
+    function validSlot(d) {
+      return d.keys().hasOnly(['day', 'start_at', 'end_at', 'subject', 'teacher', 'room', 'color'])
+        && d.keys().hasAll(['day', 'start_at', 'end_at', 'subject', 'teacher', 'room', 'color'])
+        && d.day is int && d.day >= 0 && d.day <= 5
+        && hhmm(d.start_at) && hhmm(d.end_at) && d.start_at < d.end_at
+        && str(d.subject, 1, 40) && str(d.teacher, 0, 40) && str(d.room, 0, 20)
+        && d.color is string && d.color.matches('^#[0-9a-fA-F]{6}$');
+    }
+
+    // ---------------------------------------------------------------- usernames (pseudo → e-mail de connexion)
+    match /usernames/{name} {
+      allow get: if true;               // needed to sign in with a pseudo
+      allow list: if false;             // no enumeration
+      allow create: if signedIn()
+        && name.matches('^[a-z0-9_.-]{3,24}$')
+        && request.resource.data.keys().hasOnly(['uid', 'email'])
+        && request.resource.data.uid == uid()
+        && request.resource.data.email == request.auth.token.email;
+      allow update: if false;
+      allow delete: if signedIn() && resource.data.uid == uid();   // account deletion (RGPD)
+    }
+
+    // ---------------------------------------------------------------- private keys (encrypted with the password)
+    match /private/{userId} {
+      allow read: if signedIn() && userId == uid();
+      allow create, update: if signedIn() && userId == uid()
+        && request.resource.data.keys().hasOnly(['enc_salt', 'enc_private_key', 'priv_iv'])
+        && str(request.resource.data.enc_private_key, 10, 1000);
+      allow delete: if signedIn() && userId == uid();
+    }
+
+    // ---------------------------------------------------------------- users
+    function userKeys() {
+      return request.resource.data.keys().hasOnly(['username', 'display_name', 'color', 'public_key', 'class_id',
+        'role', 'status', 'created_at', 'invite_code']);
+    }
+    function selfUpdate(userId) {
+      let b = resource.data;
+      let a = request.resource.data;
+      return userId == uid() && userKeys() && a.username == b.username && a.created_at == b.created_at && (
+        // profile
+        (onlyChanged(['display_name', 'color', 'public_key']) && str(a.display_name, 1, 40) && str(a.public_key, 50, 400))
+        // join a class with an invite code → pending
+        || (onlyChanged(['class_id', 'status', 'role', 'invite_code']) && b.class_id == null
+            && a.status == 'pending' && a.role == 'student' && a.invite_code is string
+            && get(/databases/$(database)/documents/invites/$(a.invite_code)).data.class_id == a.class_id)
+        // create a class (same batch) → delegate
+        || (onlyChanged(['class_id', 'status', 'role']) && b.class_id == null
+            && a.status == 'active' && a.role == 'delegate' && a.class_id is string
+            && !exists(classPath(a.class_id))
+            && getAfter(classPath(a.class_id)).data.created_by == uid())
+        // leave the class
+        || (onlyChanged(['class_id', 'status', 'role', 'invite_code']) && a.class_id == null && a.status == 'none' && a.role == 'student')
+      );
+    }
+    function delegateUpdate(userId) {
+      let b = resource.data;
+      let a = request.resource.data;
+      return userId != uid() && b.class_id != null && isDelegate(b.class_id) && (
+        (onlyChanged(['status']) && b.status == 'pending' && a.status == 'active')
+        || (onlyChanged(['class_id', 'status', 'role']) && a.class_id == null && a.status == 'none' && a.role == 'student')
+        || (onlyChanged(['role']) && b.status == 'active' && a.role in ['student', 'delegate'])
+      );
+    }
+
+    match /users/{userId} {
+      allow get: if signedIn() && (userId == uid()
+        || (exists(userPath(uid())) && me().class_id != null && resource.data.class_id == me().class_id));
+      allow list: if signedIn() && exists(userPath(uid())) && me().class_id != null && resource.data.class_id == me().class_id;
+      allow create: if signedIn() && userId == uid() && userKeys()
+        && request.resource.data.class_id == null && request.resource.data.role == 'student'
+        && request.resource.data.status == 'none' && request.resource.data.created_at == request.time
+        && str(request.resource.data.display_name, 1, 40) && str(request.resource.data.public_key, 50, 400)
+        && getAfter(/databases/$(database)/documents/usernames/$(request.resource.data.username)).data.uid == uid();
+      allow update: if signedIn() && (selfUpdate(userId) || delegateUpdate(userId));
+      allow delete: if signedIn() && userId == uid() && resource.data.class_id == null;
+    }
+
+    // ---------------------------------------------------------------- invites
+    match /invites/{code} {
+      allow get: if signedIn();
+      allow list: if false;
+      allow create: if signedIn() && code.matches('^[A-Z0-9]{4}-[A-Z0-9]{4}$')
+        && request.resource.data.keys().hasOnly(['class_id'])
+        && (isDelegate(request.resource.data.class_id)
+            || (!exists(classPath(request.resource.data.class_id))
+                && getAfter(classPath(request.resource.data.class_id)).data.created_by == uid()));
+      allow delete: if signedIn() && isDelegate(resource.data.class_id);
+      allow update: if false;
+    }
+
+    // ---------------------------------------------------------------- classes
+    match /classes/{cid} {
+      allow get: if signedIn() && exists(userPath(uid())) && me().class_id == cid;
+      allow list: if false;
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['name', 'invite_code', 'key_epoch', 'created_by', 'created_at'])
+        && request.resource.data.created_by == uid() && request.resource.data.key_epoch == 1
+        && request.resource.data.created_at == request.time && str(request.resource.data.name, 2, 60)
+        && me().class_id == null
+        && getAfter(userPath(uid())).data.class_id == cid
+        && existsAfter(/databases/$(database)/documents/invites/$(request.resource.data.invite_code));
+      allow update: if isDelegate(cid) && (
+        (onlyChanged(['name']) && str(request.resource.data.name, 2, 60))
+        || (onlyChanged(['invite_code']) && getAfter(/databases/$(database)/documents/invites/$(request.resource.data.invite_code)).data.class_id == cid)
+        || (onlyChanged(['key_epoch']) && request.resource.data.key_epoch == resource.data.key_epoch + 1)
+      );
+      allow delete: if false;
+
+      // Class keys, wrapped (encrypted) for each member.
+      match /shares/{shareId} {
+        allow read: if isActiveMember(cid);
+        allow create: if isActiveMember(cid)
+          && request.resource.data.keys().hasOnly(['epoch', 'user_id', 'from_user_id', 'from_public_key', 'iv', 'wrapped'])
+          && shareId == string(request.resource.data.epoch) + '_' + request.resource.data.user_id
+          && request.resource.data.from_user_id == uid()
+          && request.resource.data.from_public_key == me().public_key
+          && str(request.resource.data.wrapped, 10, 200) && str(request.resource.data.iv, 10, 32)
+          && getAfter(userPath(request.resource.data.user_id)).data.class_id == cid
+          && getAfter(userPath(request.resource.data.user_id)).data.status == 'active'
+          && (exists(/databases/$(database)/documents/classes/$(cid)/shares/$(string(request.resource.data.epoch) + '_' + uid()))
+              || (isDelegate(cid) && request.resource.data.epoch == getAfter(classPath(cid)).data.key_epoch));
+        allow update: if false;
+        allow delete: if isActiveMember(cid) && (resource.data.user_id == uid() || isDelegate(cid));
+      }
+
+      // Anti-spam: one message per second per member, enforced server-side.
+      match /rate/{userId} {
+        allow read: if false;
+        allow create, update: if isActiveMember(cid) && userId == uid()
+          && request.resource.data.keys().hasOnly(['last']) && request.resource.data.last == request.time
+          && (!exists(/databases/$(database)/documents/classes/$(cid)/rate/$(uid()))
+              || request.time > resource.data.last + duration.value(1, 's'));
+      }
+
+      // Encrypted messages.
+      match /messages/{mid} {
+        allow read: if isActiveMember(cid);
+        allow create: if isActiveMember(cid)
+          && request.resource.data.keys().hasOnly(['user_id', 'epoch', 'iv', 'ciphertext', 'pinned', 'created_at'])
+          && request.resource.data.user_id == uid()
+          && request.resource.data.epoch == get(classPath(cid)).data.key_epoch
+          && request.resource.data.pinned == false
+          && request.resource.data.created_at == request.time
+          && str(request.resource.data.iv, 10, 32) && str(request.resource.data.ciphertext, 10, 60000)
+          && getAfter(/databases/$(database)/documents/classes/$(cid)/rate/$(uid())).data.last == request.time;
+        allow update: if isDelegate(cid) && onlyChanged(['pinned']) && request.resource.data.pinned is bool;
+        allow delete: if isActiveMember(cid) && (resource.data.user_id == uid() || isDelegate(cid));
+      }
+
+      // Encrypted media, split into ~900 KB chunks.
+      match /chunks/{chunkId} {
+        allow read: if isActiveMember(cid);
+        allow create: if isActiveMember(cid)
+          && request.resource.data.keys().hasOnly(['uploader', 'n', 'data'])
+          && request.resource.data.uploader == uid()
+          && request.resource.data.n is int && request.resource.data.n >= 0 && request.resource.data.n < 20
+          && request.resource.data.data is bytes && request.resource.data.data.size() <= 950000;
+        allow update: if false;
+        allow delete: if isActiveMember(cid) && (resource.data.uploader == uid() || isDelegate(cid));
+      }
+
+      match /slots/{sid} {
+        allow read: if isActiveMember(cid);
+        allow create, update: if isDelegate(cid) && validSlot(request.resource.data);
+        allow delete: if isDelegate(cid);
+      }
+
+      // Timetable change proposals + secret ballot.
+      match /proposals/{pid} {
+        function votePath() { return /databases/$(database)/documents/classes/$(cid)/proposals/$(pid)/votes/$(uid()); }
+        function field(v) { return {'1': 'yes', '-1': 'no', '0': 'abstain'}[string(v)]; }
+        function total(d) { return d.yes + d.no + d.abstain; }
+        function tallyUpdate() {
+          let b = resource.data;
+          let a = request.resource.data;
+          let nv = getAfter(votePath()).data.value;
+          return isActiveMember(cid) && b.status == 'open' && b.deadline > request.time
+            && onlyChanged(['yes', 'no', 'abstain'])
+            && existsAfter(votePath())
+            && a[field(nv)] == b[field(nv)] + 1
+            && ((!exists(votePath()) && total(a) == total(b) + 1)
+                || (exists(votePath()) && get(votePath()).data.value != nv
+                    && a[field(get(votePath()).data.value)] == b[field(get(votePath()).data.value)] - 1
+                    && total(a) == total(b)));
+        }
+
+        allow read: if isActiveMember(cid);
+        allow create: if isActiveMember(cid)
+          && request.resource.data.keys().hasOnly(['author_id', 'title', 'reason', 'action', 'slot_id', 'data', 'status',
+               'yes', 'no', 'abstain', 'deadline', 'created_at', 'closed_at'])
+          && request.resource.data.author_id == uid()
+          && request.resource.data.status == 'open' && request.resource.data.closed_at == null
+          && request.resource.data.yes == 1 && request.resource.data.no == 0 && request.resource.data.abstain == 0
+          && request.resource.data.created_at == request.time
+          && request.resource.data.deadline is timestamp
+          && request.resource.data.deadline > request.time
+          && request.resource.data.deadline < request.time + duration.value(169, 'h')
+          && str(request.resource.data.title, 3, 80) && str(request.resource.data.reason, 0, 600)
+          && request.resource.data.action in ['add', 'modify', 'delete']
+          && (request.resource.data.action == 'delete' || validSlot(request.resource.data.data))
+          && (request.resource.data.action == 'add'
+              || exists(/databases/$(database)/documents/classes/$(cid)/slots/$(request.resource.data.slot_id)))
+          && getAfter(votePath()).data.value == 1;
+        allow update: if (isDelegate(cid) && resource.data.status == 'open' && onlyChanged(['status', 'closed_at'])
+                          && request.resource.data.status in ['accepted', 'rejected']
+                          && request.resource.data.closed_at == request.time)
+                      || tallyUpdate();
+        allow delete: if isDelegate(cid) || (isActiveMember(cid) && resource.data.author_id == uid() && resource.data.status == 'open');
+
+        match /votes/{voterId} {
+          function proposal() { return /databases/$(database)/documents/classes/$(cid)/proposals/$(pid); }
+          function validVote() {
+            return request.resource.data.keys().hasOnly(['value']) && request.resource.data.value in [-1, 0, 1];
+          }
+          allow get: if signedIn() && voterId == uid();
+          allow list: if false;
+          allow create: if signedIn() && voterId == uid() && isActiveMember(cid) && validVote() && (
+            // author's automatic vote while creating the proposal
+            (!exists(proposal()) && getAfter(proposal()).data.author_id == uid() && request.resource.data.value == 1)
+            // regular vote: the tally must move by exactly one in the same batch
+            || (exists(proposal()) && get(proposal()).data.status == 'open' && get(proposal()).data.deadline > request.time
+                && getAfter(proposal()).data[field(request.resource.data.value)] == get(proposal()).data[field(request.resource.data.value)] + 1)
+          );
+          allow update: if signedIn() && voterId == uid() && isActiveMember(cid) && validVote()
+            && resource.data.value != request.resource.data.value
+            && get(proposal()).data.status == 'open' && get(proposal()).data.deadline > request.time
+            && getAfter(proposal()).data[field(request.resource.data.value)] == get(proposal()).data[field(request.resource.data.value)] + 1
+            && getAfter(proposal()).data[field(resource.data.value)] == get(proposal()).data[field(resource.data.value)] - 1;
+          allow delete: if false;
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "class-connect",
+  "version": "2.0.0",
+  "description": "Class Connect — messagerie de classe chiffrée de bout en bout, votes d'emploi du temps et espace délégué, thème spatial 3D. GitHub Pages + Firebase.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/serve.mjs",
+    "check": "node scripts/check-links.mjs"
+  }
+}

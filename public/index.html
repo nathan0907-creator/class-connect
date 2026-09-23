@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <script>if (location.protocol === 'http:' && !/^(localhost|127\.|\[::1\])/.test(location.hostname)) location.replace('https:' + location.href.slice(5));</script>
+  <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Class Connect — La messagerie chiffrée de ta classe</title>
+  <meta name="description" content="Class Connect : le chat de classe chiffré de bout en bout (texte, images, vidéos, GIFs), les votes sur l'emploi du temps et un espace délégué. Gratuit, dans un univers spatial 3D.">
+  <meta name="cc-base" content="">
+  <link rel="canonical" href="https://nathan0907-creator.github.io/class-connect/">
+  <meta name="theme-color" content="#05030f">
+  <meta name="color-scheme" content="dark">
+  <meta name="robots" content="index, follow">
+
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="fr_FR">
+  <meta property="og:site_name" content="Class Connect">
+  <meta property="og:title" content="Class Connect — La messagerie chiffrée de ta classe">
+  <meta property="og:description" content="Chat chiffré de bout en bout, votes sur l'emploi du temps et espace délégué, dans un univers spatial 3D.">
+  <meta property="og:url" content="https://nathan0907-creator.github.io/class-connect/">
+  <meta property="og:image" content="https://nathan0907-creator.github.io/class-connect/img/og-image.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Logo Class Connect : une planète violette à anneaux dans l'espace, avec le slogan « La station spatiale de ta classe ».">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Class Connect — La messagerie chiffrée de ta classe">
+  <meta name="twitter:description" content="Chat chiffré de bout en bout, votes sur l'emploi du temps et espace délégué.">
+  <meta name="twitter:image" content="https://nathan0907-creator.github.io/class-connect/img/og-image.jpg">
+
+  <link rel="icon" href="favicon.ico" sizes="32x32">
+  <link rel="icon" href="img/logo.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+  <link rel="manifest" href="site.webmanifest">
+
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Inter:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="css/style.css">
+  <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/","firebase/app":"https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js","firebase/auth":"https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js","firebase/firestore":"https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js","firebase/database":"https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js","firebase/app-check":"https://www.gstatic.com/firebasejs/10.14.1/firebase-app-check.js","firebase/analytics":"https://www.gstatic.com/firebasejs/10.14.1/firebase-analytics.js"}}</script>
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+  <script type="module" src="js/main.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Aller au contenu</a>
+  <canvas id="space" aria-hidden="true"></canvas>
+  <div class="vignette" aria-hidden="true"></div>
+
+  <!-- Boot -->
+  <section id="view-boot" class="view active" aria-label="Chargement">
+    <div class="boot-orbit" role="progressbar" aria-label="Chargement de Class Connect"><span></span><span></span><span></span></div>
+  </section>
+
+  <!-- Missing configuration -->
+  <section id="view-setup" class="view" aria-labelledby="setup-title">
+    <div class="card center-card wide">
+      <div class="big-icon" aria-hidden="true"><i class="ico ico-rocket"></i></div>
+      <h2 id="setup-title">Configuration requise</h2>
+      <p class="muted">Class Connect a besoin d'un projet <b>Firebase</b> (gratuit) pour fonctionner.</p>
+      <ol class="setup-steps">
+        <li>Crée un projet sur <b>console.firebase.google.com</b>.</li>
+        <li>Active <b>Authentication → E-mail/Mot de passe</b> et crée une base <b>Firestore</b>.</li>
+        <li>Colle les règles de <code>firestore.rules</code> dans l'onglet <b>Règles</b> de Firestore.</li>
+        <li>Copie la configuration Web de ton projet dans <code>public/js/config.js</code>.</li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- Authentication: one field, one call to action -->
+  <main id="view-auth" class="view" aria-labelledby="brand-title">
+    <div class="auth-layout" id="main-content">
+      <header class="hero">
+        <div class="logo-3d" aria-hidden="true">
+          <div class="logo-core"></div>
+          <div class="logo-ring r1"></div>
+          <div class="logo-ring r2"></div>
+          <div class="logo-ring r3"></div>
+        </div>
+        <h1 class="brand" id="brand-title"><span>CLASS</span><span>CONNECT</span></h1>
+        <p class="tagline">La station spatiale de ta classe.</p>
+        <ul class="features">
+          <li><i class="ico ico-lock" aria-hidden="true"></i> Chat chiffré de bout en bout</li>
+          <li><i class="ico ico-image" aria-hidden="true"></i> Images, vidéos &amp; GIFs</li>
+          <li><i class="ico ico-vote" aria-hidden="true"></i> Votes sur l'emploi du temps</li>
+          <li><i class="ico ico-star" aria-hidden="true"></i> Un délégué aux commandes</li>
+        </ul>
+      </header>
+
+      <div class="card auth-card">
+        <div class="stage idle" aria-hidden="true">
+          <div class="stage-stars"></div>
+          <div class="stage-stars far"></div>
+          <div class="earth-ground"><div class="earth"></div><div class="pad"><i></i><i></i></div></div>
+          <div class="mars-ground"><div class="mars"></div><div class="flag"></div></div>
+          <div class="smoke"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="dust"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="rocket-wrap">
+            <div class="rocket-inner">
+              <div class="flame"></div>
+              <svg class="rocket" viewBox="0 0 40 90" width="40" height="90">
+                <defs>
+                  <linearGradient id="rk-body" x1="0" x2="1"><stop offset="0" stop-color="#c9cdf5"/><stop offset=".45" stop-color="#ffffff"/><stop offset="1" stop-color="#8e94cc"/></linearGradient>
+                  <linearGradient id="rk-fin" x1="0" x2="1"><stop offset="0" stop-color="#ff4fd8"/><stop offset="1" stop-color="#7c5cff"/></linearGradient>
+                </defs>
+                <path d="M8 46 L0 70 L9 65Z" fill="url(#rk-fin)"/>
+                <path d="M32 46 L40 70 L31 65Z" fill="url(#rk-fin)"/>
+                <path d="M15 62 L25 62 L27.5 71 L12.5 71Z" fill="#555a8a"/>
+                <path d="M20 2 C31 14 33 36 32 64 L8 64 C7 36 9 14 20 2Z" fill="url(#rk-body)"/>
+                <path d="M20 2 C26 8 29 15 30.6 23 L9.4 23 C11 15 14 8 20 2Z" fill="url(#rk-fin)"/>
+                <circle cx="20" cy="36" r="6.2" fill="#1b1450" stroke="#7c5cff" stroke-width="2"/>
+                <circle cx="18" cy="34" r="2" fill="#8fe9ff" opacity=".85"/>
+                <path d="M20 64 L20 50" stroke="#b8bde8" stroke-width="1.2"/>
+              </svg>
+            </div>
+          </div>
+          <div class="burst"></div>
+          <div class="success-badge"><svg viewBox="0 0 24 24" width="30" height="30"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="#04140c" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <p class="stage-caption"></p>
+        </div>
+
+        <div class="steps">
+          <!-- Step 1 -->
+          <form class="step active" data-step="id" novalidate>
+            <h2 class="step-title">Embarque à bord</h2>
+            <label class="field"><span>Pseudo ou adresse e-mail</span>
+              <input name="identifier" autocomplete="username" required maxlength="120" autocapitalize="off" spellcheck="false"
+                     placeholder="ex. astro_lea ou lea@mail.fr" aria-describedby="id-hint"></label>
+            <p class="hint" id="id-hint">Nouveau ? Choisis simplement un pseudo, on crée ton compte.</p>
+            <label class="hp" aria-hidden="true">Site web <input name="website" tabindex="-1" autocomplete="off"></label>
+            <button class="btn btn-primary btn-block btn-cta" type="submit"><span>Décoller</span> <i class="ico ico-rocket" aria-hidden="true"></i></button>
+          </form>
+
+          <!-- Step 2a: existing account -->
+          <form class="step" data-step="login-pass" novalidate>
+            <button type="button" class="back-btn" data-back>← Retour</button>
+            <input type="text" name="username" autocomplete="username" class="sr-only" tabindex="-1" aria-hidden="true">
+            <h2 class="step-title">Content de te revoir, <span data-pilot></span> !</h2>
+            <label class="field"><span>Mot de passe</span>
+              <input name="password" type="password" autocomplete="current-password" required></label>
+            <button type="button" class="link-btn" data-forgot>Mot de passe oublié ?</button>
+            <button class="btn btn-primary btn-block" type="submit"><span>Se connecter</span></button>
+          </form>
+
+          <!-- Step 2b: new account -->
+          <form class="step" data-step="reg-pass" novalidate>
+            <button type="button" class="back-btn" data-back>← Changer de pseudo</button>
+            <input type="text" name="username" autocomplete="username" class="sr-only" tabindex="-1" aria-hidden="true">
+            <h2 class="step-title">Bienvenue, <span data-pilot></span> ! Sécurise ton compte</h2>
+            <label class="field"><span>Mot de passe</span>
+              <input name="password" type="password" autocomplete="new-password" required minlength="8" aria-describedby="pw-strength"></label>
+            <div class="strength-row" id="pw-strength"><div class="strength"><i></i></div><small class="strength-label"></small></div>
+            <label class="field"><span>Confirmer le mot de passe</span>
+              <input name="confirm" type="password" autocomplete="new-password" required minlength="8"></label>
+            <label class="field"><span>Adresse e-mail <em>(facultatif)</em></span>
+              <input name="email" type="email" autocomplete="email" maxlength="120" placeholder="pour récupérer ton mot de passe"></label>
+            <label class="check"><input type="checkbox" name="terms" required>
+              <span>J'accepte les <a href="cgu.html" target="_blank" rel="noopener">CGU</a> et la <a href="confidentialite.html" target="_blank" rel="noopener">politique de confidentialité</a>.</span></label>
+            <p class="hint"><i class="ico ico-lock" aria-hidden="true"></i> Ton mot de passe chiffre tes clés sur ton appareil : il n'est jamais envoyé en clair.</p>
+            <label class="hp" aria-hidden="true">Site web <input name="website" tabindex="-1" autocomplete="off"></label>
+            <button class="btn btn-primary btn-block" type="submit"><span>Créer mon compte</span></button>
+          </form>
+
+          <div class="step" data-step="busy" role="status">
+            <p class="busy-text"></p>
+            <div class="progress-dots" aria-hidden="true"><i></i><i></i><i></i></div>
+          </div>
+        </div>
+        <p class="form-info" role="status"></p>
+        <p class="form-error" role="alert"></p>
+      </div>
+    </div>
+    <footer class="legal-footer">
+      <a href="confidentialite.html">Confidentialité (RGPD)</a>
+      <a href="cgu.html">CGU</a>
+      <a href="#" data-action="cookies">Cookies</a>
+    </footer>
+  </main>
+
+  <!-- Unlock (session exists but key not on this device) -->
+  <section id="view-unlock" class="view" aria-labelledby="unlock-title">
+    <form id="form-unlock" class="card center-card tilt" novalidate>
+      <div class="big-icon" aria-hidden="true"><i class="ico ico-lock"></i></div>
+      <h2 id="unlock-title">Déverrouiller tes clés</h2>
+      <p class="muted">Salut <b data-me-name></b> ! Entre ton mot de passe pour déchiffrer tes clés sur cet appareil.</p>
+      <label class="field"><span>Mot de passe</span><input name="password" type="password" autocomplete="current-password" required></label>
+      <button class="btn btn-primary btn-block" type="submit"><span>Déverrouiller</span></button>
+      <button class="btn btn-ghost btn-block" type="button" data-action="logout">Changer de compte</button>
+      <p class="form-error" role="alert"></p>
+    </form>
+  </section>
+
+  <!-- Choose class -->
+  <section id="view-class" class="view" aria-labelledby="class-title">
+    <div class="class-choice">
+      <h2 class="section-title" id="class-title">Rejoins ta galaxie, <span data-me-name></span></h2>
+      <div class="choice-grid">
+        <form id="form-join" class="card choice-card tilt" novalidate>
+          <div class="big-icon" aria-hidden="true"><i class="ico ico-rocket"></i></div>
+          <h3>Rejoindre une classe</h3>
+          <p class="muted">Entre le code d'invitation donné par ton délégué.</p>
+          <label class="field"><span>Code d'invitation</span>
+            <input name="inviteCode" required placeholder="ABCD-EFGH" maxlength="9" autocomplete="off" class="code-input" autocapitalize="characters"></label>
+          <button class="btn btn-primary btn-block" type="submit"><span>Rejoindre</span></button>
+        </form>
+        <form id="form-create" class="card choice-card tilt" novalidate>
+          <div class="big-icon" aria-hidden="true"><i class="ico ico-star"></i></div>
+          <h3>Créer une classe</h3>
+          <p class="muted">Tu deviens <b>délégué</b> : tu valides les membres et gères les votes.</p>
+          <label class="field"><span>Nom de la classe</span>
+            <input name="name" required minlength="2" maxlength="60" placeholder="Terminale 3"></label>
+          <button class="btn btn-ghost btn-block" type="submit"><span>Créer</span></button>
+        </form>
+      </div>
+      <p class="form-error" role="alert"></p>
+      <div class="btn-row">
+        <button class="btn btn-ghost" data-action="logout">Se déconnecter</button>
+        <button class="btn btn-ghost" data-action="delete-account">Supprimer mon compte</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Waiting for delegate approval -->
+  <section id="view-pending" class="view" aria-labelledby="pending-title">
+    <div class="card center-card">
+      <div class="orbit-wait" aria-hidden="true"><div class="planet-mini"></div><div class="sat"></div></div>
+      <h2 id="pending-title">En attente d'amarrage…</h2>
+      <p class="muted">Ta demande pour rejoindre <b data-class-name></b> a été envoyée. Un délégué doit la valider et te transmettre la clé de chiffrement.</p>
+      <p class="muted small" data-pending-delegates></p>
+      <button class="btn btn-ghost btn-block" data-action="leave">Annuler la demande</button>
+      <button class="btn btn-ghost btn-block" data-action="logout">Se déconnecter</button>
+    </div>
+  </section>
+
+  <!-- Main app -->
+  <section id="view-app" class="view" aria-label="Class Connect">
+    <div class="app-shell">
+      <nav class="sidebar" aria-label="Navigation principale">
+        <div class="side-brand">
+          <div class="logo-mini" aria-hidden="true"><span></span></div>
+          <div>
+            <div class="side-title">CLASS CONNECT</div>
+            <div class="side-class" data-class-name></div>
+          </div>
+        </div>
+        <div class="nav-items">
+          <button class="nav-item active" data-panel="chat" aria-current="page"><i class="ico ico-chat" aria-hidden="true"></i><span>Chat</span><b class="badge" data-badge="chat" aria-label="messages non lus"></b></button>
+          <button class="nav-item" data-panel="timetable"><i class="ico ico-calendar" aria-hidden="true"></i><span>Emploi du temps</span></button>
+          <button class="nav-item" data-panel="votes"><i class="ico ico-vote" aria-hidden="true"></i><span>Votes</span><b class="badge" data-badge="votes" aria-label="votes en attente"></b></button>
+          <button class="nav-item" data-panel="members"><i class="ico ico-users" aria-hidden="true"></i><span>Équipage</span></button>
+          <button class="nav-item delegate-only" data-panel="admin"><i class="ico ico-star" aria-hidden="true"></i><span>Délégué</span><b class="badge" data-badge="admin" aria-label="demandes en attente"></b></button>
+        </div>
+        <div class="side-footer">
+          <div class="e2ee-status" data-e2ee><i class="ico ico-lock" aria-hidden="true"></i><span>Chiffrement actif</span></div>
+          <div class="me-card">
+            <div class="avatar" data-me-avatar></div>
+            <div class="me-info"><b data-me-name></b><small data-me-role></small></div>
+            <button class="icon-btn" data-action="logout" title="Se déconnecter" aria-label="Se déconnecter"><i class="ico ico-logout" aria-hidden="true"></i></button>
+          </div>
+          <div class="side-legal"><a href="confidentialite.html">Confidentialité</a> · <a href="cgu.html">CGU</a> · <a href="#" data-action="cookies">Cookies</a></div>
+        </div>
+      </nav>
+
+      <main class="panels">
+        <section class="panel active" id="panel-chat" aria-labelledby="chat-title">
+          <header class="panel-head">
+            <div>
+              <h2 id="chat-title">Canal de bord</h2>
+              <p class="e2ee-line"><i class="ico ico-lock" aria-hidden="true"></i> Chiffré de bout en bout · <span data-online-count>0</span> en ligne</p>
+            </div>
+            <div class="online-stack" data-online-stack></div>
+          </header>
+          <div class="pinned-bar" hidden></div>
+          <div class="chat-scroll">
+            <div class="load-more" hidden><button class="btn btn-ghost btn-sm">Charger plus</button></div>
+            <div class="messages" role="log" aria-live="polite" aria-label="Messages"></div>
+          </div>
+          <div class="typing" aria-live="polite"></div>
+          <form class="composer">
+            <div class="composer-tools">
+              <button type="button" class="icon-btn" data-tool="file" title="Envoyer une image ou une vidéo" aria-label="Envoyer une image ou une vidéo"><i class="ico ico-image" aria-hidden="true"></i></button>
+              <button type="button" class="icon-btn gif-btn" data-tool="gif" title="GIF" aria-label="Envoyer un GIF">GIF</button>
+              <button type="button" class="icon-btn" data-tool="emoji" title="Emoji" aria-label="Insérer un emoji"><i class="ico ico-smile" aria-hidden="true"></i></button>
+            </div>
+            <textarea rows="1" placeholder="Message chiffré…" maxlength="4000" aria-label="Écrire un message"></textarea>
+            <button type="submit" class="send-btn" title="Envoyer" aria-label="Envoyer"><i class="ico ico-send" aria-hidden="true"></i></button>
+            <input type="file" accept="image/*,video/*" multiple hidden>
+            <div class="popover gif-pop" hidden>
+              <input class="gif-search" placeholder="Rechercher un GIF…" aria-label="Rechercher un GIF">
+              <div class="gif-grid"></div>
+              <button type="button" class="btn btn-ghost btn-sm btn-block" data-tool="gif-upload">Importer un GIF depuis l'appareil</button>
+            </div>
+            <div class="popover emoji-pop" hidden></div>
+          </form>
+          <div class="drop-overlay"><div><i class="ico ico-image" aria-hidden="true"></i><p>Dépose pour envoyer (chiffré)</p></div></div>
+        </section>
+
+        <section class="panel" id="panel-timetable" aria-labelledby="tt-title">
+          <header class="panel-head">
+            <div>
+              <h2 id="tt-title">Emploi du temps</h2>
+              <p class="muted">Clique sur un cours pour proposer un changement.</p>
+            </div>
+            <button class="btn btn-primary" data-action="new-slot"><span>Proposer un cours</span></button>
+          </header>
+          <div class="timetable-wrap"><div class="timetable"></div></div>
+        </section>
+
+        <section class="panel" id="panel-votes" aria-labelledby="votes-title">
+          <header class="panel-head">
+            <div>
+              <h2 id="votes-title">Votes</h2>
+              <p class="muted">Propose un changement d'emploi du temps, la classe vote, le délégué valide.</p>
+            </div>
+            <button class="btn btn-primary" data-action="new-proposal"><span>Nouvelle proposition</span></button>
+          </header>
+          <div class="seg" data-vote-filter role="tablist">
+            <button class="active" data-filter="open" role="tab">En cours</button>
+            <button data-filter="closed" role="tab">Terminés</button>
+          </div>
+          <div class="proposals"></div>
+        </section>
+
+        <section class="panel" id="panel-members" aria-labelledby="members-title">
+          <header class="panel-head">
+            <div>
+              <h2 id="members-title">Équipage</h2>
+              <p class="muted">Compare les empreintes de sécurité en vrai pour vérifier qu'aucune clé n'a été substituée.</p>
+            </div>
+          </header>
+          <div class="member-grid"></div>
+          <div class="danger-zone">
+            <button class="btn btn-ghost" data-action="logout">Se déconnecter</button>
+            <button class="btn btn-ghost" data-action="leave">Quitter la classe</button>
+            <button class="btn btn-danger" data-action="delete-account">Supprimer mon compte</button>
+          </div>
+        </section>
+
+        <section class="panel" id="panel-admin" aria-labelledby="admin-title">
+          <header class="panel-head">
+            <div>
+              <h2 id="admin-title">Poste de commandement</h2>
+              <p class="muted">Gère ta classe : invitations, membres, clés et votes.</p>
+            </div>
+          </header>
+          <div class="admin-grid"></div>
+        </section>
+      </main>
+    </div>
+  </section>
+
+  <div class="modal-root"></div>
+  <div class="toasts" aria-live="polite"></div>
+  <div class="lightbox" hidden><img alt="Image agrandie"><button class="icon-btn lb-close" title="Fermer" aria-label="Fermer">✕</button></div>
+</body>
+</html>
