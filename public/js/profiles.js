@@ -165,8 +165,9 @@ export function openProfileEditor() {
   renderPreview();
 
   modal({
-    title: 'Mon profil', body, wide: true,
+    title: 'Personnaliser mon compte', body, wide: true,
     actions: [
+      { label: 'Se déconnecter', variant: 'btn-ghost', onClick: () => { emit('logout'); } },
       { label: 'Annuler' },
       { label: 'Enregistrer', variant: 'btn-primary', onClick: async () => {
         const name = displayName.value.trim();

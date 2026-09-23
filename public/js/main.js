@@ -392,6 +392,7 @@ async function boot() {
   $$('.nav-item').forEach((b) => b.addEventListener('click', () => showPanel(b.dataset.panel)));
   on('goto', showPanel);
   on('reroute', route);
+  on('logout', logout);
   on('keys', updateE2EEStatus);
   on('profiles', fillIdentity);
 

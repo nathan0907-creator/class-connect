@@ -6,6 +6,16 @@
   "type": "module",
   "scripts": {
     "dev": "node scripts/serve.mjs",
-    "check": "node scripts/check-links.mjs"
+    "check": "node scripts/check-links.mjs",
+    "test:static": "node --test tests/level1-static.test.mjs",
+    "test:client": "node --test tests/client.test.mjs",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-classconnect \"node --test tests/rules.test.mjs\"",
+    "test:mutation": "firebase emulators:exec --only firestore --project demo-classconnect \"node tests/mutation.mjs\"",
+    "test": "npm run test:static && npm run test:client && npm run test:rules && npm run test:mutation"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
+    "firebase": "^12.19.0",
+    "linkedom": "^0.18.13"
   }
 }
