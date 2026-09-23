@@ -1320,3 +1320,16 @@ body.is-teacher .student-only { display: none !important; }
   .council-layout { grid-template-columns: 1fr; }
   .council-list { max-height: 36vh; }
 }
+
+/* subjects (Révisions IA) */
+.subject-chips { display: flex; gap: 8px; flex-wrap: wrap; flex: none; margin: -4px 0 14px; max-height: 96px; overflow-y: auto; }
+.subject-chip {
+  display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px; border-radius: 999px; font-weight: 600; font-size: 13px;
+  border: 1px solid var(--border); background: rgba(255, 255, 255, .04); color: #dcd8ff; transition: background .2s, border-color .2s, transform .2s var(--spring);
+}
+.subject-chip:hover { border-color: var(--border-strong); transform: translateY(-1px); }
+.subject-chip b { font-size: 11px; padding: 1px 7px; border-radius: 8px; background: rgba(0, 212, 255, .18); color: #9fe8ff; }
+.subject-chip.active { color: #fff; background: linear-gradient(135deg, rgba(102, 71, 240, .6), rgba(31, 111, 214, .5)); border-color: rgba(150, 130, 255, .6); box-shadow: 0 0 18px -6px var(--accent); }
+.subject-chip.empty { color: var(--muted); border-style: dashed; }
+.subject-chip.add { color: #7fe3ff; border-style: dashed; border-color: rgba(0, 212, 255, .4); }
+.study-placeholder b { font-family: var(--font-display); letter-spacing: .06em; color: #fff; }

@@ -35,7 +35,6 @@ export function initStudy() {
     $$('[data-study-tool]', root).forEach((x) => x.classList.toggle('active', x === b));
     renderOptions();
   }));
-  $('.subject-filter', root).addEventListener('change', (e) => { subjectFilter = e.target.value; renderLibrary(); });
   on('keys', decryptAll);
   on('me', renderLibrary);
   renderOptions();
@@ -45,16 +44,19 @@ export function startStudy() {
   stopStudy();
   unsub = onSnapshot(query(sub(state.cls.id, 'courses'), orderBy('created_at', 'desc')), async (snap) => {
     const known = new Map(courses.map((c) => [c.id, c]));
+    const firstLoad = !courses.length;
     courses = await Promise.all(snap.docs.map(async (d) => {
       const row = plain(d);
       const prev = known.get(row.id);
       return prev?.meta ? prev : { ...row, meta: await decryptMeta(row) };
     }));
     for (const id of [...selected]) if (!courses.some((c) => c.id === id)) selected.delete(id);
+    // New courses of the current subject are used by the AI right away.
+    for (const c of courses) if (!known.has(c.id) && !firstLoad && c.meta?.subject === subjectFilter) selected.add(c.id);
     renderLibrary();
   }, toastError);
 }
-export function stopStudy() { unsub?.(); unsub = null; courses = []; selected.clear(); chatHistory = []; }
+export function stopStudy() { unsub?.(); unsub = null; courses = []; selected.clear(); chatHistory = []; subjectFilter = ''; }
 
 async function decryptMeta(row) {
   const key = state.classKeys.get(row.epoch);
@@ -68,43 +70,78 @@ async function decryptAll() {
 }
 
 // ------------------------------------------------------------ library
+/** Switches subject: all its courses are selected and the question thread starts over. */
+function chooseSubject(subject) {
+  subjectFilter = subject;
+  selected.clear();
+  for (const c of courses) if (c.meta?.subject === subject) selected.add(c.id);
+  chatHistory = [];
+  renderLibrary();
+  renderOptions();
+}
+
 function renderLibrary() {
   if (!root) return;
   const readable = courses.filter((c) => c.meta);
-  const subjects = [...new Set(readable.map((c) => c.meta.subject))].sort();
-  const filter = $('.subject-filter', root);
-  filter.replaceChildren(h('option', { value: '' }, 'Toutes les matières'),
-    ...subjects.map((s) => h('option', { value: s, selected: s === subjectFilter }, s)));
-  if (subjectFilter && !subjects.includes(subjectFilter)) subjectFilter = '';
+  const counts = new Map();
+  for (const c of readable) counts.set(c.meta.subject, (counts.get(c.meta.subject) || 0) + 1);
+  // Subjects with courses first; publishers also see the usual subjects to start a new one.
+  const withCourses = [...counts.keys()].sort((a, b) => a.localeCompare(b, 'fr'));
+  const extra = canPublish() ? SUBJECTS.filter((s) => !counts.has(s)) : [];
+  if (!subjectFilter || (!counts.has(subjectFilter) && !extra.includes(subjectFilter))) {
+    if (withCourses.length) return chooseSubject(withCourses[0]);
+    subjectFilter = extra[0] || '';
+  }
+
+  $('.subject-chips', root).replaceChildren(
+    ...withCourses.map((s) => h(`button.subject-chip${s === subjectFilter ? '.active' : ''}`, {
+      type: 'button', role: 'tab', 'aria-selected': String(s === subjectFilter), onclick: () => chooseSubject(s),
+    }, s, h('b', counts.get(s)))),
+    ...extra.map((s) => h(`button.subject-chip.empty${s === subjectFilter ? '.active' : ''}`, {
+      type: 'button', role: 'tab', 'aria-selected': String(s === subjectFilter), onclick: () => chooseSubject(s),
+      title: 'Aucun cours pour l\'instant',
+    }, s)),
+    canPublish() ? h('button.subject-chip.add', { type: 'button', onclick: addSubject }, '+ Autre matière') : null);
+
+  $('[data-subject-title]', root).textContent = subjectFilter ? `Cours de ${subjectFilter}` : 'Cours';
+  $('[data-new-course-label]').textContent = subjectFilter ? `Ajouter un cours de ${subjectFilter}` : 'Ajouter un cours';
 
   const list = $('.course-list', root);
-  const shown = readable.filter((c) => !subjectFilter || c.meta.subject === subjectFilter);
-  const groups = new Map();
-  for (const c of shown) {
-    if (!groups.has(c.meta.subject)) groups.set(c.meta.subject, []);
-    groups.get(c.meta.subject).push(c);
-  }
-  list.replaceChildren(...[...groups].map(([subject, items]) => h('div.course-group',
-    h('div.course-group-head',
-      h('b', subject),
-      h('button.link-btn', { type: 'button', onclick: () => {
-        const all = items.every((c) => selected.has(c.id));
-        items.forEach((c) => (all ? selected.delete(c.id) : selected.add(c.id)));
-        renderLibrary();
-      } }, items.every((c) => selected.has(c.id)) ? 'Tout désélectionner' : 'Tout sélectionner')),
-    items.map(courseItem))));
+  const shown = readable.filter((c) => c.meta.subject === subjectFilter);
+  list.replaceChildren(...shown.map(courseItem));
   if (!shown.length) {
-    list.append(h('div.empty.small-empty', icon('book'), h('p', canPublish()
-      ? 'Aucun cours pour l\'instant. Ajoute ton premier cours (PDF, photos du cahier ou texte).'
-      : 'Aucun cours pour l\'instant. Les délégués et les membres de confiance peuvent en ajouter.')));
+    list.append(h('div.empty.small-empty', icon('book'), h('p', !subjectFilter
+      ? 'Aucun cours pour l\'instant. Les délégués, les suppléants, les professeurs et les membres de confiance peuvent en ajouter.'
+      : canPublish()
+        ? `Aucun cours de ${subjectFilter}. Ajoute le premier (PDF, photos du cahier ou texte) !`
+        : `Aucun cours de ${subjectFilter} pour l'instant.`)));
   }
   const locked = courses.length - readable.length;
   if (locked) list.append(h('p.muted.small', icon('lock'), ` ${locked} cours chiffré(s) avec une clé que tu n'as pas encore.`));
   const size = selectedSize();
-  $('.selection-info', root).textContent = selected.size
-    ? `${selected.size} cours sélectionné(s) · ${fmtSize(size)}${size > MAX_REQUEST ? ' — trop lourd, retire des cours' : ''}`
-    : 'Sélectionne les cours sur lesquels l\'IA doit travailler.';
+  $('.selection-info', root).textContent = shown.length
+    ? `L'IA utilise ${selected.size}/${shown.length} cours de ${subjectFilter} · ${fmtSize(size)}${size > MAX_REQUEST ? ' — trop lourd, décoche des cours' : ''}`
+    : '';
   $('.selection-info', root).classList.toggle('warn', size > MAX_REQUEST);
+}
+
+async function addSubject() {
+  const input = h('input', { maxLength: 40, required: true, placeholder: 'Ex. Latin, Sciences numériques…' });
+  modal({
+    title: 'Nouvelle matière',
+    body: h('label.field', h('span', 'Nom de la matière'), input),
+    actions: [
+      { label: 'Annuler' },
+      { label: 'Choisir', variant: 'btn-primary', onClick: () => {
+        const name = input.value.trim();
+        if (name.length < 2) throw new Error('Nom de matière trop court');
+        subjectFilter = name;
+        if (!SUBJECTS.includes(name)) SUBJECTS.push(name);
+        chooseSubject(name);
+        openUpload();
+      } },
+    ],
+  });
 }
 
 function courseItem(c) {
@@ -166,7 +203,7 @@ function openUpload() {
   const progress = h('p.muted.small');
 
   modal({
-    title: 'Ajouter un cours',
+    title: subjectFilter ? `Ajouter un cours de ${subjectFilter}` : 'Ajouter un cours',
     wide: true,
     body: h('form.slot-form', { onsubmit: (e) => e.preventDefault() },
       h('label.field', h('span', 'Titre'), title),
@@ -226,7 +263,7 @@ function renderOptions() {
   box.replaceChildren(...layouts[tool]);
   const out = $('.study-output', root);
   if (tool === 'ask') renderAsk(out);
-  else out.replaceChildren(h('div.study-placeholder', icon('sparkles'), h('p', {
+  else out.replaceChildren(h('div.study-placeholder', icon('sparkles'), subjectFilter ? h('b', subjectFilter) : null, h('p', {
     sheet: 'Une fiche claire avec définitions, méthodes du cahier, exemples et auto-test.',
     quiz: 'Un QCM interactif corrigé instantanément, avec explications tirées de vos cours.',
     exam: 'Une évaluation notée sur 20 : réponds, rends ta copie, l\'IA corrige avec la méthode du cahier.',
@@ -236,7 +273,11 @@ function renderOptions() {
 /** Decrypts the selected courses into Gemini "parts" (text + inline PDF/images). */
 async function courseParts() {
   const chosen = courses.filter((c) => selected.has(c.id) && c.meta);
-  if (!chosen.length) throw new Error('Sélectionne au moins un cours dans la bibliothèque');
+  if (!chosen.length) {
+    throw new Error(subjectFilter && !courses.some((c) => c.meta?.subject === subjectFilter)
+      ? `Aucun cours de ${subjectFilter} pour l'instant : il faut d'abord en ajouter un.`
+      : 'Coche au moins un cours de la matière.');
+  }
   if (selectedSize() > MAX_REQUEST) throw new Error('Trop de cours sélectionnés (18 Mo max). Retires-en quelques-uns.');
   const parts = [{ text: 'DOCUMENTS DE COURS DE LA CLASSE (seule source autorisée) :' }];
   for (const c of chosen) {
