@@ -62,6 +62,39 @@ self.addEventListener('fetch', (event) => {
 });
 
 // ------------------------------------------------------------ push notifications
+// The notification server only relays the encrypted message; it is decrypted here, on the device, with the
+// class key the app keeps in IndexedDB (same database as the private key, see js/crypto.js).
+function classKey(cid, epoch) {
+  return new Promise((resolve) => {
+    const req = indexedDB.open('classconnect', 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('keys');
+    req.onerror = () => resolve(null);
+    req.onsuccess = () => {
+      try {
+        const get = req.result.transaction('keys', 'readonly').objectStore('keys').get(`class:${cid}:${epoch}`);
+        get.onsuccess = () => resolve(get.result || null);
+        get.onerror = () => resolve(null);
+      } catch { resolve(null); }
+    };
+  });
+}
+const fromB64 = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+
+/** Returns a readable preview of the pushed message, or null if this device can't decrypt it. */
+async function preview(d) {
+  if (!d.ciphertext || !d.cid || !d.epoch) return null;
+  try {
+    const key = await classKey(d.cid, d.epoch);
+    if (!key) return null;
+    // Same additional data as js/chat.js: the students' channel keeps the original format.
+    const aad = d.channel === 'messages' ? `msg|${d.cid}|${d.epoch}|${d.user_id}` : `msg|${d.cid}|${d.channel}|${d.epoch}|${d.user_id}`;
+    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromB64(d.iv), additionalData: new TextEncoder().encode(aad) }, key, fromB64(d.ciphertext));
+    const p = JSON.parse(new TextDecoder().decode(plain));
+    if (p.text) return p.text.length > 180 ? p.text.slice(0, 177) + '…' : p.text;
+    return p.t === 'video' ? '🎬 Vidéo' : p.t === 'gif' ? 'GIF' : p.t === 'image' ? '🖼️ Photo' : null;
+  } catch { return null; }
+}
+
 self.addEventListener('push', (event) => {
   let msg = {};
   try { msg = event.data?.json() || {}; } catch { /* not JSON */ }
@@ -71,7 +104,7 @@ self.addEventListener('push', (event) => {
     const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     if (wins.some((w) => w.visibilityState === 'visible')) return;
     await self.registration.showNotification(data.title || 'Class Connect', {
-      body: data.body || 'Nouveau message',
+      body: (await preview(data)) || data.body || 'Nouveau message',
       tag: data.tag || 'cc',
       renotify: true,
       icon: 'img/icon-192.png',

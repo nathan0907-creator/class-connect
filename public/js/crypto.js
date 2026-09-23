@@ -151,3 +151,13 @@ async function idbDo(mode, fn) {
 export const storePrivateKey = (userId, key) => idbDo('readwrite', (s) => s.put(key, `priv:${userId}`));
 export const loadPrivateKey = (userId) => idbDo('readonly', (s) => s.get(`priv:${userId}`)).catch(() => null);
 export const clearKeys = () => idbDo('readwrite', (s) => s.clear()).catch(() => {});
+
+/**
+ * Keeps a decrypt-only, non-extractable copy of a class key on this device so the service worker can
+ * show the text of a push notification while the app is closed (the server only relays ciphertext).
+ */
+export async function storeClassKey(classId, epoch, key) {
+  const raw = await subtle.exportKey('raw', key);
+  const copy = await subtle.importKey('raw', raw, 'AES-GCM', false, ['decrypt']);
+  return idbDo('readwrite', (s) => s.put(copy, `class:${classId}:${epoch}`));
+}

@@ -2,9 +2,11 @@
 import { collection, doc, getDoc, getDocs, query, where, limit, setDoc, updateDoc, writeBatch, deleteDoc } from 'firebase/firestore';
 import { db, sub, classRef, userRef, plain } from './fb.js';
 import { state, emit, isDelegate } from './state.js';
-import { generateClassKey, wrapClassKey, unwrapClassKey, createIdentity, storePrivateKey } from './crypto.js';
+import { generateClassKey, wrapClassKey, unwrapClassKey, createIdentity, storePrivateKey, storeClassKey } from './crypto.js';
 
 export const currentKey = () => state.classKeys.get(state.cls?.key_epoch);
+/** Device copy of the class keys, used to decrypt push notifications while the app is closed. */
+const persistKeys = () => Promise.allSettled([...state.classKeys].map(([epoch, key]) => storeClassKey(state.cls.id, epoch, key)));
 const shareRef = (cid, epoch, uid) => sub(cid, 'shares', `${epoch}_${uid}`);
 
 async function shareDoc(key, epoch, userId, publicKey) {
@@ -36,6 +38,7 @@ export async function loadKeys() {
       console.warn('Impossible de déballer la clé', s.epoch, err);
     }
   }
+  persistKeys();
   emit('keys');
 }
 
@@ -88,6 +91,7 @@ export async function rotateKey() {
   await batch.commit();
   state.classKeys.set(epoch, key);
   state.cls.key_epoch = epoch;
+  persistKeys();
   emit('keys');
 }
 

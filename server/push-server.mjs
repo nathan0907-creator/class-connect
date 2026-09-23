@@ -91,6 +91,11 @@ async function notifyClass(cid, channel, ch, msg) {
     tag: `cc-${channel}`,
     url: SITE,
   };
+  // The encrypted message itself travels with the notification: the phone decrypts it with its class key
+  // and shows the real text. This server still can't read it. (FCM payloads are limited to 4 KB.)
+  if (typeof msg.ciphertext === 'string' && msg.ciphertext.length <= 3000) {
+    Object.assign(data, { cid, channel, epoch: String(msg.epoch), user_id: msg.user_id, iv: msg.iv, ciphertext: msg.ciphertext });
+  }
   const res = await getMessaging().sendEach(targets.map(([, t]) => ({
     token: t.token, data,
     webpush: { headers: { Urgency: 'high', TTL: String(24 * 3600) } },
