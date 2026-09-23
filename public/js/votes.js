@@ -9,13 +9,15 @@ const myVotes = new Map(); // proposal id -> -1 | 0 | 1
 let filter = 'open';
 let unsub = null;
 
-const ACTIONS = { add: ['Ajout', 'plus'], modify: ['Modification', 'edit'], delete: ['Suppression', 'trash'] };
+const ACTIONS = { poll: ['Question', 'vote'], add: ['Ajout de cours', 'plus'], modify: ['Modification', 'edit'], delete: ['Suppression', 'trash'] };
 const FIELD = { 1: 'yes', '-1': 'no', 0: 'abstain' };
 const isLive = (p) => p.status === 'open' && p.deadline > Date.now();
 const proposalRef = (id) => sub(state.cls.id, 'proposals', id);
 
 export function initVotes() {
-  $('#panel-votes [data-action="new-proposal"]').addEventListener('click', () => openSlotForm({ mode: 'propose', action: 'add' }));
+  $('#panel-votes [data-action="new-proposal"]').addEventListener('click', () => {
+    if (isDelegate()) openSlotForm({ mode: 'propose', action: 'poll' });
+  });
   $$('#panel-votes [data-filter]').forEach((b) => b.addEventListener('click', () => {
     filter = b.dataset.filter;
     $$('#panel-votes [data-filter]').forEach((x) => x.classList.toggle('active', x === b));
@@ -50,7 +52,7 @@ function render() {
   root.replaceChildren(...shown.map(card));
   if (!shown.length) {
     root.append(h('div.empty', icon('vote'), h('p', filter === 'open'
-      ? 'Aucun vote en cours. Propose un changement d\'emploi du temps !'
+      ? (isDelegate() ? 'Aucun vote en cours. Lance-en un avec « Nouveau vote » !' : 'Aucun vote en cours. Les délégués lanceront les prochains.')
       : 'Aucun vote terminé pour l\'instant.')));
   }
   enableTilt(root);
@@ -78,8 +80,9 @@ function card(p) {
   const [actionLabel, actionIcon] = ACTIONS[p.action];
   const author = state.members.get(p.author_id);
 
-  let change;
-  if (p.action === 'add') change = h('div.change', h('span.change-tag', '+'), miniSlot(p.data, '.new'));
+  let change = null;
+  if (p.action === 'poll') change = null;
+  else if (p.action === 'add') change = h('div.change', h('span.change-tag', '+'), miniSlot(p.data, '.new'));
   else if (p.action === 'modify') change = h('div.change', miniSlot(slot, '.old'), h('span.arrow', '→'), miniSlot(p.data, '.new'));
   else change = h('div.change', miniSlot(slot, '.strike'));
 
@@ -119,7 +122,7 @@ function card(p) {
         h('button.btn.btn-sm.btn-ghost', { onclick: () => decide(p, false) }, 'Refuser'),
         h('button.btn.btn-sm.btn-primary', { onclick: () => decide(p, true) }, h('span', 'Adopter & appliquer')),
       ] : null,
-      (isDelegate() || (p.author_id === state.me.id && p.status === 'open'))
+      isDelegate()
         ? h('button.icon-btn', { title: 'Supprimer la proposition', onclick: () => remove(p) }, icon('trash')) : null));
 }
 
@@ -144,12 +147,14 @@ async function castVote(p, value) {
 
 async function decide(p, accept) {
   const text = accept
-    ? `« ${p.title} » sera appliqué immédiatement à l'emploi du temps (${p.yes} pour, ${p.no} contre).`
+    ? (p.action === 'poll'
+      ? `« ${p.title} » sera marqué comme adopté (${p.yes} pour, ${p.no} contre).`
+      : `« ${p.title} » sera appliqué immédiatement à l'emploi du temps (${p.yes} pour, ${p.no} contre).`)
     : `« ${p.title} » sera marqué comme rejeté.`;
   if (!(await confirmDialog(accept ? 'Adopter la proposition ?' : 'Rejeter la proposition ?', text, { danger: !accept, label: accept ? 'Adopter' : 'Rejeter' }))) return;
   try {
     const batch = writeBatch(db);
-    if (accept) {
+    if (accept && p.action !== 'poll') {
       const slotsCol = sub(state.cls.id, 'slots');
       if (p.action === 'add') batch.set(doc(slotsCol), p.data);
       else {
@@ -160,7 +165,7 @@ async function decide(p, accept) {
     }
     batch.update(proposalRef(p.id), { status: accept ? 'accepted' : 'rejected', closed_at: serverTimestamp() });
     await batch.commit();
-    toast(accept ? 'Proposition adoptée, emploi du temps mis à jour ✨' : 'Proposition rejetée', accept ? 'success' : 'info');
+    toast(accept ? (p.action === 'poll' ? 'Vote adopté ✨' : 'Adopté, emploi du temps mis à jour ✨') : 'Proposition rejetée', accept ? 'success' : 'info');
   } catch (err) { toastError(err); }
 }
 

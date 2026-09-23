@@ -1,5 +1,5 @@
-import { onSnapshot, addDoc, updateDoc, deleteDoc, doc, writeBatch, serverTimestamp, Timestamp } from 'firebase/firestore';
-import { db, sub, plain } from './fb.js';
+import { onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { sub, plain } from './fb.js';
 import { state, on, emit, isDelegate } from './state.js';
 import { $, h, icon, modal, toast, toastError, confirmDialog, DAYS, enableTilt } from './ui.js';
 
@@ -14,8 +14,8 @@ const slotsCol = () => sub(state.cls.id, 'slots');
 
 export function initTimetable() {
   const btn = $('#panel-timetable [data-action="new-slot"]');
-  btn.addEventListener('click', () => openSlotForm(isDelegate() ? { mode: 'add' } : { mode: 'propose', action: 'add' }));
-  on('me', () => { btn.querySelector('span').textContent = isDelegate() ? 'Ajouter un cours' : 'Proposer un cours'; });
+  btn.addEventListener('click', () => { if (isDelegate()) openSlotForm({ mode: 'add' }); });
+  on('me', render);
   setInterval(() => { if ($('#panel-timetable').classList.contains('active')) render(); }, 60_000);
 }
 
@@ -71,7 +71,7 @@ function render() {
   if (!slots.length) {
     root.append(h('div.tt-empty', icon('calendar'), h('p', isDelegate()
       ? 'L\'emploi du temps est vide. Ajoute le premier cours !'
-      : 'L\'emploi du temps est vide. Propose un cours au vote !')));
+      : 'L\'emploi du temps est vide : ton délégué ne l\'a pas encore rempli.')));
   }
   enableTilt(root);
 }
@@ -109,9 +109,7 @@ function openSlotDetail(s) {
       toast('Cours supprimé');
     } });
     actions.push({ label: 'Modifier', variant: 'btn-primary', onClick: () => { openSlotForm({ mode: 'edit', slot: s }); } });
-  } else {
-    actions.push({ label: 'Proposer la suppression', onClick: () => { openSlotForm({ mode: 'propose', action: 'delete', slot: s }); } });
-    actions.push({ label: 'Proposer une modification', variant: 'btn-primary', onClick: () => { openSlotForm({ mode: 'propose', action: 'modify', slot: s }); } });
+    actions.splice(1, 0, { label: 'Mettre au vote', onClick: () => { openSlotForm({ mode: 'propose', action: 'modify', slot: s }); } });
   }
   modal({
     title: s.subject,
@@ -156,7 +154,7 @@ export function openSlotForm({ mode, action = 'add', slot = null }) {
   })));
 
   const field = (label, input, extra = '') => h(`label.field${extra}`, h('span', label), input);
-  const actionSeg = h('div.seg.seg-sm', [['add', 'Nouveau cours'], ['modify', 'Modifier'], ['delete', 'Supprimer']].map(([a, l]) =>
+  const actionSeg = h('div.seg.seg-sm.seg-wrap', [['poll', 'Question libre'], ['add', 'Nouveau cours'], ['modify', 'Modifier un cours'], ['delete', 'Supprimer un cours']].map(([a, l]) =>
     h(`button${a === action ? '.active' : ''}`, { type: 'button', onclick: (e) => {
       current.action = a;
       actionSeg.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b === e.currentTarget));
@@ -171,6 +169,7 @@ export function openSlotForm({ mode, action = 'add', slot = null }) {
     h('div.field', h('span', 'Couleur'), swatches));
 
   function autoTitle() {
+    if (current.action === 'poll') return '';
     const s = slots.find((x) => String(x.id) === f.slotSelect.value);
     if (current.action === 'add') return f.subject.value ? `Ajouter ${f.subject.value} le ${DAYS[f.day.value].toLowerCase()}` : '';
     if (!s) return '';
@@ -191,8 +190,13 @@ export function openSlotForm({ mode, action = 'add', slot = null }) {
   });
 
   function sync() {
-    slotRow.hidden = !proposing || current.action === 'add';
-    slotFields.hidden = current.action === 'delete';
+    slotRow.hidden = !proposing || ['add', 'poll'].includes(current.action);
+    slotFields.hidden = ['delete', 'poll'].includes(current.action);
+    // Hidden sections must not block the form's validation.
+    slotFields.querySelectorAll('input, select').forEach((i) => { i.disabled = slotFields.hidden; });
+    f.slotSelect.disabled = slotRow.hidden;
+    f.title.placeholder = current.action === 'poll' ? 'Ex. Sortie de fin d\'année : parc ou bowling ?' : 'Ex. Déplacer les maths au mardi';
+    f.reason.placeholder = current.action === 'poll' ? 'Détails de la question (facultatif)' : 'Pourquoi ce changement ?';
     refreshTitle();
   }
 
@@ -200,18 +204,18 @@ export function openSlotForm({ mode, action = 'add', slot = null }) {
     proposing ? [
       !slot ? actionSeg : null,
       slotRow,
-      field('Titre de la proposition', f.title),
+      field('Question / titre du vote', f.title),
     ] : null,
     slotFields,
     proposing ? [
-      field('Justification', f.reason),
+      field('Explications', f.reason),
       field('Durée du vote', f.duration),
-      h('p.hint', icon('vote'), ' Tu votes automatiquement « pour ». Le délégué valide après le vote.'),
+      h('p.hint', icon('vote'), ' Toute la classe vote pour / contre / abstention (vote secret). Tu décides ensuite d\'adopter ou non.'),
     ] : null,
     h('button', { type: 'submit', hidden: true }));
   sync();
 
-  const titles = { add: 'Ajouter un cours', edit: 'Modifier le cours', propose: 'Proposer un changement' };
+  const titles = { add: 'Ajouter un cours', edit: 'Modifier le cours', propose: 'Nouveau vote' };
   const m = modal({
     title: titles[mode], body: form, wide: true,
     actions: [
@@ -226,7 +230,8 @@ export function openSlotForm({ mode, action = 'add', slot = null }) {
       day: Number(f.day.value), start_at: f.start.value, end_at: f.end.value,
       subject: f.subject.value.trim(), teacher: f.teacher.value.trim(), room: f.room.value.trim(), color,
     };
-    if (current.action !== 'delete' && data.start_at >= data.end_at) throw new Error('La fin doit être après le début');
+    const needsSlot = !['delete', 'poll'].includes(current.action);
+    if (needsSlot && data.start_at >= data.end_at) throw new Error('La fin doit être après le début');
     if (mode === 'add') {
       await addDoc(slotsCol(), data);
       toast('Cours ajouté', 'success');
@@ -234,21 +239,16 @@ export function openSlotForm({ mode, action = 'add', slot = null }) {
       await updateDoc(doc(slotsCol(), slot.id), data);
       toast('Cours modifié', 'success');
     } else {
-      const slotId = current.action === 'add' ? null : (f.slotSelect.value || slot?.id || null);
-      if (current.action !== 'add' && !slotId) throw new Error('Choisis le cours concerné');
-      if (f.title.value.trim().length < 3) throw new Error('Donne un titre à ta proposition');
-      // The proposal and the author's own "yes" vote are written atomically.
-      const ref = doc(sub(state.cls.id, 'proposals'));
-      const batch = writeBatch(db);
-      batch.set(ref, {
+      const slotId = ['add', 'poll'].includes(current.action) ? null : (f.slotSelect.value || slot?.id || null);
+      if (['modify', 'delete'].includes(current.action) && !slotId) throw new Error('Choisis le cours concerné');
+      if (f.title.value.trim().length < 3) throw new Error('Écris la question ou le titre du vote');
+      await addDoc(sub(state.cls.id, 'proposals'), {
         author_id: state.me.id, title: f.title.value.trim(), reason: f.reason.value.trim(), action: current.action,
-        slot_id: slotId, data: current.action === 'delete' ? {} : data, status: 'open', yes: 1, no: 0, abstain: 0,
+        slot_id: slotId, data: needsSlot ? data : {}, status: 'open', yes: 0, no: 0, abstain: 0,
         deadline: Timestamp.fromMillis(Date.now() + Number(f.duration.value) * 3600e3),
         created_at: serverTimestamp(), closed_at: null,
       });
-      batch.set(doc(ref, 'votes', state.me.id), { value: 1 });
-      await batch.commit();
-      toast('Proposition envoyée au vote 🗳️', 'success');
+      toast('Vote lancé 🗳️', 'success');
       emit('goto', 'votes');
     }
     m.close();

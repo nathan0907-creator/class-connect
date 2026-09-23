@@ -47,6 +47,8 @@
           <tr><td>Mot de passe</td><td>Authentification</td><td>Non : seule une empreinte dérivée (PBKDF2) est envoyée</td></tr>
           <tr><td>Clé publique et clé privée chiffrée</td><td>Chiffrement de bout en bout</td><td>Clé privée : non (chiffrée avec ton mot de passe)</td></tr>
           <tr><td>Messages, images, vidéos, GIFs importés</td><td>Service de messagerie</td><td><b>Non</b> (chiffrés AES-256)</td></tr>
+          <tr><td>Messages supprimés (chiffrés), auteur et date de suppression</td><td>Preuve en cas de harcèlement</td><td>Non (restent chiffrés), effacés après 30 jours</td></tr>
+          <tr><td>Signalements : message signalé + 10 messages avant/après (déchiffrés par la personne qui signale), pseudos, identifiants, horodatages, motif, commentaire</td><td>Lutte contre le harcèlement</td><td>Oui, par les délégués de la classe et l'éditeur — effacés après 30 jours</td></tr>
           <tr><td>Classe, rôle (élève/délégué), statut</td><td>Gestion de la classe</td><td>Oui</td></tr>
           <tr><td>Emploi du temps, propositions, totaux des votes</td><td>Votes sur l'emploi du temps</td><td>Oui (ton vote individuel n'est visible que par toi)</td></tr>
           <tr><td>Présence en ligne, indicateur « écrit… »</td><td>Confort d'utilisation</td><td>Oui, effacé à la déconnexion</td></tr>
@@ -58,12 +60,16 @@
       <h2>3. Bases légales</h2>
       <ul>
         <li><b>Exécution du contrat</b> (les <a href="cgu.html">CGU</a>) : compte, classe, messagerie, votes.</li>
-        <li><b>Intérêt légitime</b> : sécurité du service et lutte contre le spam.</li>
+        <li><b>Intérêt légitime</b> : sécurité du service, lutte contre le spam et <b>protection des élèves contre le
+          harcèlement</b> (conservation 30 jours des messages supprimés et des signalements, loi n° 2022-299 du 2 mars 2022).</li>
+        <li><b>Obligation légale</b> : réponse aux réquisitions judiciaires (loi pour la confiance dans l'économie numérique).</li>
         <li><b>Consentement</b> : mesure d'audience. Tu peux le retirer à tout moment via le lien « Cookies » en bas de page.</li>
       </ul>
 
       <h2>4. Destinataires et sous-traitants</h2>
       <ul>
+        <li><b>Délégués de ta classe</b> : signalements concernant ta classe (jamais les autres conversations, qui restent chiffrées).</li>
+        <li><b>Autorités judiciaires</b> : uniquement sur réquisition, dans la limite des données disponibles.</li>
         <li><b>Google Firebase</b> (Google Ireland Ltd) : authentification, base de données, sécurité, statistiques.</li>
         <li><b>GitHub Pages</b> (GitHub Inc.) : hébergement des pages du site.</li>
         <li><b>jsDelivr</b> et <b>Google Fonts</b> : fourniture de bibliothèques et de polices (ils voient ton adresse IP).</li>
@@ -76,7 +82,9 @@
       <h2>5. Durées de conservation</h2>
       <ul>
         <li>Compte : jusqu'à sa suppression (bouton « Supprimer mon compte » dans l'onglet Équipage).</li>
-        <li>Messages et médias chiffrés : tant que la classe existe, ou jusqu'à leur suppression par l'auteur ou le délégué.</li>
+        <li>Messages et médias chiffrés : tant que la classe existe ; après suppression par l'auteur ou un délégué,
+          conservation chiffrée <b>30 jours</b> puis effacement définitif.</li>
+        <li>Signalements et preuves associées : <b>30 jours</b>, puis effacement automatique.</li>
         <li>Présence en ligne : effacée dès la déconnexion.</li>
         <li>Statistiques : 14 mois maximum.</li>
       </ul>

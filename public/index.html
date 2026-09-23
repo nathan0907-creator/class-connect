@@ -304,9 +304,9 @@
           <header class="panel-head">
             <div>
               <h2 id="tt-title">Emploi du temps</h2>
-              <p class="muted">Clique sur un cours pour proposer un changement.</p>
+              <p class="muted">Géré par les délégués. Les changements importants passent par un vote de la classe.</p>
             </div>
-            <button class="btn btn-primary" data-action="new-slot"><span>Proposer un cours</span></button>
+            <button class="btn btn-primary delegate-only" data-action="new-slot"><span>Ajouter un cours</span></button>
           </header>
           <div class="timetable-wrap"><div class="timetable"></div></div>
         </section>
@@ -315,9 +315,9 @@
           <header class="panel-head">
             <div>
               <h2 id="votes-title">Votes</h2>
-              <p class="muted">Propose un changement d'emploi du temps, la classe vote, le délégué valide.</p>
+              <p class="muted">Les délégués lancent les votes, toute la classe vote (bulletin secret).</p>
             </div>
-            <button class="btn btn-primary" data-action="new-proposal"><span>Nouvelle proposition</span></button>
+            <button class="btn btn-primary delegate-only" data-action="new-proposal"><span>Nouveau vote</span></button>
           </header>
           <div class="seg" data-vote-filter role="tablist">
             <button class="active" data-filter="open" role="tab">En cours</button>

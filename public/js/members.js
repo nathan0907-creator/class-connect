@@ -4,6 +4,7 @@ import { auth, db, sub, classRef, userRef } from './fb.js';
 import { state, on, emit, isDelegate } from './state.js';
 import { fingerprint, deriveAuthKey, clearKeys } from './crypto.js';
 import { sharesFor, shareRefFor, rotateKey } from './keyring.js';
+import { reportsCard, openReportsCount } from './moderation.js';
 import { $, $$, h, icon, avatar, modal, toast, toastError, confirmDialog, enableTilt, busy } from './ui.js';
 
 export function initMembers() {
@@ -12,6 +13,7 @@ export function initMembers() {
   on('members', () => { renderMembers(); renderAdmin(); });
   on('presence', renderMembers);
   on('keys', renderAdmin);
+  on('reports', renderAdmin);
 }
 
 const active = () => [...state.members.values()].filter((m) => m.status === 'active');
@@ -127,7 +129,8 @@ export { inviteCode };
 function renderAdmin() {
   const root = $('#panel-admin .admin-grid');
   const pend = pending();
-  $('[data-badge="admin"]').textContent = isDelegate() && pend.length ? pend.length : '';
+  const toHandle = pend.length + openReportsCount();
+  $('[data-badge="admin"]').textContent = isDelegate() && toHandle ? toHandle : '';
   if (!isDelegate() || !state.cls) { root.replaceChildren(); return; }
 
   const codeEl = h('div.invite-code', state.cls.invite_code);
@@ -194,7 +197,7 @@ function renderAdmin() {
       finally { busy(e.currentTarget, false); }
     } }, 'Renouveler la clé'));
 
-  root.replaceChildren(invite, pendingCard, crew, settings, security);
+  root.replaceChildren(invite, pendingCard, reportsCard(), crew, settings, security);
   enableTilt(root);
 }
 

@@ -5,7 +5,8 @@ import { state, emit, on, isDelegate } from './state.js';
 import { unlockIdentity, storePrivateKey, loadPrivateKey, clearKeys } from './crypto.js';
 import { loadKeys, shareNeeded, currentKey } from './keyring.js';
 import { initAuthFlow } from './authflow.js';
-import { initChat, startChat, stopChat } from './chat.js';
+import { initChat, startChat, stopChat, purgeExpired } from './chat.js';
+import { startModeration, stopModeration } from './moderation.js';
 import { initTimetable, startSlots, stopSlots } from './timetable.js';
 import { initVotes, startProposals, stopProposals } from './votes.js';
 import { initMembers, inviteCode } from './members.js';
@@ -213,6 +214,12 @@ async function enterApp() {
   await loadKeys();
   updateE2EEStatus();
   shareNeeded();
+  if (isDelegate()) {
+    startModeration();
+    purgeExpired().catch(() => {});
+  } else {
+    stopModeration();
+  }
   show('app');
 }
 
@@ -259,6 +266,7 @@ function stopClass() {
   stopSlots();
   stopProposals();
   stopPresence();
+  stopModeration();
   liveClassId = null;
 }
 

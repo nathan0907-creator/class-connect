@@ -179,8 +179,40 @@ service cloud.firestore {
           && request.resource.data.created_at == request.time
           && str(request.resource.data.iv, 10, 32) && str(request.resource.data.ciphertext, 10, 60000)
           && getAfter(/databases/$(database)/documents/classes/$(cid)/rate/$(uid())).data.last == request.time;
-        allow update: if isDelegate(cid) && onlyChanged(['pinned']) && request.resource.data.pinned is bool;
-        allow delete: if isActiveMember(cid) && (resource.data.user_id == uid() || isDelegate(cid));
+        allow update: if (isDelegate(cid) && onlyChanged(['pinned']) && request.resource.data.pinned is bool)
+          // Deletion is "soft": the message disappears for everyone but stays (encrypted) 30 days as evidence.
+          || (isActiveMember(cid) && (resource.data.user_id == uid() || isDelegate(cid))
+              && !('deleted_at' in resource.data)
+              && onlyChanged(['deleted_at', 'deleted_by', 'pinned'])
+              && request.resource.data.deleted_at == request.time
+              && request.resource.data.deleted_by == uid()
+              && request.resource.data.pinned == false);
+        // Permanent removal only once the 30-day retention period is over.
+        allow delete: if isActiveMember(cid) && 'deleted_at' in resource.data
+          && resource.data.deleted_at < request.time - duration.value(30, 'd');
+      }
+
+      // Harassment reports: evidence decrypted by the reporter's device, kept 30 days.
+      match /reports/{rid} {
+        function validEvidence(list) { return list is list && list.size() >= 1 && list.size() <= 25; }
+        allow read: if isActiveMember(cid) && (isDelegate(cid) || resource.data.reporter_id == uid());
+        allow create: if isActiveMember(cid)
+          && request.resource.data.keys().hasOnly(['reporter_id', 'reported_id', 'message_id', 'reason', 'comment',
+               'evidence', 'status', 'handled_by', 'created_at', 'expire_at'])
+          && request.resource.data.reporter_id == uid()
+          && request.resource.data.reported_id is string
+          && request.resource.data.reason in ['harcelement', 'insulte', 'menace', 'contenu_choquant', 'usurpation', 'autre']
+          && str(request.resource.data.comment, 0, 1000)
+          && validEvidence(request.resource.data.evidence)
+          && request.resource.data.status == 'open' && request.resource.data.handled_by == null
+          && request.resource.data.created_at == request.time
+          && request.resource.data.expire_at is timestamp
+          && request.resource.data.expire_at > request.time + duration.value(29, 'd')
+          && request.resource.data.expire_at < request.time + duration.value(31, 'd');
+        allow update: if isDelegate(cid) && resource.data.reported_id != uid()
+          && onlyChanged(['status', 'handled_by'])
+          && request.resource.data.status in ['open', 'handled'] && request.resource.data.handled_by == uid();
+        allow delete: if isActiveMember(cid) && resource.data.expire_at < request.time;
       }
 
       // Encrypted media, split into ~900 KB chunks.
@@ -221,27 +253,27 @@ service cloud.firestore {
         }
 
         allow read: if isActiveMember(cid);
-        allow create: if isActiveMember(cid)
+        // Only delegates open votes (timetable changes or free questions); every member can vote.
+        allow create: if isDelegate(cid)
           && request.resource.data.keys().hasOnly(['author_id', 'title', 'reason', 'action', 'slot_id', 'data', 'status',
                'yes', 'no', 'abstain', 'deadline', 'created_at', 'closed_at'])
           && request.resource.data.author_id == uid()
           && request.resource.data.status == 'open' && request.resource.data.closed_at == null
-          && request.resource.data.yes == 1 && request.resource.data.no == 0 && request.resource.data.abstain == 0
+          && request.resource.data.yes == 0 && request.resource.data.no == 0 && request.resource.data.abstain == 0
           && request.resource.data.created_at == request.time
           && request.resource.data.deadline is timestamp
           && request.resource.data.deadline > request.time
           && request.resource.data.deadline < request.time + duration.value(169, 'h')
           && str(request.resource.data.title, 3, 80) && str(request.resource.data.reason, 0, 600)
-          && request.resource.data.action in ['add', 'modify', 'delete']
-          && (request.resource.data.action == 'delete' || validSlot(request.resource.data.data))
-          && (request.resource.data.action == 'add'
-              || exists(/databases/$(database)/documents/classes/$(cid)/slots/$(request.resource.data.slot_id)))
-          && getAfter(votePath()).data.value == 1;
+          && request.resource.data.action in ['add', 'modify', 'delete', 'poll']
+          && (request.resource.data.action in ['delete', 'poll'] || validSlot(request.resource.data.data))
+          && (request.resource.data.action in ['add', 'poll']
+              || exists(/databases/$(database)/documents/classes/$(cid)/slots/$(request.resource.data.slot_id)));
         allow update: if (isDelegate(cid) && resource.data.status == 'open' && onlyChanged(['status', 'closed_at'])
                           && request.resource.data.status in ['accepted', 'rejected']
                           && request.resource.data.closed_at == request.time)
                       || tallyUpdate();
-        allow delete: if isDelegate(cid) || (isActiveMember(cid) && resource.data.author_id == uid() && resource.data.status == 'open');
+        allow delete: if isDelegate(cid);
 
         match /votes/{voterId} {
           function proposal() { return /databases/$(database)/documents/classes/$(cid)/proposals/$(pid); }
@@ -250,13 +282,10 @@ service cloud.firestore {
           }
           allow get: if signedIn() && voterId == uid();
           allow list: if false;
-          allow create: if signedIn() && voterId == uid() && isActiveMember(cid) && validVote() && (
-            // author's automatic vote while creating the proposal
-            (!exists(proposal()) && getAfter(proposal()).data.author_id == uid() && request.resource.data.value == 1)
-            // regular vote: the tally must move by exactly one in the same batch
-            || (exists(proposal()) && get(proposal()).data.status == 'open' && get(proposal()).data.deadline > request.time
-                && getAfter(proposal()).data[field(request.resource.data.value)] == get(proposal()).data[field(request.resource.data.value)] + 1)
-          );
+          // The tally must move by exactly one in the same batch.
+          allow create: if signedIn() && voterId == uid() && isActiveMember(cid) && validVote()
+            && exists(proposal()) && get(proposal()).data.status == 'open' && get(proposal()).data.deadline > request.time
+            && getAfter(proposal()).data[field(request.resource.data.value)] == get(proposal()).data[field(request.resource.data.value)] + 1;
           allow update: if signedIn() && voterId == uid() && isActiveMember(cid) && validVote()
             && resource.data.value != request.resource.data.value
             && get(proposal()).data.status == 'open' && get(proposal()).data.deadline > request.time

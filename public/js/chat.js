@@ -1,7 +1,8 @@
 import {
   query, orderBy, limit, startAfter, where, onSnapshot, getDocs, getDoc, setDoc, updateDoc, deleteDoc, doc,
-  serverTimestamp, Bytes, writeBatch,
+  serverTimestamp, Bytes, writeBatch, Timestamp,
 } from 'firebase/firestore';
+import { openReport } from './moderation.js';
 import { db, sub, plain } from './fb.js';
 import { state, on, isDelegate, memberName } from './state.js';
 import { encryptJSON, decryptJSON, encryptBytes, decryptBytes } from './crypto.js';
@@ -132,6 +133,7 @@ function onIncoming(row) {
 }
 
 function onModified(row) {
+  if (row.deleted_at) return onRemoved(row.id);
   const el = list.querySelector(`[data-id="${row.id}"]`);
   if (!el) return;
   el.classList.toggle('pinned', !!row.pinned);
@@ -152,7 +154,7 @@ async function loadOlder() {
   const snap = await getDocs(query(messagesCol(), orderBy('created_at', 'desc'), startAfter(oldestSnap), limit(PAGE)));
   const prevHeight = scroller.scrollHeight;
   const frag = document.createDocumentFragment();
-  [...snap.docs].reverse().forEach((d) => frag.append(messageEl(plain(d))));
+  [...snap.docs].reverse().map(plain).filter((r) => !r.deleted_at).forEach((r) => frag.append(messageEl(r)));
   list.prepend(frag);
   regroup();
   scroller.scrollTop += scroller.scrollHeight - prevHeight;
@@ -162,7 +164,7 @@ async function loadOlder() {
 
 // ------------------------------------------------------------ rendering
 function appendMessage(row) {
-  if (list.querySelector(`[data-id="${row.id}"]`)) return;
+  if (row.deleted_at || list.querySelector(`[data-id="${row.id}"]`)) return;
   list.append(messageEl(row));
   regroup(list.lastElementChild);
 }
@@ -203,22 +205,37 @@ function actionButtons(row) {
       updateDoc(doc(messagesCol(), row.id), { pinned: !row.pinned }).catch(toastError);
     } }, icon('pin')));
   }
+  if (row.user_id !== state.me.id) {
+    out.push(h('button.icon-btn', { title: 'Signaler ce message', 'aria-label': 'Signaler ce message', onclick: () => openReport(row) }, icon('flag')));
+  }
   if (row.user_id === state.me.id || isDelegate()) {
-    out.push(h('button.icon-btn', { title: 'Supprimer', onclick: async () => {
-      if (!(await confirmDialog('Supprimer le message ?', 'Il disparaîtra pour toute la classe.'))) return;
+    out.push(h('button.icon-btn', { title: 'Supprimer', 'aria-label': 'Supprimer', onclick: async () => {
+      if (!(await confirmDialog('Supprimer le message ?', 'Il disparaîtra pour toute la classe. Par sécurité (harcèlement), il reste conservé chiffré 30 jours et peut être joint à un signalement.'))) return;
       try {
-        const payload = decrypted.get(row.id);
-        await deleteDoc(doc(messagesCol(), row.id));
+        await updateDoc(doc(messagesCol(), row.id), { deleted_at: serverTimestamp(), deleted_by: state.me.id, pinned: false });
         onRemoved(row.id);
-        if (payload?.file?.id) {
-          await Promise.allSettled(Array.from({ length: payload.file.chunks }, (_, n) =>
-            deleteDoc(sub(state.cls.id, 'chunks', `${payload.file.id}_${n}`))));
-        }
       } catch (err) { toastError(err); }
     } }, icon('trash')));
   }
   return out;
 }
+
+/** Delegates' clients permanently erase messages (and their media) deleted more than 30 days ago. */
+export async function purgeExpired() {
+  const cutoff = Timestamp.fromMillis(Date.now() - 30 * 864e5);
+  const old = await getDocs(query(messagesCol(), where('deleted_at', '<', cutoff), limit(100))).catch(() => null);
+  for (const d of old?.docs || []) {
+    const row = plain(d);
+    const payload = await decryptRow(row);
+    if (payload?.file?.id) {
+      await Promise.allSettled(Array.from({ length: payload.file.chunks }, (_, n) =>
+        deleteDoc(sub(state.cls.id, 'chunks', `${payload.file.id}_${n}`))));
+    }
+    await deleteDoc(d.ref).catch(() => {});
+  }
+}
+
+export const decryptMessage = (row) => decryptRow(row);
 
 async function decryptRow(row) {
   if (decrypted.get(row.id)) return decrypted.get(row.id);
@@ -343,6 +360,7 @@ function regroup(only) {
 
 // ------------------------------------------------------------ pinned
 async function renderPinned(rows) {
+  rows = rows.filter((r) => !r.deleted_at);
   if (!rows.length) { pinnedBar.hidden = true; return; }
   rows.sort((a, b) => b.created_at - a.created_at);
   const items = await Promise.all(rows.map(async (r) => {
