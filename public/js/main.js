@@ -8,6 +8,7 @@ import { initAuthFlow } from './authflow.js';
 import { initChat, startChat, stopAllChat, purgeExpired } from './chat.js';
 import { startModeration, stopModeration } from './moderation.js';
 import { initStudy, startStudy, stopStudy } from './study.js';
+import { initCouncil, startCouncil, stopCouncil } from './council.js';
 import { initTimetable, startSlots, stopSlots } from './timetable.js';
 import { initVotes, startProposals, stopProposals } from './votes.js';
 import { initMembers, inviteCode } from './members.js';
@@ -271,6 +272,7 @@ function startClass(cid) {
   startSlots();
   startProposals();
   startStudy();
+  startCouncil();
   startPresence(cid);
   return membersReady;
 }
@@ -284,6 +286,7 @@ function stopClass() {
   stopPresence();
   stopModeration();
   stopStudy();
+  stopCouncil();
   liveClassId = null;
 }
 
@@ -320,6 +323,7 @@ async function boot() {
   initVotes();
   initMembers();
   initStudy();
+  initCouncil();
 
   $$('.nav-item').forEach((b) => b.addEventListener('click', () => showPanel(b.dataset.panel)));
   on('goto', showPanel);

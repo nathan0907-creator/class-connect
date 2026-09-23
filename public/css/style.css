@@ -1278,3 +1278,45 @@ body.is-teacher .student-only { display: none !important; }
 .role-select { width: auto; padding: 6px 10px; font-size: 13px; border-radius: 10px; }
 .role-summary { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 13px; color: var(--muted); }
 .role-summary b { color: #fff; font-family: var(--font-display); }
+
+/* ==========================================================================
+   Conseil de classe
+   ========================================================================== */
+.ico-award { --i: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='8' r='6'/><path d='M15.48 12.89 17 22l-5-3-5 3 1.52-9.11'/></svg>"); }
+.council-body { flex: 1; min-height: 0; overflow-y: auto; }
+.council-teacher { display: flex; flex-direction: column; gap: 14px; height: 100%; min-height: 0; }
+.council-toolbar { display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; }
+.council-toolbar .field { min-width: 200px; }
+.council-stats { display: flex; gap: 16px; font-size: 13px; color: var(--muted); padding-bottom: 10px; }
+.council-stats b { color: #fff; font-family: var(--font-display); }
+.council-layout { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(250px, 320px) 1fr; gap: 16px; }
+.council-picker { display: flex; flex-direction: column; gap: 10px; min-height: 0; padding: 12px; border-radius: 16px; background: rgba(0, 0, 0, .22); border: 1px solid var(--border); }
+.council-search { padding: 9px 12px; }
+.council-list { flex: 1; overflow-y: auto; display: grid; gap: 6px; align-content: start; min-height: 120px; }
+.council-item {
+  display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; text-align: left;
+  padding: 8px 10px; border-radius: 12px; border: 1px solid transparent; background: rgba(255, 255, 255, .03);
+  transition: background .2s, border-color .2s;
+}
+.council-item:hover { background: rgba(124, 92, 255, .1); }
+.council-item.active { border-color: rgba(0, 212, 255, .55); background: rgba(0, 212, 255, .1); }
+.ci-name { display: flex; flex-direction: column; min-width: 0; }
+.ci-name b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ci-name small { color: var(--muted); font-size: 11px; }
+.ci-avg { font-family: var(--font-display); font-weight: 700; color: var(--ok); }
+.ci-todo { font-size: 11px; color: var(--gold); border: 1px solid rgba(255, 207, 107, .4); border-radius: 8px; padding: 2px 7px; }
+.council-editor { min-height: 0; overflow-y: auto; }
+.council-form { padding: 20px 22px; display: grid; gap: 12px; }
+.cf-head { display: flex; gap: 14px; align-items: center; }
+.cf-head h3 { margin: 0; font-size: 18px; }
+.council-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; align-content: start; }
+.council-card { padding: 20px; display: grid; gap: 10px; animation: propIn .6s var(--ease) both; }
+.cc-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.cc-average span { font-family: var(--font-display); font-size: 44px; font-weight: 900; line-height: 1;
+  background: linear-gradient(135deg, #fff, var(--accent-2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.cc-average small { font-size: 18px; color: var(--muted); margin-left: 4px; }
+.mention { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 10px; color: var(--gold); background: rgba(255, 207, 107, .1); border: 1px solid rgba(255, 207, 107, .35); }
+@media (max-width: 900px) {
+  .council-layout { grid-template-columns: 1fr; }
+  .council-list { max-height: 36vh; }
+}

@@ -272,6 +272,24 @@ service cloud.firestore {
         allow delete: if isActiveMember(cid) && (resource.data.uploader_id == uid() || isDelegate(cid));
       }
 
+      // Class council results. Each record is end-to-end encrypted for the student concerned and the teachers only:
+      // other students, delegates and the server cannot read it. Only teachers write.
+      match /council/{rid} {
+        function validRecord(d) {
+          return d.keys().hasOnly(['student_id', 'period', 'author_id', 'updated_at', 'iv', 'ciphertext', 'keys'])
+            && d.student_id is string && d.period in ['T1', 'T2', 'T3', 'S1', 'S2']
+            && rid == d.period + '_' + d.student_id
+            && d.author_id == uid() && d.updated_at == request.time
+            && str(d.iv, 10, 32) && str(d.ciphertext, 10, 20000)
+            && d.keys is map && d.keys.size() >= 1 && d.keys.size() <= 80
+            && get(userPath(d.student_id)).data.class_id == cid
+            && get(userPath(d.student_id)).data.role != 'teacher';
+        }
+        allow read: if isTeacher(cid) || (isActiveMember(cid) && resource.data.student_id == uid());
+        allow create, update: if isTeacher(cid) && validRecord(request.resource.data);
+        allow delete: if isTeacher(cid);
+      }
+
       // Encrypted media, split into ~900 KB chunks.
       match /chunks/{chunkId} {
         allow read: if isActiveMember(cid);
