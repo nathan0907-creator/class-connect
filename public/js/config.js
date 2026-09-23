@@ -24,4 +24,4 @@ export const RECAPTCHA_SITE_KEY = '';
 
 // Optionnel : clé API GIPHY (developers.giphy.com) pour la recherche de GIFs.
 // Sans clé, on peut toujours envoyer des GIFs depuis son appareil.
-export const GIPHY_API_KEY = '';
+export const GIPHY_API_KEY = 'gItZUnu59yAAE3N0jfkL2c5Kfl5AXfAn';

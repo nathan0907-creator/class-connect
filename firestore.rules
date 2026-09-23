@@ -45,6 +45,16 @@ service cloud.firestore {
       allow delete: if signedIn() && resource.data.uid == uid();   // account deletion (RGPD)
     }
 
+    // ---------------------------------------------------------------- e-mails (to know if an address already has an account)
+    match /emails/{email} {
+      allow get: if true;
+      allow list: if false;             // no enumeration
+      allow create: if signedIn() && email == request.auth.token.email
+        && request.resource.data.keys().hasOnly(['uid']) && request.resource.data.uid == uid();
+      allow update: if false;
+      allow delete: if signedIn() && resource.data.uid == uid();
+    }
+
     // ---------------------------------------------------------------- private keys (encrypted with the password)
     match /private/{userId} {
       allow read: if signedIn() && userId == uid();

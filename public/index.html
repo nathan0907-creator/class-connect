@@ -149,13 +149,15 @@
           <form class="step" data-step="reg-pass" novalidate>
             <button type="button" class="back-btn" data-back>← Changer de pseudo</button>
             <input type="text" name="username" autocomplete="username" class="sr-only" tabindex="-1" aria-hidden="true">
-            <h2 class="step-title">Bienvenue, <span data-pilot></span> ! Sécurise ton compte</h2>
+            <h2 class="step-title">Bienvenue, <span data-pilot></span> ! Crée ton compte</h2>
+            <label class="field" data-only="pseudo"><span>Choisis ton pseudo</span>
+              <input name="pseudo" autocomplete="nickname" maxlength="24" autocapitalize="off" spellcheck="false" placeholder="ex. astro_lea"></label>
             <label class="field"><span>Mot de passe</span>
               <input name="password" type="password" autocomplete="new-password" required minlength="8" aria-describedby="pw-strength"></label>
             <div class="strength-row" id="pw-strength"><div class="strength"><i></i></div><small class="strength-label"></small></div>
             <label class="field"><span>Confirmer le mot de passe</span>
               <input name="confirm" type="password" autocomplete="new-password" required minlength="8"></label>
-            <label class="field"><span>Adresse e-mail <em>(facultatif)</em></span>
+            <label class="field" data-only="email"><span>Adresse e-mail <em>(facultatif)</em></span>
               <input name="email" type="email" autocomplete="email" maxlength="120" placeholder="pour récupérer ton mot de passe"></label>
             <label class="check"><input type="checkbox" name="terms" required>
               <span>J'accepte les <a href="cgu.html" target="_blank" rel="noopener">CGU</a> et la <a href="confidentialite.html" target="_blank" rel="noopener">politique de confidentialité</a>.</span></label>

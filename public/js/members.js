@@ -1,4 +1,4 @@
-import { doc, getDocs, query, where, updateDoc, writeBatch } from 'firebase/firestore';
+import { doc, getDocs, query, where, updateDoc, writeBatch, deleteDoc } from 'firebase/firestore';
 import { reauthenticateWithCredential, EmailAuthProvider, deleteUser } from 'firebase/auth';
 import { auth, db, sub, classRef, userRef } from './fb.js';
 import { state, on, emit, isDelegate } from './state.js';
@@ -74,6 +74,7 @@ function deleteAccount() {
         batch.delete(doc(db, 'usernames', state.me.username));
         batch.delete(userRef(state.me.id));
         await batch.commit();
+        await deleteDoc(doc(db, 'emails', user.email)).catch(() => {});
         await deleteUser(user);
         await clearKeys();
         location.reload();

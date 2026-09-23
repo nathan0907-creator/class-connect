@@ -5,12 +5,12 @@
 import {
   createUserWithEmailAndPassword, signInWithEmailAndPassword, updatePassword, sendPasswordResetEmail, deleteUser, signOut,
 } from 'firebase/auth';
-import { doc, getDoc, writeBatch, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, writeBatch, serverTimestamp } from 'firebase/firestore';
 import { auth, db, synthEmail, isSynthetic, friendly } from './fb.js';
 import { deriveAuthKey, createIdentity, unlockIdentity, storePrivateKey } from './crypto.js';
 import { resetIdentity } from './keyring.js';
 import { state } from './state.js';
-import { $, $$, h } from './ui.js';
+import { $, $$, h, toast } from './ui.js';
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -134,7 +134,12 @@ export class Stage {
 async function lookup(identifier) {
   if (identifier.includes('@')) {
     if (!EMAIL_RE.test(identifier)) throw new Error('Adresse e-mail invalide');
-    return { mode: 'login', authEmail: identifier.toLowerCase(), label: identifier };
+    const email = identifier.toLowerCase();
+    // Accounts register their e-mail in /emails so the site knows whether to log in or sign up.
+    const known = await getDoc(doc(db, 'emails', email)).then((s) => s.exists()).catch(() => false);
+    return known
+      ? { mode: 'login', authEmail: email, label: identifier }
+      : { mode: 'register', email, username: null, label: identifier };
   }
   if (!USERNAME_RE.test(identifier)) throw new Error('Pseudo : 3 à 24 caractères (lettres, chiffres, _ . -)');
   const snap = await getDoc(doc(db, 'usernames', identifier.toLowerCase()));
@@ -161,6 +166,7 @@ async function createAccount({ username, password, email }) {
     await deleteUser(cred.user).catch(() => {});
     throw err.code === 'permission-denied' ? new Error('Ce pseudo vient d\'être pris, choisis-en un autre') : err;
   }
+  if (!isSynthetic(authEmail)) await setDoc(doc(db, 'emails', authEmail), { uid }).catch(() => {});
   state.privateKey = identity.privateKey;
   await storePrivateKey(uid, identity.privateKey);
 }
@@ -184,6 +190,8 @@ async function signIn(authEmail, password) {
     wasReset = true;
   }
   const uid = cred.user.uid;
+  // Accounts created before the e-mail index existed get registered on their next login.
+  if (!isSynthetic(authEmail)) setDoc(doc(db, 'emails', authEmail), { uid }).catch(() => {});
   const priv = await getDoc(doc(db, 'private', uid));
   if (wasReset || !priv.exists()) {
     await resetIdentity(uid, password);
@@ -269,8 +277,14 @@ export function initAuthFlow({ onSuccess }) {
     }
     const target = ctx.mode === 'login' ? 'login-pass' : 'reg-pass';
     const pass = forms[target];
-    pass.elements.username.value = ctx.mode === 'login' ? ctx.label : ctx.username.toLowerCase();
+    pass.elements.username.value = ctx.mode === 'login' ? ctx.label : (ctx.username || ctx.email).toLowerCase();
     $('[data-pilot]', pass).textContent = ctx.label;
+    if (ctx.mode === 'register') {
+      // Started with an e-mail → ask for a pseudo; started with a pseudo → offer the optional e-mail.
+      $('[data-only="pseudo"]', pass).hidden = !!ctx.username;
+      $('[data-only="email"]', pass).hidden = !!ctx.email;
+      $('[data-back]', pass).textContent = ctx.username ? '← Changer de pseudo' : '← Changer d\'adresse';
+    }
     await Promise.all([cargo(input), stage.launch(ctx.mode === 'login' ? 'Décollage !' : 'Nouveau pilote : décollage !')]);
     input.classList.remove('vanish');
     lock(false);
@@ -292,6 +306,7 @@ export function initAuthFlow({ onSuccess }) {
 
   // Password strength meter
   const regPass = forms['reg-pass'];
+  const loginPass = forms['login-pass'];
   regPass.elements.password.addEventListener('input', () => {
     const p = regPass.elements.password.value;
     const score = [p.length >= 8, p.length >= 12, /[A-Z]/.test(p) && /[a-z]/.test(p), /\d/.test(p), /[^A-Za-z0-9]/.test(p)].filter(Boolean).length;
@@ -301,8 +316,8 @@ export function initAuthFlow({ onSuccess }) {
     $('.strength-label', regPass).textContent = p ? ['Très faible', 'Faible', 'Faible', 'Correct', 'Solide', 'Excellent'][score] : '';
   });
 
-  /** Mars landing while `task` runs; aborts back to `step` on failure. */
-  async function land(task, { descending, success, busyText, step }) {
+  /** Mars landing while `task` runs; aborts back to `step` on failure. Resolves true on success. */
+  async function land(task, { descending, success, busyText, step, onError }) {
     state.authFlowBusy = true;
     go('busy');
     $('.busy-text', card).textContent = busyText;
@@ -315,35 +330,57 @@ export function initAuthFlow({ onSuccess }) {
       state.authFlowBusy = false;
       lock(false);
       await onSuccess(r.v);
-      return;
+      return true;
     }
     if (auth.currentUser) await signOut(auth).catch(() => {});
     state.authFlowBusy = false;
     await stage.abort();
     lock(false);
+    if (onError?.(r.err)) return false;
     go(step, { back: true });
     error(friendly(r.err));
+    return false;
+  }
+
+  /** Switches to the password step for an existing account (e.g. e-mail already registered). */
+  function toLogin(authEmail, label, message) {
+    ctx = { mode: 'login', authEmail, label };
+    loginPass.elements.username.value = label;
+    $('[data-pilot]', loginPass).textContent = label;
+    go('login-pass', { back: true });
+    info(message);
   }
 
   // Step 2b — new account
-  regPass.addEventListener('submit', (e) => {
+  regPass.addEventListener('submit', async (e) => {
     e.preventDefault();
     const f = regPass.elements;
     if (botLike(regPass)) return error('Doucement, pilote… réessaie.');
+    const username = ctx.username || f.pseudo.value.trim();
+    if (!USERNAME_RE.test(username)) return error('Pseudo : 3 à 24 caractères (lettres, chiffres, _ . -)');
     if (f.password.value.length < 8) return error('Mot de passe : 8 caractères minimum');
     if (f.password.value !== f.confirm.value) return error('Les mots de passe ne correspondent pas');
-    const email = f.email.value.trim();
+    const email = ctx.email || f.email.value.trim();
     if (email && !EMAIL_RE.test(email)) return error('Adresse e-mail invalide');
     if (!f.terms.checked) return error('Accepte les CGU et la politique de confidentialité pour continuer');
+    if (!ctx.username) {
+      const taken = await getDoc(doc(db, 'usernames', username.toLowerCase())).then((s) => s.exists()).catch(() => false);
+      if (taken) return error(`Le pseudo « ${username} » est déjà pris, choisis-en un autre`);
+    }
     error('');
-    land(createAccount({ username: ctx.username, password: f.password.value, email }), {
+    const ok = await land(createAccount({ username, password: f.password.value, email }), {
       descending: 'Cap sur Mars…', success: 'Compte créé !', busyText: 'Création du compte…', step: 'reg-pass',
-    }).then(() => regPass.reset());
+      onError: (err) => {
+        if (err.code !== 'auth/email-already-in-use') return false;
+        toLogin(email.toLowerCase(), email, 'Un compte existe déjà avec cette adresse : entre ton mot de passe pour te connecter.');
+        return true;
+      },
+    });
+    if (ok) regPass.reset();
   });
 
   // Step 2a — login
-  const loginPass = forms['login-pass'];
-  loginPass.addEventListener('submit', (e) => {
+  loginPass.addEventListener('submit', async (e) => {
     e.preventDefault();
     const pw = loginPass.elements.password.value;
     if (!pw) return error('Entre ton mot de passe');
@@ -353,20 +390,31 @@ export function initAuthFlow({ onSuccess }) {
       if (++failures >= 5) { lockedUntil = Date.now() + 30_000; failures = 0; }
       throw err;
     });
-    land(task, {
+    const ok = await land(task, {
       descending: 'Connexion en cours…', success: 'Connexion réussie', busyText: 'Connexion en cours…', step: 'login-pass',
-    }).then(() => loginPass.reset());
+    });
+    if (ok) loginPass.reset();
   });
 
   // Forgot password
-  $('[data-forgot]', card).addEventListener('click', async () => {
+  const forgotBtn = $('[data-forgot]', card);
+  forgotBtn.addEventListener('click', async () => {
     if (!ctx.authEmail || isSynthetic(ctx.authEmail)) {
       return error('Aucune adresse e-mail n\'est liée à ce compte : le mot de passe ne peut pas être réinitialisé.');
     }
+    forgotBtn.disabled = true;
+    forgotBtn.textContent = 'Envoi en cours…';
     try {
       await sendPasswordResetEmail(auth, ctx.authEmail);
-      info(`E-mail de réinitialisation envoyé à ${maskEmail(ctx.authEmail)}. Après le changement, tes clés seront régénérées et un membre de ta classe te redonnera l'accès aux messages.`);
-    } catch (err) { error(friendly(err)); }
+      const msg = `📧 E-mail envoyé à ${maskEmail(ctx.authEmail)} ! Ouvre le lien reçu (regarde aussi dans les spams), choisis un nouveau mot de passe puis reviens te connecter ici.`;
+      info(msg);
+      toast(msg, 'success', 9000);
+    } catch (err) {
+      error(friendly(err));
+    } finally {
+      forgotBtn.disabled = false;
+      forgotBtn.textContent = 'Mot de passe oublié ?';
+    }
   });
 
   return {
