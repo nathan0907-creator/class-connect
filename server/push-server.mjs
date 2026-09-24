@@ -18,6 +18,7 @@ const CHANNELS = {
   messages: { label: 'Classe', canRead: (role) => role !== 'teacher' },
   mixed_messages: { label: 'Profs & élèves', canRead: () => true },
   staff_messages: { label: 'Salle des profs', canRead: (role) => role === 'teacher' },
+  announcements: { label: 'Annonces', canRead: () => true },
 };
 const DEAD_TOKEN = new Set(['messaging/registration-token-not-registered', 'messaging/invalid-registration-token', 'messaging/invalid-argument']);
 

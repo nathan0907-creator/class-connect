@@ -25,7 +25,9 @@ const MUTANTS = [
   ['couleur non vérifiée (injection CSS)', "str(a.display_name, 1, 40) && validColor(a.color)", 'str(a.display_name, 1, 40)'],
   ['nouvelle clé sans revalidation', "(a.public_key == b.public_key || b.status != 'active' || b.role == 'delegate')", 'true'],
   ['code professeurs lisible par les élèves', "match /secrets/{docId} {\n        allow read: if isDelegate(cid);", "match /secrets/{docId} {\n        allow read: if isActiveMember(cid);"],
-  ['clé privée lisible par tous',"match /private/{userId} {\n      allow read: if signedIn() && userId == uid();", "match /private/{userId} {\n      allow read: if signedIn();"],
+  ['un élève publie dans les annonces', "(ch != 'announcements' || isStaff(cid) || d.get('kind', '') == 'alert')", 'true'],
+  ['alerte signée au nom d\'un autre', '&& request.resource.data.slot_id is string && request.resource.data.by == uid()', '&& request.resource.data.slot_id is string'],
+  ['clé privée lisible par tous', "match /private/{userId} {\n      allow read: if signedIn() && userId == uid();", "match /private/{userId} {\n      allow read: if signedIn();"],
 ];
 
 let survived = 0;

@@ -25,24 +25,30 @@ service cloud.firestore {
     function canPublishCourses(cid) { return isActiveMember(cid) && (me().role in ['delegate', 'deputy', 'teacher'] || me().get('trusted', false) == true); }
     function notPrincipal(d) { return d.get('principal', false) == false; }
 
-    // Chat channels: "messages" = students only, "staff_messages" = teachers only, "mixed_messages" = everyone.
-    function isChannel(ch) { return ch in ['messages', 'mixed_messages', 'staff_messages']; }
+    // Chat channels: "messages" = students only, "staff_messages" = teachers only, "mixed_messages" = everyone,
+    // "announcements" = read by everyone, written by delegates / deputies / teachers.
+    function isChannel(ch) { return ch in ['messages', 'mixed_messages', 'staff_messages', 'announcements']; }
     function canChannel(cid, ch) {
       return (ch == 'messages' && isStudent(cid))
         || (ch == 'staff_messages' && isTeacher(cid))
-        || (ch == 'mixed_messages' && isActiveMember(cid));
+        || (ch in ['mixed_messages', 'announcements'] && isActiveMember(cid));
+    }
+    function isStaff(cid) { return isDelegate(cid) || isDeputy(cid) || isTeacher(cid); }
+    // Writing: in the announcements channel, other members may only post a timetable alert ("prof absent"…).
+    function canPost(cid, ch, d) {
+      return canChannel(cid, ch) && (ch != 'announcements' || isStaff(cid) || d.get('kind', '') == 'alert');
     }
     // Pin / delete others' messages: delegates and deputies for students, teachers for the staff room.
     function moderates(cid, ch) {
       return (ch == 'messages' && (isDelegate(cid) || isDeputy(cid)))
         || (ch == 'staff_messages' && isTeacher(cid))
-        || (ch == 'mixed_messages' && (isDelegate(cid) || isDeputy(cid) || isTeacher(cid)));
+        || (ch in ['mixed_messages', 'announcements'] && isStaff(cid));
     }
     // Reports: delegates for the students' channels, teachers for theirs, and head teachers receive ALL reports.
     function handlesReports(cid, ch) {
       return isPrincipal(cid)
-        || (ch in ['messages', 'mixed_messages'] && isDelegate(cid))
-        || (ch in ['mixed_messages', 'staff_messages'] && isTeacher(cid));
+        || (ch in ['messages', 'mixed_messages', 'announcements'] && isDelegate(cid))
+        || (ch in ['mixed_messages', 'staff_messages', 'announcements'] && isTeacher(cid));
     }
     function notTrusted(d) { return d.get('trusted', false) == false; }
     function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
@@ -53,8 +59,9 @@ service cloud.firestore {
     function hhmm(v) { return v is string && v.matches('^([01][0-9]|2[0-3]):[0-5][0-9]$'); }
 
     function validSlot(d) {
-      return d.keys().hasOnly(['day', 'start_at', 'end_at', 'subject', 'teacher', 'room', 'color'])
+      return d.keys().hasOnly(['day', 'start_at', 'end_at', 'subject', 'teacher', 'room', 'color', 'week'])
         && d.keys().hasAll(['day', 'start_at', 'end_at', 'subject', 'teacher', 'room', 'color'])
+        && d.get('week', 'A') in ['A', 'B']
         && d.day is int && d.day >= 0 && d.day <= 5
         && hhmm(d.start_at) && hhmm(d.end_at) && d.start_at < d.end_at
         && str(d.subject, 1, 40) && str(d.teacher, 0, 40) && str(d.room, 0, 20)
@@ -205,6 +212,9 @@ service cloud.firestore {
         // the teachers' code moved to secrets/codes: it can only be removed from here
         || (onlyChanged(['teacher_code']) && !('teacher_code' in request.resource.data))
         || (onlyChanged(['key_epoch']) && request.resource.data.key_epoch == resource.data.key_epoch + 1)
+        // Monday of a "semaine A" (timetables alternating A / B weeks)
+        || (onlyChanged(['week_a']) && request.resource.data.week_a is string
+            && request.resource.data.week_a.matches('^20[0-9]{2}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$'))
       );
       allow delete: if false;
 
@@ -244,11 +254,12 @@ service cloud.firestore {
               || request.time > resource.data.last + duration.value(1, 's'));
       }
 
-      // Encrypted messages, one collection per channel (students / teachers / everyone).
+      // Encrypted messages, one collection per channel (students / teachers / everyone / announcements).
       match /{channel}/{mid} {
         allow read: if isChannel(channel) && canChannel(cid, channel);
-        allow create: if isChannel(channel) && canChannel(cid, channel)
-          && request.resource.data.keys().hasOnly(['user_id', 'epoch', 'iv', 'ciphertext', 'pinned', 'created_at'])
+        allow create: if isChannel(channel) && canPost(cid, channel, request.resource.data)
+          && request.resource.data.keys().hasOnly(['user_id', 'epoch', 'iv', 'ciphertext', 'pinned', 'created_at', 'kind'])
+          && request.resource.data.get('kind', 'alert') in ['alert']
           && request.resource.data.user_id == uid()
           && request.resource.data.epoch == get(classPath(cid)).data.key_epoch
           && request.resource.data.pinned == false
@@ -417,6 +428,24 @@ service cloud.firestore {
         allow create: if (isDelegate(cid) || isDeputy(cid) || isTeacher(cid)) && validEvent(request.resource.data);
         allow update: if false;
         allow delete: if isDelegate(cid) || isDeputy(cid) || isTeacher(cid);
+      }
+
+      // Encrypted content of the "class items" (alerts, compliments, playlist…): current key, sensible sizes.
+      function sealed(d, max) {
+        return d.epoch == get(classPath(cid)).data.key_epoch && str(d.iv, 10, 32) && str(d.ciphertext, 10, max);
+      }
+      function isDate(v) { return v is string && v.matches('^20[0-9]{2}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$'); }
+
+      // Timetable alerts ("prof absent", "salle changée", "cours annulé"): any member warns the class.
+      match /alerts/{aid} {
+        allow read: if isActiveMember(cid);
+        allow create: if isActiveMember(cid)
+          && request.resource.data.keys().hasOnly(['kind', 'slot_id', 'date', 'epoch', 'iv', 'ciphertext', 'by', 'created_at'])
+          && request.resource.data.kind in ['absent', 'room', 'cancel'] && isDate(request.resource.data.date)
+          && request.resource.data.slot_id is string && request.resource.data.by == uid()
+          && request.resource.data.created_at == request.time && sealed(request.resource.data, 2000);
+        allow update: if false;
+        allow delete: if isActiveMember(cid) && (resource.data.by == uid() || isStaff(cid));
       }
 
       match /slots/{sid} {

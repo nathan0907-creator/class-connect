@@ -7,7 +7,7 @@ import { notify } from './notify.js';
 import { recordVoice, voicePlayer, voiceSupported } from './voice.js';
 import { statusEmoji, isBirthday, birthdaysToday } from './profiles.js';
 import { db, sub, plain } from './fb.js';
-import { state, on, isDelegate, isDeputy, isTeacher, memberName, CHANNELS, channelsFor } from './state.js';
+import { state, on, isDelegate, isDeputy, isTeacher, memberName, CHANNELS, channelsFor, canAnnounce } from './state.js';
 import { encryptJSON, decryptJSON } from './crypto.js';
 import { cleanPayload, safeColor, safeMime } from './safe.js';
 import { MAX_FILE, uploadEncrypted, downloadDecrypted, deleteFileChunks, compressImage } from './media.js';
@@ -46,6 +46,16 @@ const messagesCol = () => sub(state.cls.id, channel);
 /** Who may pin / delete others' messages in a channel. */
 const moderates = (ch = channel) => (ch === 'messages' ? isDelegate() || isDeputy()
   : ch === 'staff_messages' ? isTeacher() : isDelegate() || isDeputy() || isTeacher());
+
+export const ALERTS = { absent: '🚫 Prof absent', room: '🔁 Changement de salle', cancel: '❌ Cours annulé' };
+const dayFmtLong = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+export const fmtDate = (ymd) => { const [y, m, d] = ymd.split('-').map(Number); return dayFmtLong.format(new Date(y, m - 1, d)); };
+/** One line describing a message (notifications, replies, pinned bar). */
+export function payloadPreview(p) {
+  if (!p) return '🔒 message chiffré';
+  if (p.t === 'alert') return `${ALERTS[p.alert.kind]} · ${p.alert.subject} · ${fmtDate(p.alert.date)}`;
+  return p.text || (p.t === 'audio' ? '🎤 Message vocal' : p.t === 'video' ? '🎬 Vidéo' : p.t === 'gif' ? 'GIF' : '🖼️ Image');
+}
 
 export function initChat() {
   root = $('#panel-chat');
@@ -149,7 +159,12 @@ function openChannel(ch) {
   renderChannelTabs();
   $('[data-channel-title]').textContent = CHANNELS[ch].title;
   $('[data-channel-hint]').textContent = CHANNELS[ch].hint;
-  textarea.placeholder = `Message chiffré — ${CHANNELS[ch].label}…`;
+  // Announcements: only delegates and teachers write (anyone can still report an absent teacher from the timetable).
+  const locked = ch === 'announcements' && !canAnnounce();
+  root.classList.toggle('composer-locked', locked);
+  textarea.disabled = locked;
+  textarea.placeholder = locked ? "Seuls les délégués et les profs publient ici · signale un prof absent depuis l'emploi du temps"
+    : `Message chiffré — ${CHANNELS[ch].label}…`;
   typingTimers.forEach((t) => clearTimeout(t));
   typingTimers.clear();
   renderTyping();
@@ -208,7 +223,7 @@ function onIncoming(row) {
     if (document.hidden) {
       // Decrypted locally: the notification never goes through a server.
       decryptRow(row).then((p) => notify(`${memberName(row.user_id)} · ${CHANNELS[channel].label}`,
-        !p ? 'Nouveau message chiffré' : p.text ? p.text.slice(0, 120) : p.t === 'audio' ? '🎤 Message vocal' : p.t === 'video' ? '🎬 Vidéo' : p.t === 'gif' ? 'GIF' : '🖼️ Image', `cc-${channel}`));
+        p ? payloadPreview(p).slice(0, 120) : 'Nouveau message chiffré', `cc-${channel}`));
     }
   }
   if (atBottom || row.user_id === state.me.id) scrollToBottom(true);
@@ -552,7 +567,13 @@ async function fillBubble(el, row) {
   }
   el.classList.remove('locked');
   const parts = [];
-  if (payload.t === 'gif' && payload.gif) {
+  if (payload.t === 'alert') {
+    const a = payload.alert;
+    parts.push(h(`div.alert-card.alert-${a.kind}`,
+      h('b', ALERTS[a.kind]), h('span', `${a.subject} · ${fmtDate(a.date)}`),
+      a.kind === 'room' && a.room ? h('span', `Nouvelle salle : ${a.room}`) : null,
+      a.note ? h('small', a.note) : null));
+  } else if (payload.t === 'gif' && payload.gif) {
     parts.push(h('div.media.gif', { style: ratio(payload.gif) },
       h('img', { src: payload.gif.url, alt: payload.gif.title || 'GIF', loading: 'lazy' }), h('span.media-tag', 'GIF')));
   } else if (payload.t === 'audio' && payload.file) {
@@ -581,7 +602,7 @@ let replyTo = null;
 let replyBar;
 function startReply(row) {
   const p = decrypted.get(row.id);
-  const preview = !p ? 'message chiffré' : p.text || (p.t === 'audio' ? '🎤 Message vocal' : p.t === 'video' ? '🎬 Vidéo' : p.t === 'gif' ? 'GIF' : '🖼️ Photo');
+  const preview = payloadPreview(p);
   replyTo = { id: row.id, user_id: row.user_id, text: preview.slice(0, 120) };
   replyBar.replaceChildren(icon('reply'),
     h('div', h('b', `Réponse à ${memberName(row.user_id)}`), h('span', replyTo.text)),
@@ -718,7 +739,7 @@ async function renderPinned(rows) {
   rows.sort((a, b) => b.created_at - a.created_at);
   const items = await Promise.all(rows.map(async (r) => {
     const p = await decryptRow(r);
-    const preview = !p ? '🔒 message chiffré' : p.text || (p.t === 'audio' ? '🎤 Message vocal' : p.t === 'video' ? '🎬 Vidéo' : p.t === 'gif' ? 'GIF' : '🖼️ Image');
+    const preview = payloadPreview(p);
     return h('button.pinned-item', { onclick: () => jumpTo(r.id) },
       icon('pin'), h('b', memberName(r.user_id)), h('span', preview.slice(0, 140)));
   }));
@@ -736,16 +757,17 @@ function jumpTo(id) {
 }
 
 // ------------------------------------------------------------ sending
-async function postPayload(payload) {
+/** Posts an encrypted message in a channel. `extra` = plain fields allowed by the rules (e.g. kind: 'alert'). */
+export async function postTo(ch, payload, extra = {}) {
   const key = currentKey();
   if (!key) throw new Error('Clé de la classe pas encore reçue. Attends qu\'un membre en ligne te la transmette.');
   const epoch = state.cls.key_epoch;
-  const ref = doc(messagesCol());
-  const enc = await encryptJSON(key, payload, aadFor({ epoch, user_id: state.me.id, channel }));
+  const ref = doc(sub(state.cls.id, ch));
+  const enc = await encryptJSON(key, payload, aadFor({ epoch, user_id: state.me.id, channel: ch }));
   decrypted.set(ref.id, payload);
   // The rate document lets the security rules enforce one message per second (anti-spam).
   const batch = writeBatch(db);
-  batch.set(ref, { user_id: state.me.id, epoch, iv: enc.iv, ciphertext: enc.ciphertext, pinned: false, created_at: serverTimestamp() });
+  batch.set(ref, { user_id: state.me.id, epoch, iv: enc.iv, ciphertext: enc.ciphertext, pinned: false, created_at: serverTimestamp(), ...extra });
   batch.set(sub(state.cls.id, 'rate', state.me.id), { last: serverTimestamp() });
   try {
     await batch.commit();
@@ -753,7 +775,9 @@ async function postPayload(payload) {
     if (err.code === 'permission-denied') throw new Error('Doucement ! Un message par seconde maximum.');
     throw err;
   }
+  return ref.id;
 }
+const postPayload = (payload, extra) => postTo(channel, payload, extra);
 
 async function sendText() {
   const text = textarea.value.trim();

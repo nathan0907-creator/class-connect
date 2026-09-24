@@ -423,4 +423,45 @@ describe('NIVEAU 3 — attaques poussées', () => {
       await assertSucceeds(updateDoc(c(as('dele'), C1), { teacher_code: deleteField() }));
     });
   });
+
+  describe('emploi du temps et annonces', () => {
+    const slot = { day: 1, start_at: '08:00', end_at: '09:00', subject: 'Maths', teacher: '', room: 'B204', color: '#7c5cff' };
+    const alert = (by, extra = {}) => ({ kind: 'absent', slot_id: 's1', date: '2030-01-15', epoch: 1, ...enc, by, created_at: serverTimestamp(), ...extra });
+
+    test('annonces : tout le monde lit, seuls délégués / suppléants / profs publient', async () => {
+      for (const u of ['alice', 'prof', 'dele']) await assertSucceeds(getDocs(collection(as(u), 'classes', C1, 'announcements')));
+      await assertFails(getDocs(collection(as('pend'), 'classes', C1, 'announcements')));
+      await assertFails(postMessage(as('alice'), 'alice', 'announcements'));
+      await assertSucceeds(postMessage(as('dele'), 'dele', 'announcements'));
+      await assertSucceeds(postMessage(as('prof'), 'prof', 'announcements'));
+    });
+    test('un élève peut seulement y signaler un changement de cours (alerte)', async () => {
+      await assertSucceeds(postMessage(as('alice'), 'alice', 'announcements', { kind: 'alert' }));
+      await assertFails(postMessage(as('bob'), 'bob', 'announcements', { kind: 'annonce' }));
+      // le champ « kind » n'ouvre rien ailleurs
+      await assertFails(postMessage(as('alice'), 'alice', 'staff_messages', { kind: 'alert' }));
+    });
+    test('alertes « prof absent » : chacun prévient, personne ne signe à la place d\'un autre', async () => {
+      await assertSucceeds(addDoc(collection(as('alice'), 'classes', C1, 'alerts'), alert('alice')));
+      await assertFails(addDoc(collection(as('alice'), 'classes', C1, 'alerts'), alert('bob')));
+      await assertFails(addDoc(collection(as('alice'), 'classes', C1, 'alerts'), alert('alice', { kind: 'fete' })));
+      await assertFails(addDoc(collection(as('alice'), 'classes', C1, 'alerts'), alert('alice', { date: 'demain' })));
+      await assertFails(addDoc(collection(as('eve'), 'classes', C1, 'alerts'), alert('eve')));
+      await assertFails(addDoc(collection(as('pend'), 'classes', C1, 'alerts'), alert('pend')));
+    });
+    test('une alerte ne peut être retirée que par son auteur ou l\'équipe (délégués, profs)', async () => {
+      await env.withSecurityRulesDisabled((ctx) => setDoc(c(ctx.firestore(), C1, 'alerts', 'a1'), { ...alert('alice'), created_at: Timestamp.now() }));
+      await assertFails(deleteDoc(c(as('bob'), C1, 'alerts', 'a1')));
+      await assertFails(updateDoc(c(as('alice'), C1, 'alerts', 'a1'), { kind: 'room' }));
+      await assertSucceeds(deleteDoc(c(as('dele'), C1, 'alerts', 'a1')));
+    });
+    test('semaines A / B : cours marqués A ou B, et seul un délégué fixe la semaine A', async () => {
+      await assertSucceeds(setDoc(c(as('dele'), C1, 'slots', 'sa'), { ...slot, week: 'A' }));
+      await assertFails(setDoc(c(as('dele'), C1, 'slots', 'sc'), { ...slot, week: 'C' }));
+      await assertFails(setDoc(c(as('alice'), C1, 'slots', 'sb'), { ...slot, week: 'B' }));
+      await assertSucceeds(updateDoc(c(as('dele'), C1), { week_a: '2030-01-14' }));
+      await assertFails(updateDoc(c(as('dele'), C1), { week_a: 'lundi' }));
+      await assertFails(updateDoc(c(as('alice'), C1), { week_a: '2030-01-14' }));
+    });
+  });
 });

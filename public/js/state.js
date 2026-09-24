@@ -29,6 +29,9 @@ export const CHANNELS = {
   messages: { label: 'Classe', title: 'Canal de la classe', hint: 'Élèves uniquement' },
   mixed_messages: { label: 'Profs & élèves', title: 'Profs & élèves', hint: 'Élèves et professeurs' },
   staff_messages: { label: 'Salle des profs', title: 'Salle des profs', hint: 'Professeurs uniquement' },
+  announcements: { label: '📢 Annonces', title: 'Annonces', hint: 'Délégués et profs publient, tout le monde lit' },
 };
-export const channelsFor = () => (isTeacher() ? ['staff_messages', 'mixed_messages'] : ['messages', 'mixed_messages']);
+export const channelsFor = () => (isTeacher() ? ['staff_messages', 'mixed_messages', 'announcements'] : ['messages', 'mixed_messages', 'announcements']);
+/** Who may write announcements (everyone else can only post a "prof absent / salle changée" alert there). */
+export const canAnnounce = () => isDelegate() || isDeputy() || isTeacher();
 export const memberName = (id) => state.members.get(id)?.display_name || 'Ancien membre';

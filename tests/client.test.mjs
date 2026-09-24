@@ -5,7 +5,10 @@ import assert from 'node:assert/strict';
 import { parseHTML } from 'linkedom';
 
 const { window, document } = parseHTML('<!doctype html><html><head></head><body><div class="toasts"></div><div class="modal-root"></div></body></html>');
-Object.assign(globalThis, { window, document, Node: window.Node, HTMLElement: window.HTMLElement, matchMedia: () => ({ matches: true }), location: new URL('http://localhost:5173/') });
+Object.assign(globalThis, {
+  window, document, Node: window.Node, HTMLElement: window.HTMLElement, matchMedia: () => ({ matches: true }),
+  IntersectionObserver: class { observe() {} unobserve() {} disconnect() {} }, location: new URL('http://localhost:5173/'),
+});
 window.matchMedia = globalThis.matchMedia;
 
 const c = await import('../public/js/crypto.js');
@@ -128,6 +131,56 @@ describe('messages piégés par un membre de la classe (contenu chiffré mais ma
       assert.ok(!String(el.getAttribute('style')).includes('url('), String(bad));
     }
     assert.equal(safeColor('#00d4ff'), '#00d4ff');
+  });
+});
+
+describe('emploi du temps importé par l\'IA (photo / PDF)', async () => {
+  const { cleanImported, weekOf, mondayOf, ymd } = await import('../public/js/timetable.js');
+
+  test('seuls des cours valides sont gardés, aux tailles acceptées par le serveur', () => {
+    const out = cleanImported([
+      { day: 0, start_at: '8h30', end_at: '10:00', subject: 'Mathématiques', teacher: 'Mme Curie', room: 'B204', week: 'a' },
+      { day: 7, start_at: '08:00', end_at: '09:00', subject: 'Samedi+1' },
+      { day: 1, start_at: '10:00', end_at: '09:00', subject: 'À l\'envers' },
+      { day: 2, start_at: '25:00', end_at: '26:00', subject: 'Heure impossible' },
+      { day: 3, start_at: '09:00', end_at: '10:00', subject: '' },
+      { day: '1', start_at: '09:00', end_at: '10:00', subject: 'Jour en texte' },
+      { day: 4, start_at: '14:00', end_at: '15:00', subject: 'X'.repeat(80), teacher: 'Y'.repeat(80), room: 'Z'.repeat(80), week: 'C' },
+      null, 'cours', 42,
+    ]);
+    assert.equal(out.length, 2);
+    assert.deepEqual({ ...out[0], color: undefined }, { day: 0, start_at: '08:30', end_at: '10:00', subject: 'Mathématiques', teacher: 'Mme Curie', room: 'B204', week: 'A', color: undefined });
+    assert.equal(out[1].subject.length, 40);
+    assert.equal(out[1].teacher.length, 40);
+    assert.equal(out[1].room.length, 20);
+    assert.equal(out[1].week, '');
+    for (const s of out) assert.match(s.color, /^#[0-9a-fA-F]{6}$/);
+    assert.deepEqual(cleanImported('pas une liste'), []);
+  });
+  test('une même matière garde la même couleur', () => {
+    const out = cleanImported([
+      { day: 0, start_at: '08:00', end_at: '09:00', subject: 'Anglais' },
+      { day: 2, start_at: '08:00', end_at: '09:00', subject: 'anglais' },
+    ]);
+    assert.equal(out[0].color, out[1].color);
+  });
+  test('semaines A / B : alternance calculée à partir de la semaine A choisie par le délégué', () => {
+    state.cls = { id: 'c1', week_a: '2030-01-14' };   // un lundi
+    assert.equal(weekOf(new Date(2030, 0, 16)), 'A');
+    assert.equal(weekOf(new Date(2030, 0, 21)), 'B');
+    assert.equal(weekOf(new Date(2030, 0, 27)), 'B');  // dimanche de la même semaine
+    assert.equal(weekOf(new Date(2030, 0, 28)), 'A');
+    assert.equal(weekOf(new Date(2030, 0, 7)), 'B');   // avant la référence
+    assert.equal(weekOf(new Date(2030, 3, 8)), 'A');   // 12 semaines plus tard, après le changement d'heure
+    state.cls = { id: 'c1' };
+    assert.equal(weekOf(new Date(2030, 0, 16)), null);
+    assert.equal(ymd(mondayOf(new Date(2030, 0, 19))), '2030-01-14');
+  });
+  test('une alerte « prof absent » truquée devient un simple texte', () => {
+    assert.equal(cleanPayload({ t: 'alert', alert: { kind: 'absent', date: '2030-01-15', subject: 'Maths' } }).alert.kind, 'absent');
+    assert.equal(cleanPayload({ t: 'alert', alert: { kind: '<b>', date: '2030-01-15' } }).t, 'text');
+    assert.equal(cleanPayload({ t: 'alert', alert: { kind: 'room', date: 'demain' } }).t, 'text');
+    assert.equal(cleanPayload({ t: 'alert', alert: { kind: 'room', date: '2030-01-15', subject: 'M'.repeat(500) } }).alert.subject.length, 40);
   });
 });
 

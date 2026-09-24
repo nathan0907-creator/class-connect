@@ -14,9 +14,9 @@
     "typing": {
       "$cid": {
         "$channel": {
-          ".read": "auth != null && ($channel === 'messages' || $channel === 'mixed_messages' || $channel === 'staff_messages')",
+          ".read": "auth != null && ($channel === 'messages' || $channel === 'mixed_messages' || $channel === 'staff_messages' || $channel === 'announcements')",
           "$uid": {
-            ".write": "auth != null && auth.uid === $uid && $cid.matches(/^[A-Za-z0-9]{20}$/) && ($channel === 'messages' || $channel === 'mixed_messages' || $channel === 'staff_messages')",
+            ".write": "auth != null && auth.uid === $uid && $cid.matches(/^[A-Za-z0-9]{20}$/) && ($channel === 'messages' || $channel === 'mixed_messages' || $channel === 'staff_messages' || $channel === 'announcements')",
             ".validate": "newData.isNumber() && newData.val() <= now + 5000"
           }
         }

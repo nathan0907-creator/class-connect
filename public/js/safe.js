@@ -34,12 +34,21 @@ export function cleanFile(f, kinds) {
   };
 }
 
-const KINDS = ['text', 'gif', 'image', 'video', 'audio'];
+const KINDS = ['text', 'gif', 'image', 'video', 'audio', 'alert'];
+const DATE = /^20\d\d-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+const str = (v, max) => (typeof v === 'string' ? v.slice(0, max) : '');
+
 /** Chat message payload: only known fields, with the right types. Null if it isn't an object at all. */
 export function cleanPayload(p) {
   if (!p || typeof p !== 'object' || Array.isArray(p)) return null;
   const out = { v: 1, t: KINDS.includes(p.t) ? p.t : 'text', text: isStr(p.text, 20000) ? p.text : '' };
-  if (out.t === 'gif') {
+  if (out.t === 'alert') {
+    // "Prof absent / salle changée / cours annulé" posted in the announcements channel.
+    const a = p.alert && typeof p.alert === 'object' ? p.alert : {};
+    if (['absent', 'room', 'cancel'].includes(a.kind) && DATE.test(a.date)) {
+      out.alert = { kind: a.kind, date: a.date, subject: str(a.subject, 40), room: str(a.room, 20), note: str(a.note, 300) };
+    } else out.t = 'text';
+  } else if (out.t === 'gif') {
     const g = p.gif;
     if (g && typeof g === 'object' && isStr(g.url, 2000) && CHAT_GIF.test(g.url)) {
       out.gif = { url: g.url, title: isStr(g.title, 200) && g.title ? g.title : 'GIF', w: num(g.w, 1e5), h: num(g.h, 1e5) };

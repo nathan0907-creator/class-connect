@@ -19,5 +19,10 @@ http.createServer((req, res) => {
   if (fs.existsSync(file) && fs.statSync(file).isDirectory()) file = path.join(file, 'index.html');
   if (!fs.existsSync(file)) file = path.join(root, 'index.html');
   res.writeHead(200, { 'Content-Type': types[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-store' });
+  // Local tests with the Firebase emulators (http://localhost:5173/?emu): the page may also talk to them.
+  if (file.endsWith('.html')) {
+    res.end(fs.readFileSync(file, 'utf8').replace("connect-src 'self'", "connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*"));
+    return;
+  }
   fs.createReadStream(file).pipe(res);
 }).listen(port, () => console.log(`\n  🚀 Class Connect : http://localhost:${port}\n`));

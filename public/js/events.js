@@ -25,8 +25,11 @@ export function daysUntil(date) {
 }
 export const whenText = (n) => (n === 0 ? 'aujourd\'hui' : n === 1 ? 'demain' : `dans ${n} jours`);
 const dateFmt = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+/** Every countdown of the class (month calendar). */
+export const allEvents = () => events;
 const upcoming = () => events.filter((e) => daysUntil(e.date) >= 0).sort((a, b) => a.date.localeCompare(b.date));
 
+export const canEditEvents = () => canEdit();
 export function initEvents() {
   $('[data-next-event]')?.addEventListener('click', () => emit('goto', 'timetable'));
   on('me', render);
@@ -39,6 +42,7 @@ export function startEvents() {
   unsub = onSnapshot(eventsCol(), (snap) => {
     events = snap.docs.map(plain);
     render();
+    emit('events');
     cleanup();
   }, toastError);
 }
@@ -73,7 +77,7 @@ function render() {
         h('span.ev-body', h('b', e.title), h('small', whenText(n))),
         h('span.ev-count', n === 0 ? 'J' : `J-${n}`));
     }),
-    canEdit() ? h('button.event-card.add', { type: 'button', onclick: openEventForm }, icon('plus'), h('span', 'Compte à rebours')) : null,
+    canEdit() ? h('button.event-card.add', { type: 'button', onclick: () => openEventForm() }, icon('plus'), h('span', 'Compte à rebours')) : null,
   ].filter(Boolean));
   strip.hidden = !list.length && !canEdit();
 }
@@ -98,10 +102,10 @@ function openEvent(e) {
   });
 }
 
-function openEventForm() {
+export function openEventForm(preset = '') {
   let kind = 'controle';
   const title = h('input', { maxLength: 60, required: true, placeholder: 'Ex. Contrôle de maths (chapitre 4)' });
-  const date = h('input', { type: 'date', required: true, min: new Date().toISOString().slice(0, 10) });
+  const date = h('input', { type: 'date', required: true, min: new Date().toISOString().slice(0, 10), value: preset });
   const seg = h('div.seg.seg-sm.seg-wrap', Object.entries(KINDS).map(([k, v]) => h(`button${k === kind ? '.active' : ''}`, {
     type: 'button', onclick: (ev) => {
       kind = k;

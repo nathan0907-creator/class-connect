@@ -1,14 +1,19 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getAuth, connectAuthEmulator } from 'firebase/auth';
 import {
   getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, terminate, clearIndexedDbPersistence,
-  doc, collection,
+  doc, collection, connectFirestoreEmulator,
 } from 'firebase/firestore';
-import { getDatabase } from 'firebase/database';
+import { getDatabase, connectDatabaseEmulator } from 'firebase/database';
 import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check';
 import { FIREBASE_CONFIG, RECAPTCHA_SITE_KEY } from './config.js';
 
 export const configured = Boolean(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.projectId);
+// Local tests only (http://localhost:5173/?emu): everything goes to the Firebase emulators, never to the real data.
+const LOCAL = /^(localhost|127\.)/.test(location.hostname);
+const session = (() => { try { return globalThis.sessionStorage || null; } catch { return null; } })();
+export const EMULATORS = LOCAL && (new URLSearchParams(location.search).has('emu') || session?.getItem('cc-emu') === '1');
+if (EMULATORS) session?.setItem('cc-emu', '1');
 const app = configured ? initializeApp(FIREBASE_CONFIG) : null;
 export const firebaseApp = app;
 
@@ -19,9 +24,11 @@ if (app && RECAPTCHA_SITE_KEY && !/^(localhost|127\.)/.test(location.hostname)) 
 }
 
 export const auth = app ? getAuth(app) : null;
+if (auth && EMULATORS) connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
 // Offline mode: Firestore keeps what was already loaded (messages stay encrypted on the device) and queues what
 // is sent without network. Falls back to the memory cache where IndexedDB is unavailable (private browsing…).
 function makeDb() {
+  if (EMULATORS) { const d = getFirestore(app); connectFirestoreEmulator(d, '127.0.0.1', 8080); return d; }
   try { return initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) }); }
   catch { return getFirestore(app); }
 }
@@ -32,6 +39,7 @@ export async function clearOfflineData() {
   try { await terminate(db); await clearIndexedDbPersistence(db); } catch { /* another tab still uses it */ }
 }
 export const rtdb = app && FIREBASE_CONFIG.databaseURL ? getDatabase(app) : null;
+if (rtdb && EMULATORS) connectDatabaseEmulator(rtdb, '127.0.0.1', 9000);
 
 /** Google Analytics (via Firebase) — only called after the visitor accepts cookies. */
 export async function startAnalytics() {

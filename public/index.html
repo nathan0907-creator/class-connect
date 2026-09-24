@@ -340,9 +340,13 @@
               <h2 id="tt-title">Emploi du temps</h2>
               <p class="muted">Géré par les délégués. Les changements importants passent par un vote de la classe.</p>
             </div>
-            <button class="btn btn-primary delegate-only" data-action="new-slot"><span>Ajouter un cours</span></button>
+            <div class="btn-row delegate-only">
+              <button class="btn btn-primary" data-action="import-timetable"><span>📷 Importer photo / PDF</span></button>
+              <button class="btn btn-ghost" data-action="new-slot"><span>Ajouter un cours</span></button>
+            </div>
           </header>
           <div class="events-strip" data-events hidden></div>
+          <div class="tt-toolbar-slot"></div>
           <div class="timetable-wrap"><div class="timetable"></div></div>
         </section>
 
