@@ -5,6 +5,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { QUALITY, chosenQuality, applyQualityClass } from './quality.js';
 
 const NOISE = /* glsl */`
   vec3 mod289(vec3 x){return x-floor(x*(1.0/289.0))*289.0;}
@@ -40,13 +41,17 @@ const MODES = {
 };
 
 const rand = (a, b) => a + Math.random() * (b - a);
+
 const ease = (t) => t * t * (3 - 2 * t);
 
 export class Space {
   constructor(canvas) {
     this.canvas = canvas;
     this.reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    this.low = (navigator.hardwareConcurrency || 4) <= 4 || matchMedia('(pointer: coarse)').matches;
+    this.quality = chosenQuality();
+    this.low = this.quality === 'eco' || (navigator.hardwareConcurrency || 4) <= 4 || matchMedia('(pointer: coarse)').matches;
+    this.lastFrame = 0;
+    this.slowFrames = 0;
     this.mouse = new THREE.Vector2();
     this.mouseSmooth = new THREE.Vector2();
     this.mode = MODES.auth;
@@ -58,8 +63,8 @@ export class Space {
     this.clock = new THREE.Clock();
     this.nextShooting = 3;
 
-    const r = (this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !this.low, powerPreference: 'high-performance' }));
-    r.setPixelRatio(Math.min(devicePixelRatio, this.low ? 1.25 : 1.75));
+    const r = (this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !this.low, powerPreference: this.low ? 'low-power' : 'high-performance' }));
+    r.setPixelRatio(Math.min(devicePixelRatio, QUALITY[this.quality].ratio));
     r.setSize(innerWidth, innerHeight);
     r.toneMapping = THREE.ACESFilmicToneMapping;
     r.toneMappingExposure = 1.05;
@@ -99,7 +104,7 @@ export class Space {
 
   // ------------------------------------------------------------ builders
   buildStars() {
-    const n = this.low ? 3500 : 7000;
+    const n = this.quality === 'eco' ? 1800 : this.low ? 3500 : 7000;
     const pos = new Float32Array(n * 3), col = new Float32Array(n * 3), size = new Float32Array(n), phase = new Float32Array(n);
     const palette = ['#9fb8ff', '#ffffff', '#fff4e0', '#ffd6a5', '#c7b8ff', '#a0f0ff'].map((c) => new THREE.Color(c));
     for (let i = 0; i < n; i++) {
@@ -179,7 +184,7 @@ export class Space {
   }
 
   buildGalaxy() {
-    const n = this.low ? 9000 : 22000, radius = 300, branches = 3, spin = 1.15;
+    const n = this.quality === 'eco' ? 4500 : this.low ? 9000 : 22000, radius = 300, branches = 3, spin = 1.15;
     const pos = new Float32Array(n * 3), col = new Float32Array(n * 3), size = new Float32Array(n);
     const inside = new THREE.Color('#ffd29a'), mid = new THREE.Color('#ff4fd8'), outside = new THREE.Color('#4a6bff');
     for (let i = 0; i < n; i++) {
@@ -333,7 +338,7 @@ export class Space {
     this.ring = ring;
 
     // Asteroid belt (instanced rocks orbiting in the ring plane)
-    const count = this.low ? 120 : 320;
+    const count = this.quality === 'eco' ? 50 : this.low ? 120 : 320;
     const rock = new THREE.IcosahedronGeometry(1, 0);
     const rockMat = new THREE.MeshStandardMaterial({ color: '#8b80b8', roughness: 0.9, metalness: 0.1, flatShading: true });
     this.belt = new THREE.InstancedMesh(rock, rockMat, count);
@@ -353,7 +358,7 @@ export class Space {
   }
 
   buildDust() {
-    const n = this.low ? 500 : 1100;
+    const n = this.quality === 'eco' ? 220 : this.low ? 500 : 1100;
     this.dustN = n;
     this.dustData = new Float32Array(n * 3);
     const pos = new Float32Array(n * 6), col = new Float32Array(n * 6);
@@ -412,6 +417,15 @@ export class Space {
     this.mode = MODES[name] || MODES.auth;
   }
 
+  /** Changes resolution, glow and frame rate on the fly (particle counts apply at the next start). */
+  setQuality(q) {
+    if (!QUALITY[q]) return;
+    this.quality = q;
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, QUALITY[q].ratio));
+    this.resize();
+    applyQualityClass(q);
+  }
+
   /** Hyperspace jump. Resolves at peak speed so the UI can swap views behind the blur. */
   warpJump() {
     if (this.reduced) return Promise.resolve();
@@ -429,9 +443,21 @@ export class Space {
   }
 
   // ------------------------------------------------------------ frame
-  loop() {
+  loop(now) {
     if (document.hidden) return;
-    const dt = Math.min(this.clock.getDelta(), 0.05);
+    // Frame cap: the backdrop doesn't need 60 images per second, especially behind the chat.
+    const q = QUALITY[this.quality];
+    const busy = this.warpStart >= 0 || this.pulseLevel > 0.05;
+    const fps = busy ? q.fps.auth : this.mode === MODES.app ? q.fps.app : q.fps.auth;
+    const gap = now - this.lastFrame;
+    if (gap < 1000 / fps - 2) return;
+    // Automatic fallback: if the device can't keep up, switch to the economy mode.
+    if (this.lastFrame && this.quality !== 'eco' && !busy) {
+      this.slowFrames = gap > 1000 / fps * 2.2 ? this.slowFrames + 1 : Math.max(0, this.slowFrames - 1);
+      if (this.slowFrames > 40) { this.slowFrames = 0; this.setQuality('eco'); document.dispatchEvent(new CustomEvent('cc-quality-auto', { detail: 'eco' })); }
+    }
+    this.lastFrame = now;
+    const dt = Math.min(this.clock.getDelta(), 0.12);
     const t = this.clock.elapsedTime;
     const motion = this.reduced ? 0.15 : 1;
 
@@ -517,7 +543,8 @@ export class Space {
     this.pulseLevel = Math.max(0, this.pulseLevel - dt * 1.6);
     this.bloom.strength = 0.8 + this.warp * 1.2 + this.pulseLevel * 0.6;
 
-    this.composer.render();
+    if (q.bloom) this.composer.render();
+    else this.renderer.render(this.scene, this.camera);
   }
 }
 
@@ -527,6 +554,6 @@ export function createSpace(canvas) {
   } catch (err) {
     console.warn('WebGL indisponible', err);
     document.body.classList.add('no-webgl');
-    return { setMode() {}, setTheme() {}, warpJump: () => Promise.resolve(), pulse() {} };
+    return { setMode() {}, setTheme() {}, setQuality() {}, warpJump: () => Promise.resolve(), pulse() {} };
   }
 }

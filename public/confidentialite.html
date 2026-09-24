@@ -27,108 +27,169 @@
     </header>
     <main class="card doc-card">
       <h1>Politique de confidentialité</h1>
-      <p class="doc-meta">Dernière mise à jour : 23 septembre 2026</p>
+      <p class="doc-meta">Dernière mise à jour : 24 septembre 2026 · Conforme au RGPD (règlement européen 2016/679) et à la loi Informatique et Libertés</p>
 
-      <p>Class Connect est une messagerie de classe. Elle a été conçue pour collecter <b>le minimum de données</b> :
-      le contenu de tes messages, images et vidéos est <b>chiffré de bout en bout</b> sur ton appareil. Ni l'éditeur du site
-      ni ses hébergeurs ne peuvent le lire.</p>
+      <section class="tldr" aria-labelledby="tldr-title">
+        <h2 id="tldr-title">L'essentiel en 30 secondes</h2>
+        <ul>
+          <li>🔒 <b>Tes messages, photos, vocaux et messages privés sont chiffrés de bout en bout</b> : personne d'autre que les membres concernés ne peut les lire, ni l'éditeur, ni Google, ni le serveur de notifications.</li>
+          <li>🎓 <b>Les résultats du conseil de classe</b> ne sont visibles que par toi, tes professeurs et les délégués.</li>
+          <li>🚫 <b>Aucune publicité, aucune revente de données</b>, jamais.</li>
+          <li>🍪 Les statistiques de visite ne sont activées <b>que si tu les acceptes</b>.</li>
+          <li>🤖 L'assistant de révision envoie les <b>cours</b> à Google Gemini : n'y mets jamais de données personnelles.</li>
+          <li>🧹 Les messages supprimés et les signalements sont <b>effacés au bout de 30 jours</b>.</li>
+          <li>✋ Tu peux <b>télécharger, corriger ou supprimer</b> tes données toi-même, depuis l'appli (voir <a href="#droits">tes droits</a>).</li>
+        </ul>
+      </section>
 
-      <h2>1. Responsable du traitement</h2>
-      <p>Le responsable du traitement est l'éditeur du site Class Connect. Pour toute question ou demande liée à tes données,
-      contacte-le via <a href="https://github.com/nathan0907-creator/class-connect/issues" rel="noopener">la page du projet</a> (en précisant « RGPD » dans le titre,
-      sans y écrire d'informations personnelles : l'éditeur te recontactera).</p>
+      <nav class="toc" aria-label="Sommaire">
+        <b>Sommaire</b>
+        <a href="#qui">1. Qui est responsable ?</a>
+        <a href="#donnees">2. Quelles données, pourquoi, qui peut les lire ?</a>
+        <a href="#base">3. Sur quelle base légale ?</a>
+        <a href="#ou">4. Où sont-elles stockées, et avec qui ?</a>
+        <a href="#duree">5. Combien de temps ?</a>
+        <a href="#droits">6. Tes droits et comment les exercer</a>
+        <a href="#cookies">7. Cookies et stockage sur ton appareil</a>
+        <a href="#securite">8. Sécurité</a>
+        <a href="#mineurs">9. Si tu as moins de 15 ans</a>
+      </nav>
 
-      <h2>2. Données traitées</h2>
+      <h2 id="qui">1. Qui est responsable ?</h2>
+      <p>Le responsable du traitement est <b>l'éditeur du site Class Connect</b>, un projet non commercial.
+      Pour toute question ou demande sur tes données, écris-lui via <a href="https://github.com/nathan0907-creator/class-connect/issues" rel="noopener">la page du projet</a>
+      en mettant « RGPD » dans le titre, <b>sans écrire d'informations personnelles</b> dans le message public : l'éditeur te recontactera.
+      Il te répond dans un délai d'<b>un mois</b> maximum.</p>
+
+      <h2 id="donnees">2. Quelles données, pourquoi, qui peut les lire ?</h2>
+      <p class="legend"><span class="tag tag-e2e">🔒 Chiffré</span> personne d'autre que les personnes indiquées ne peut le lire, pas même le serveur ·
+        <span class="tag tag-clear">👁️ Lisible</span> le serveur (Google Firebase) peut techniquement le lire</p>
+
+      <h3>Ton compte</h3>
       <div class="table-wrap"><table>
-        <thead><tr><th>Donnée</th><th>Pourquoi</th><th>Lisible par le serveur ?</th></tr></thead>
+        <thead><tr><th>Donnée</th><th>Pourquoi</th><th>Qui peut la lire</th></tr></thead>
         <tbody>
-          <tr><td>Pseudo, nom affiché, couleur d'avatar</td><td>T'identifier auprès de ta classe</td><td>Oui</td></tr>
-          <tr><td>Adresse e-mail (facultative)</td><td>Connexion et réinitialisation du mot de passe</td><td>Oui</td></tr>
-          <tr><td>Mot de passe</td><td>Authentification</td><td>Non : seule une empreinte dérivée (PBKDF2) est envoyée</td></tr>
-          <tr><td>Clé publique et clé privée chiffrée</td><td>Chiffrement de bout en bout</td><td>Clé privée : non (chiffrée avec ton mot de passe)</td></tr>
-          <tr><td>Messages, images, vidéos, messages vocaux, GIFs importés</td><td>Service de messagerie</td><td><b>Non</b> (chiffrés AES-256)</td></tr>
-          <tr><td>Messages supprimés (chiffrés), auteur et date de suppression</td><td>Preuve en cas de harcèlement</td><td>Non (restent chiffrés), effacés après 30 jours</td></tr>
-          <tr><td>Signalements : message signalé + 10 messages avant/après (déchiffrés par la personne qui signale), pseudos, identifiants, horodatages, motif, commentaire</td><td>Lutte contre le harcèlement</td><td>Oui, par les délégués de la classe et l'éditeur — effacés après 30 jours</td></tr>
-          <tr><td>Photo de profil, bio, statut / humeur et anniversaire (jour et mois, sans l'année) — facultatifs</td><td>Te présenter à ta classe</td><td><b>Non</b> : chiffrées de bout en bout, visibles par les membres de ta classe ; effacées si tu quittes la classe</td></tr>
-          <tr><td>Vrai nom (facultatif, saisi par toi, un professeur ou un délégué)</td><td>Retrouver les élèves lors de la saisie du conseil de classe</td><td><b>Non</b> : chiffré de bout en bout, visible uniquement par toi, les professeurs et les délégués ; effacé si tu quittes la classe</td></tr>
-          <tr><td>Messages privés « Contacter les délégués »</td><td>Permettre à un élève d'écrire aux délégués (et au prof principal s'il l'invite)</td><td><b>Non</b> : chiffrés de bout en bout avec une clé propre à chaque conversation, lisibles uniquement par ses participants</td></tr>
-          <tr><td>Comptes à rebours (vacances, contrôles, sorties) : titre et date</td><td>Organisation de la classe</td><td>Oui (comme l'emploi du temps) ; effacés une semaine après la date</td></tr>
-          <tr><td>Classe, rôle (élève/délégué), statut</td><td>Gestion de la classe</td><td>Oui</td></tr>
-          <tr><td>Emploi du temps, propositions, totaux des votes</td><td>Votes sur l'emploi du temps</td><td>Oui (ton vote individuel n'est visible que par toi)</td></tr>
-          <tr><td>Réactions emoji aux messages (qui a réagi, avec quel emoji)</td><td>Service de messagerie</td><td>Oui, par les membres du canal (le message lui-même reste chiffré) ; effacées avec le message</td></tr>
-          <tr><td>Préférence de notifications</td><td>Te prévenir des nouveaux messages</td><td>Non : stockée uniquement sur ton appareil ; le contenu des notifications est déchiffré sur ton appareil</td></tr>
-          <tr><td>Jeton de notification de ton appareil (si tu actives les notifications)</td><td>Notifications quand l'appli est fermée, via Google Firebase Cloud Messaging</td><td>Oui, uniquement par le serveur de notifications de l'éditeur (un ordinateur personnel). Le serveur transmet l'auteur, le canal et le message <b>toujours chiffré</b> : c'est ton appareil qui le déchiffre pour afficher l'aperçu, le serveur ne peut jamais le lire. Supprimé quand tu coupes les notifications ou te déconnectes</td></tr>
-          <tr><td>Copie hors ligne de la classe (messages chiffrés, membres, emploi du temps…)</td><td>Mode hors ligne</td><td>Non : stockée uniquement sur ton appareil, effacée à la déconnexion</td></tr>
-          <tr><td>Présence en ligne, indicateur « écrit… »</td><td>Confort d'utilisation</td><td>Oui, effacé à la déconnexion</td></tr>
-          <tr><td>Résultats du conseil de classe (nom, moyenne, appréciation, mention) saisis par les professeurs et les délégués</td><td>Consultation par l'élève concerné</td><td><b>Non</b> : chiffrés de bout en bout pour l'élève, les professeurs et les délégués uniquement ; conservés jusqu'à leur suppression par un professeur ou la fermeture de la classe</td></tr>
-          <tr><td>Cours de la bibliothèque (PDF, photos du cahier, textes)</td><td>Assistant de révision IA</td><td>Stockés chiffrés. <b>Envoyés en clair à Google Gemini</b> au moment où un membre génère une fiche, un quiz, une évaluation ou pose une question</td></tr>
-          <tr><td>Réponses et copies saisies dans l'assistant IA</td><td>Correction des évaluations, questions</td><td>Envoyées à Google Gemini, non conservées par Class Connect</td></tr>
-          <tr><td>Données techniques (adresse IP, navigateur)</td><td>Sécurité, anti-abus (App Check / reCAPTCHA)</td><td>Oui, par Google</td></tr>
-          <tr><td>Statistiques de visite</td><td>Mesure d'audience, <b>uniquement si tu l'acceptes</b></td><td>Oui, par Google Analytics</td></tr>
+          <tr><td>Pseudo, nom affiché, couleur</td><td>T'identifier dans ta classe</td><td><span class="tag tag-clear">👁️</span> Ta classe</td></tr>
+          <tr><td>Adresse e-mail <i>(facultative)</i></td><td>Connexion, mot de passe oublié</td><td><span class="tag tag-clear">👁️</span> Personne d'autre dans l'appli</td></tr>
+          <tr><td>Mot de passe</td><td>Connexion</td><td><span class="tag tag-e2e">🔒</span> <b>Jamais envoyé</b> : seule une empreinte (PBKDF2) part au serveur</td></tr>
+          <tr><td>Clés de chiffrement</td><td>Chiffrement de bout en bout</td><td><span class="tag tag-e2e">🔒</span> Ta clé privée est chiffrée avec ton mot de passe</td></tr>
+          <tr><td>Classe, rôle (élève, suppléant, délégué, professeur), statut</td><td>Gérer la classe et les droits de chacun</td><td><span class="tag tag-clear">👁️</span> Ta classe</td></tr>
         </tbody>
       </table></div>
 
-      <h2>3. Bases légales</h2>
+      <h3>Ce que tu écris et partages</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Donnée</th><th>Pourquoi</th><th>Qui peut la lire</th></tr></thead>
+        <tbody>
+          <tr><td>Messages, photos, vidéos, messages vocaux, GIFs importés, réponses</td><td>Messagerie</td><td><span class="tag tag-e2e">🔒</span> Les membres du canal (Classe, Profs &amp; élèves ou Salle des profs)</td></tr>
+          <tr><td>Messages privés « Contacter les délégués »</td><td>Écrire aux délégués (et au prof principal si tu l'invites)</td><td><span class="tag tag-e2e">🔒</span> Toi, les délégués, et le prof principal seulement si tu l'as invité</td></tr>
+          <tr><td>Réactions emoji</td><td>Messagerie</td><td><span class="tag tag-clear">👁️</span> Les membres du canal (le message, lui, reste chiffré)</td></tr>
+          <tr><td>Photo ou avatar, bio, statut, anniversaire (jour et mois, <b>sans l'année</b>) — <i>facultatifs</i></td><td>Te présenter à ta classe</td><td><span class="tag tag-e2e">🔒</span> Ta classe</td></tr>
+          <tr><td>Vrai nom <i>(facultatif)</i></td><td>Retrouver les élèves au conseil de classe</td><td><span class="tag tag-e2e">🔒</span> Toi, les professeurs et les délégués</td></tr>
+          <tr><td>Résultats du conseil de classe (moyenne, appréciation, mention)</td><td>Te communiquer tes résultats</td><td><span class="tag tag-e2e">🔒</span> Toi, les professeurs et les délégués</td></tr>
+          <tr><td>Emploi du temps, votes (totaux), comptes à rebours</td><td>Organisation de la classe</td><td><span class="tag tag-clear">👁️</span> Ta classe — <b>ton vote individuel reste secret</b></td></tr>
+          <tr><td>Cours de la bibliothèque de révision</td><td>Assistant de révision IA</td><td><span class="tag tag-e2e">🔒</span> Stockés chiffrés, mais <b>envoyés en clair à Google Gemini</b> quand quelqu'un génère une révision</td></tr>
+          <tr><td>Questions et copies saisies dans l'assistant IA</td><td>Réponses et corrections</td><td>Envoyées à Google Gemini, non conservées par Class Connect</td></tr>
+        </tbody>
+      </table></div>
+
+      <h3>Sécurité et harcèlement</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Donnée</th><th>Pourquoi</th><th>Qui peut la lire</th></tr></thead>
+        <tbody>
+          <tr><td>Messages supprimés (toujours chiffrés), auteur et date de suppression</td><td>Pouvoir prouver un harcèlement</td><td><span class="tag tag-e2e">🔒</span> Personne ne les voit plus dans l'appli ; ils peuvent être joints à un signalement</td></tr>
+          <tr><td>Signalements : message signalé + 10 messages avant/après, pseudos, dates, motif</td><td>Lutter contre le harcèlement</td><td><span class="tag tag-clear">👁️</span> Les modérateurs du canal concerné (délégués ou professeurs) et le prof principal</td></tr>
+          <tr><td>Adresse IP, navigateur (technique)</td><td>Bloquer les robots et les abus (App Check / reCAPTCHA)</td><td>Google</td></tr>
+        </tbody>
+      </table></div>
+
+      <h3>Confort d'utilisation</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Donnée</th><th>Pourquoi</th><th>Qui peut la lire</th></tr></thead>
+        <tbody>
+          <tr><td>Présence en ligne, « … écrit »</td><td>Savoir qui est là</td><td><span class="tag tag-clear">👁️</span> Ta classe — effacé à la déconnexion</td></tr>
+          <tr><td>Jeton de notification de ton appareil <i>(si tu les actives)</i></td><td>Te prévenir même appli fermée</td><td>Le serveur de notifications de l'éditeur. Il ne transmet que le message <b>chiffré</b> : ton téléphone le déchiffre lui-même</td></tr>
+          <tr><td>Statistiques de visite <i>(si tu les acceptes)</i></td><td>Améliorer le site</td><td>Google Analytics, de façon anonymisée</td></tr>
+        </tbody>
+      </table></div>
+      <p>Class Connect ne te demande <b>jamais</b> ton adresse, ton numéro de téléphone, ta date de naissance complète ni aucune donnée de santé ou bancaire.</p>
+
+      <h2 id="base">3. Sur quelle base légale ?</h2>
       <ul>
-        <li><b>Exécution du contrat</b> (les <a href="cgu.html">CGU</a>) : compte, classe, messagerie, votes.</li>
-        <li><b>Intérêt légitime</b> : sécurité du service, lutte contre le spam et <b>protection des élèves contre le
-          harcèlement</b> (conservation 30 jours des messages supprimés et des signalements, loi n° 2022-299 du 2 mars 2022).</li>
-        <li><b>Obligation légale</b> : réponse aux réquisitions judiciaires (loi pour la confiance dans l'économie numérique).</li>
-        <li><b>Consentement</b> : mesure d'audience. Tu peux le retirer à tout moment via le lien « Cookies » en bas de page.</li>
+        <li><b>L'exécution du service</b> que tu as accepté (les <a href="cgu.html">CGU</a>) : ton compte, ta classe, la messagerie, les votes, le conseil de classe.</li>
+        <li><b>L'intérêt légitime</b> : la sécurité, l'anti-spam et la <b>protection des élèves contre le harcèlement</b> (conservation 30 jours, loi n° 2022-299 du 2 mars 2022).</li>
+        <li><b>Ton consentement</b> : les statistiques de visite, les notifications et les informations facultatives de ton profil. Tu peux le retirer à tout moment.</li>
+        <li><b>Une obligation légale</b> : répondre à une réquisition de la justice.</li>
       </ul>
 
-      <h2>4. Destinataires et sous-traitants</h2>
+      <h2 id="ou">4. Où sont-elles stockées, et avec qui ?</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Prestataire</th><th>Rôle</th><th>Lieu</th></tr></thead>
+        <tbody>
+          <tr><td>Google Firebase (Google Ireland Ltd)</td><td>Comptes, base de données, présence, notifications, sécurité</td><td>🇪🇺 Union européenne (Suède et Belgique)</td></tr>
+          <tr><td>GitHub Pages (GitHub Inc.)</td><td>Héberge les pages du site (aucune donnée personnelle)</td><td>🇺🇸 États-Unis</td></tr>
+          <tr><td>Google Gemini (via Firebase AI Logic)</td><td>Assistant de révision, uniquement quand tu l'utilises</td><td>🇺🇸 États-Unis / monde</td></tr>
+          <tr><td>GIPHY</td><td>Recherche de GIFs, uniquement quand tu l'utilises</td><td>🇺🇸 États-Unis</td></tr>
+          <tr><td>jsDelivr, Google Fonts</td><td>Bibliothèques et polices (voient ton adresse IP)</td><td>Réseau mondial</td></tr>
+          <tr><td>Serveur de notifications de l'éditeur</td><td>Envoie les notifications (ne peut rien lire)</td><td>🇫🇷 France</td></tr>
+        </tbody>
+      </table></div>
+      <p>Les transferts hors de l'Union européenne sont encadrés par le <i>EU-US Data Privacy Framework</i> et/ou les clauses contractuelles types de la Commission européenne.</p>
+      <p class="warn">⚠️ <b>Assistant de révision</b> : dans l'offre gratuite de Gemini, Google peut utiliser les contenus envoyés pour améliorer ses services, y compris avec une relecture humaine.
+      La bibliothèque doit donc contenir <b>uniquement des cours</b>, jamais de noms, de photos d'élèves, de notes ou d'informations privées.</p>
+
+      <h2 id="duree">5. Combien de temps ?</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Donnée</th><th>Durée</th></tr></thead>
+        <tbody>
+          <tr><td>Compte et profil</td><td>Jusqu'à ce que tu supprimes ton compte</td></tr>
+          <tr><td>Profil, avatar, vrai nom</td><td>Effacés dès que tu quittes la classe (ou en es exclu)</td></tr>
+          <tr><td>Messages et médias</td><td>Tant que la classe existe</td></tr>
+          <tr><td>Messages supprimés</td><td><b>30 jours</b> (chiffrés), puis effacement définitif</td></tr>
+          <tr><td>Signalements</td><td><b>30 jours</b>, puis effacement automatique</td></tr>
+          <tr><td>Comptes à rebours</td><td>1 semaine après la date</td></tr>
+          <tr><td>Présence en ligne, « … écrit »</td><td>Effacés à la déconnexion</td></tr>
+          <tr><td>Jeton de notification</td><td>Jusqu'à ce que tu coupes les notifications ou te déconnectes</td></tr>
+          <tr><td>Statistiques de visite</td><td>14 mois maximum</td></tr>
+        </tbody>
+      </table></div>
+
+      <h2 id="droits">6. Tes droits et comment les exercer</h2>
+      <p>Le RGPD te donne des droits sur tes données. La plupart s'exercent <b>directement dans l'appli</b>, sans rien demander à personne :</p>
+      <div class="table-wrap"><table class="rights">
+        <thead><tr><th>Ton droit</th><th>Ce que ça veut dire</th><th>Comment faire</th></tr></thead>
+        <tbody>
+          <tr><td><b>Accès</b> et <b>portabilité</b></td><td>Savoir ce qu'on a sur toi et le récupérer</td><td>Onglet <b>Équipage</b> → <b>« 📦 Télécharger mes données »</b></td></tr>
+          <tr><td><b>Rectification</b></td><td>Corriger une information fausse</td><td>Onglet <b>Équipage</b> → <b>« ✏️ Personnaliser mon compte »</b></td></tr>
+          <tr><td><b>Effacement</b></td><td>Faire supprimer tes données</td><td>Onglet <b>Équipage</b> → <b>« Supprimer mon compte »</b> (ou « Quitter la classe » pour effacer ton profil de la classe)</td></tr>
+          <tr><td><b>Retrait du consentement</b></td><td>Changer d'avis</td><td>Lien <b>« Cookies »</b> en bas de page (statistiques), cloche 🔔 (notifications)</td></tr>
+          <tr><td><b>Opposition</b> et <b>limitation</b></td><td>Refuser ou geler un traitement</td><td>Contacter l'éditeur (voir <a href="#qui">§ 1</a>)</td></tr>
+          <tr><td><b>Directives après décès</b></td><td>Décider du sort de tes données</td><td>Contacter l'éditeur (voir <a href="#qui">§ 1</a>)</td></tr>
+        </tbody>
+      </table></div>
+      <p>Si tu penses que tes droits ne sont pas respectés, tu peux porter plainte auprès de la
+      <a href="https://www.cnil.fr/fr/plaintes" rel="noopener">CNIL</a> (Commission nationale de l'informatique et des libertés).</p>
+
+      <h2 id="cookies">7. Cookies et stockage sur ton appareil</h2>
+      <p>Sans ton accord, le site n'utilise que ce qui est <b>indispensable</b> à son fonctionnement :</p>
       <ul>
-        <li><b>Délégués de ta classe</b> : signalements des canaux « Classe » et « Profs &amp; élèves » (jamais les autres conversations, qui restent chiffrées).</li>
-        <li><b>Professeurs de ta classe</b> : signalements des canaux « Profs &amp; élèves » et « Salle des profs ». Ils n'ont pas accès au canal des élèves.</li>
-        <li><b>Professeur(s) principal(aux)</b> désigné(s) par les délégués : <b>tous les signalements</b> de la classe, y compris
-          ceux du canal des élèves (uniquement le message signalé et son contexte, jamais le reste de la conversation).</li>
-        <li><b>Autorités judiciaires</b> : uniquement sur réquisition, dans la limite des données disponibles.</li>
-        <li><b>Google Firebase</b> (Google Ireland Ltd) : authentification, base de données, sécurité, statistiques.</li>
-        <li><b>GitHub Pages</b> (GitHub Inc.) : hébergement des pages du site.</li>
-        <li><b>jsDelivr</b> et <b>Google Fonts</b> : fourniture de bibliothèques et de polices (ils voient ton adresse IP).</li>
-        <li><b>GIPHY</b> : uniquement si tu utilises la recherche de GIFs.</li>
-        <li><b>Google Gemini</b> (via Firebase AI Logic, offre gratuite de la Gemini Developer API) : uniquement quand tu utilises
-          l'assistant de révision. Dans l'offre gratuite, <b>Google peut utiliser les contenus envoyés pour améliorer ses services</b>
-          (y compris via une relecture humaine). C'est pourquoi la bibliothèque ne doit contenir <b>que des cours</b>, jamais de
-          données personnelles (noms, photos d'élèves, notes, informations privées).</li>
+        <li>ta session de connexion (Firebase) ;</li>
+        <li>tes clés de chiffrement (IndexedDB) — elles ne quittent jamais ton appareil en clair ;</li>
+        <li>une copie hors ligne de ta classe, toujours chiffrée, effacée à la déconnexion ;</li>
+        <li>tes préférences : thème, performances, notifications, brouillons, choix des cookies.</li>
       </ul>
-      <p>Certains de ces prestataires peuvent traiter des données aux États-Unis. Ces transferts sont encadrés par le
-      <i>EU-US Data Privacy Framework</i> et/ou des clauses contractuelles types de la Commission européenne.
-      Les données ne sont jamais vendues ni utilisées à des fins publicitaires.</p>
+      <p>Les cookies de statistiques (<code>_ga</code>) ne sont déposés <b>qu'après ton accord</b>, et supprimés si tu le retires.</p>
 
-      <h2>5. Durées de conservation</h2>
-      <ul>
-        <li>Compte : jusqu'à sa suppression (bouton « Supprimer mon compte » dans l'onglet Équipage).</li>
-        <li>Messages et médias chiffrés : tant que la classe existe ; après suppression par l'auteur ou un délégué,
-          conservation chiffrée <b>30 jours</b> puis effacement définitif.</li>
-        <li>Signalements et preuves associées : <b>30 jours</b>, puis effacement automatique.</li>
-        <li>Présence en ligne : effacée dès la déconnexion.</li>
-        <li>Statistiques : 14 mois maximum.</li>
-      </ul>
+      <h2 id="securite">8. Sécurité</h2>
+      <p>HTTPS obligatoire, chiffrement de bout en bout (ECDH P-256 + AES-256-GCM), règles d'accès vérifiées par le serveur et testées automatiquement,
+      protection anti-robots (App Check), limitation anti-spam, empreintes de sécurité pour vérifier les clés de tes camarades.</p>
+      <p>Conséquence du chiffrement : <b>si tu oublies ton mot de passe</b>, de nouvelles clés sont créées et un membre de ta classe doit te retransmettre l'accès aux messages.
+      En cas de fuite de données, l'éditeur prévient la CNIL et les personnes concernées dans les délais prévus par la loi.</p>
 
-      <h2>6. Cookies et stockage local</h2>
-      <p>Le site utilise le stockage de ton navigateur <b>strictement nécessaire</b> au fonctionnement : session de connexion
-      Firebase, clé privée de chiffrement (IndexedDB, jamais transmise), et ton choix concernant les cookies. Ces éléments
-      ne nécessitent pas de consentement. Les cookies de mesure d'audience (<code>_ga</code>) ne sont déposés
-      <b>qu'après ton accord</b>, et supprimés si tu le retires.</p>
-
-      <h2>7. Sécurité</h2>
-      <p>Connexion HTTPS obligatoire, chiffrement de bout en bout (ECDH P-256 + AES-256-GCM), règles d'accès vérifiées
-      côté serveur, limitation anti-spam, et empreintes de sécurité pour vérifier les clés de tes camarades.
-      Conséquence : <b>si tu perds ton mot de passe, tes clés sont régénérées</b> et un membre de ta classe doit te
-      retransmettre l'accès aux messages.</p>
-
-      <h2>8. Mineurs</h2>
-      <p>Class Connect s'adresse à des élèves. Si tu as moins de 15 ans, parles-en à un parent ou responsable légal avant
-      de créer un compte : conformément à la loi française, son accord est nécessaire pour le traitement fondé sur le
-      consentement (statistiques).</p>
-
-      <h2>9. Tes droits</h2>
-      <p>Tu disposes d'un droit d'accès, de rectification, d'effacement, de limitation, d'opposition et de portabilité de
-      tes données, ainsi que du droit de retirer ton consentement et de définir des directives sur leur sort après ton décès.
-      Tu peux supprimer ton compte toi-même, ou contacter l'éditeur (voir §1). Si tu estimes que tes droits ne sont pas
-      respectés, tu peux adresser une réclamation à la <a href="https://www.cnil.fr/fr/plaintes" rel="noopener">CNIL</a>.</p>
+      <h2 id="mineurs">9. Si tu as moins de 15 ans</h2>
+      <p>Class Connect s'adresse à des élèves. En France, si tu as <b>moins de 15 ans</b>, l'accord d'un parent ou responsable légal est nécessaire pour ce qui repose sur ton consentement
+      (statistiques, notifications, informations facultatives du profil). Parles-en avec lui avant de les activer.
+      Tes parents peuvent aussi exercer tes droits pour toi (voir <a href="#droits">§ 6</a>).</p>
     </main>
     <footer class="doc-footer">
       <a href="./">Accueil</a><a href="cgu.html">CGU</a><a href="#" data-action="cookies">Gérer les cookies</a>

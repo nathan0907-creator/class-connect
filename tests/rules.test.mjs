@@ -153,8 +153,17 @@ describe('NIVEAU 3 — attaques poussées', () => {
       await assertFails(updateDoc(doc(as('eve'), 'users', 'alice'), { role: 'delegate' }));
       await assertFails(updateDoc(c(as('eve'), C1), { name: 'Piratée' }));
     });
-    test('un délégué ne peut pas nommer un élève "professeur"', async () => {
-      await assertFails(updateDoc(doc(as('dele'), 'users', 'alice'), { role: 'teacher' }));
+    test('un délégué peut nommer un élève professeur, sans autre privilège au passage', async () => {
+      // pas d'escalade : on ne devient pas "prof principal" (tous les signalements) ni "de confiance" dans la foulée
+      await assertFails(updateDoc(doc(as('dele'), 'users', 'alice'), { role: 'teacher', principal: true, trusted: false }));
+      await assertFails(updateDoc(doc(as('eve'), 'users', 'alice'), { role: 'teacher', principal: false, trusted: false }));
+      await assertFails(updateDoc(doc(as('depu'), 'users', 'alice'), { role: 'teacher', principal: false, trusted: false }));
+      await assertSucceeds(updateDoc(doc(as('dele'), 'users', 'alice'), { role: 'teacher', principal: false, trusted: false }));
+      // …et peut annuler une erreur
+      await assertSucceeds(updateDoc(doc(as('dele'), 'users', 'alice'), { role: 'student', principal: false, trusted: false }));
+    });
+    test('un délégué ne peut pas se nommer lui-même professeur', async () => {
+      await assertFails(updateDoc(doc(as('dele'), 'users', 'dele'), { role: 'teacher', principal: false, trusted: false }));
     });
     test('changer son pseudo de connexion ou sa date de création est impossible', async () => {
       await assertFails(updateDoc(doc(as('alice'), 'users', 'alice'), { username: 'dele' }));

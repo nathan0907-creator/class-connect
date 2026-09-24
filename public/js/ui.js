@@ -48,13 +48,17 @@ function append(el, children) {
 export const icon = (name) => h(`i.ico.ico-${name}`);
 
 const PHOTO_RE = /^data:image\/(webp|jpeg|png);base64,[A-Za-z0-9+/=]+$/;
-/** Round avatar: the member's (decrypted) profile photo, or their initials. `photo` overrides it (profile editor preview). */
+/** Animated avatars: GIPHY media links only, with a strict character set (no quote or parenthesis can slip into CSS). */
+export const GIF_RE = /^https:\/\/(media\d?|i)\.giphy\.com\/media\/[A-Za-z0-9/_.-]+\.(gif|webp)(\?[A-Za-z0-9=&._-]*)?$/;
+export const isSafeAvatar = (src) => !!src && (PHOTO_RE.test(src) || GIF_RE.test(src));
+/** Round avatar: the member's (decrypted) GIF or photo, or their initials. `photo` overrides it (profile editor preview). */
 export function avatar(profile, size = 36, photo = undefined) {
   const name = profile?.display_name || '?';
   const initials = name.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
-  const src = photo !== undefined ? photo : state.profiles?.get(profile?.id)?.photo;
+  const p = state.profiles?.get(profile?.id);
+  const src = photo !== undefined ? photo : p?.gif || p?.photo;
   const style = { '--c': profile?.color || '#7c5cff', width: size + 'px', height: size + 'px', fontSize: size * 0.38 + 'px' };
-  if (src && PHOTO_RE.test(src)) {
+  if (isSafeAvatar(src)) {
     return h('div.avatar.has-photo', { style: { ...style, backgroundImage: `url("${src}")` }, role: 'img', 'aria-label': name });
   }
   return h('div.avatar', { style }, initials);

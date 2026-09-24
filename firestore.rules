@@ -139,6 +139,9 @@ service cloud.firestore {
             && a.role == 'student' && notTrusted(a) && notPrincipal(a))
         // student roles: élève / suppléant / délégué
         || (onlyChanged(['role']) && b.status == 'active' && b.role != 'teacher' && a.role in ['student', 'deputy', 'delegate'])
+        // a member becomes a teacher (or a teacher goes back to student): no "trusted" / "prof principal" carried over
+        || (onlyChanged(['role', 'trusted', 'principal']) && b.status == 'active' && notTrusted(a) && notPrincipal(a)
+            && ((b.role != 'teacher' && a.role == 'teacher') || (b.role == 'teacher' && a.role == 'student')))
         // head teacher ("prof principal"): receives every report
         || (onlyChanged(['principal']) && b.status == 'active' && b.role == 'teacher' && a.principal is bool)
         // mark a student as trusted (may publish courses for the AI)

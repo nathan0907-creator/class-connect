@@ -12,6 +12,7 @@ import { $, $$, h, icon, avatar, modal, toast, toastError, confirmDialog, enable
 export function initMembers() {
   $$('[data-action="leave"]').forEach((b) => b.addEventListener('click', leave));
   $$('[data-action="delete-account"]').forEach((b) => b.addEventListener('click', deleteAccount));
+  $$('[data-action="export-data"]').forEach((b) => b.addEventListener('click', exportMyData));
   on('members', () => { renderMembers(); renderAdmin(); });
   on('profiles', () => { renderMembers(); renderAdmin(); });
   $$('[data-action="edit-profile"]').forEach((b) => b.addEventListener('click', openProfileEditor));
@@ -44,6 +45,40 @@ export async function leave() {
     await batch.commit();
     emit('reroute');
   } catch (err) { toastError(err); }
+}
+
+/**
+ * RGPD rights of access and portability: everything the app holds about me, decrypted on this device,
+ * in a readable JSON file. Messages stay in the class (they belong to the conversation), so they are not included.
+ */
+function exportMyData() {
+  const me = state.me;
+  const p = state.profiles.get(me.id) || {};
+  const email = auth.currentUser?.email || '';
+  const data = {
+    info: 'Données personnelles détenues par Class Connect (export RGPD, articles 15 et 20).',
+    exporte_le: new Date().toISOString(),
+    compte: {
+      pseudo: me.username, nom_affiche: me.display_name, couleur: me.color,
+      email: email.endsWith('@users.classconnect.app') ? '(aucun e-mail lié)' : email,
+      cree_le: me.created_at ? new Date(me.created_at).toISOString() : null,
+      empreinte_de_securite_cle_publique: me.public_key,
+    },
+    classe: state.cls ? { nom: state.cls.name, role: me.role, statut: me.status, confiance: !!me.trusted, prof_principal: !!me.principal } : null,
+    profil: {
+      bio: p.bio || '', statut: p.status || '', anniversaire_jour_mois: p.birthday || '',
+      avatar: p.gif ? { type: 'GIF', lien: p.gif } : p.photo ? { type: 'image', image: p.photo } : 'initiales',
+      vrai_nom: realName(me.id) || '',
+    },
+    note: 'Tes messages, résultats du conseil de classe et messages privés restent consultables dans l\'appli. Pour tout effacer : Équipage → Supprimer mon compte.',
+  };
+  const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+  const a = h('a', { href: url, download: `class-connect-mes-donnees-${me.username}.json` });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  toast('Tes données ont été téléchargées 📦', 'success');
 }
 
 /** RGPD right to erasure: removes the profile, keys, pseudo and the Firebase account. */
@@ -233,8 +268,11 @@ function renderAdmin() {
       avatar(m, 34),
       h('div.pi-info', h('b', m.display_name), roleBadge(m)),
       m.role === 'teacher'
-        ? h(`button.btn.btn-sm.${m.principal ? 'btn-ghost' : 'btn-primary'}`, { onclick: () => togglePrincipal(m) },
-          h('span', m.principal ? 'Retirer prof principal' : 'Nommer prof principal'))
+        ? [
+            h(`button.btn.btn-sm.${m.principal ? 'btn-ghost' : 'btn-primary'}`, { onclick: () => togglePrincipal(m) },
+              h('span', m.principal ? 'Retirer prof principal' : 'Nommer prof principal')),
+            h('button.btn.btn-sm.btn-ghost', { onclick: () => backToStudent(m), title: 'Si ce compte a été nommé professeur par erreur' }, 'Repasser élève'),
+          ]
         : [
             roleSelect(m, count('delegate')),
             m.role === 'student'
@@ -305,6 +343,7 @@ const ROLE_INFO = {
   student: ['Élève', 'redeviendra simple élève.'],
   deputy: ['Suppléant', 'pourra modérer les canaux élèves (épingler, supprimer) et publier des cours pour l\'IA, pour remplacer un délégué absent.'],
   delegate: ['Délégué', 'aura tous les pouvoirs : membres, rôles, emploi du temps, votes et signalements.'],
+  teacher: ['Professeur', 'deviendra professeur : il accédera à la salle des profs, au canal Profs & élèves et à TOUS les résultats du conseil de classe (et au vrai nom de chacun). Il ne verra plus le canal des élèves. À réserver aux vrais professeurs !'],
 };
 
 /** Student role picker: élève / suppléant / délégué (2 delegates max, like a French class council). */
@@ -317,14 +356,24 @@ function roleSelect(m, delegates) {
   select.addEventListener('change', async () => {
     const role = select.value;
     const [label, effect] = ROLE_INFO[role];
-    const ok = await confirmDialog(`${m.display_name} : ${label} ?`, `${m.display_name} ${effect}`, { danger: role === 'student', label: 'Confirmer' });
+    const ok = await confirmDialog(`${m.display_name} : ${label} ?`, `${m.display_name} ${effect}`, { danger: role === 'student' || role === 'teacher', label: 'Confirmer' });
     if (!ok) { select.value = m.role; return; }
     try {
-      await updateDoc(userRef(m.id), { role });
+      // Becoming a teacher drops the student-only "trusted" flag (required by the security rules).
+      await updateDoc(userRef(m.id), role === 'teacher' ? { role, trusted: false, principal: false } : { role });
       toast(`${m.display_name} est maintenant ${label.toLowerCase()}`, 'success');
     } catch (err) { select.value = m.role; toastError(err); }
   });
   return select;
+}
+
+/** Undo a mistaken "Professeur": back to a plain student account. */
+async function backToStudent(m) {
+  const ok = await confirmDialog(`Repasser ${m.display_name} en élève ?`,
+    `${m.display_name} perdra l'accès à la salle des profs et aux résultats des autres élèves, et retrouvera le canal de la classe.`, { label: 'Repasser élève' });
+  if (!ok) return;
+  try { await updateDoc(userRef(m.id), { role: 'student', principal: false, trusted: false }); toast(`${m.display_name} est de nouveau élève`, 'success'); }
+  catch (err) { toastError(err); }
 }
 
 async function togglePrincipal(m) {

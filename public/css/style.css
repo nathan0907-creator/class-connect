@@ -1700,3 +1700,61 @@ body:not(.can-dm) .dm-nav, body:not(.can-dm) .dm-shortcut { display: none !impor
 }
 .fun-avatar:hover, .fun-avatar:focus-visible { transform: scale(1.12) rotate(-6deg); }
 .fun-avatar.active { border-color: #fff; box-shadow: 0 0 0 3px var(--accent-2), inset -4px -4px 10px rgba(0, 0, 0, .3); }
+
+/* ---------------------------------------------------------------- animated (GIF) avatars */
+.gif-avatar-box { margin: 2px 0 6px; border-radius: 14px; border: 1px solid var(--border); background: rgba(255, 255, 255, .03); padding: 8px 10px; }
+.gif-avatar-box summary { cursor: pointer; font-weight: 600; font-size: 14px; list-style: none; }
+.gif-avatar-box summary::-webkit-details-marker { display: none; }
+.gif-avatar-box summary::after { content: ' ▾'; color: var(--muted); }
+.gif-avatar-box[open] summary::after { content: ' ▴'; }
+.gif-avatar-box input[type=search] { width: 100%; margin: 10px 0 8px; }
+.gif-avatars { display: grid; grid-template-columns: repeat(auto-fill, minmax(62px, 1fr)); gap: 8px; max-height: 210px; overflow-y: auto; padding: 2px; }
+.gif-avatar { aspect-ratio: 1; padding: 0; border-radius: 50%; overflow: hidden; border: 2px solid transparent; background: rgba(0, 0, 0, .3); cursor: pointer; transition: transform .2s var(--spring); }
+.gif-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.gif-avatar:hover { transform: scale(1.08); }
+.gif-avatar.active { border-color: #fff; box-shadow: 0 0 0 3px var(--accent-2); }
+.avatar.has-photo { background-size: cover; background-position: center; }
+
+/* ---------------------------------------------------------------- economy mode (phones / modest devices)
+   Blur over an animated backdrop is recomputed at every frame: it is the main cause of lag on phones.
+   Here the glass panels become near-opaque, and the heaviest effects are simplified. */
+body.eco * { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+body.eco .card { background: linear-gradient(160deg, rgba(26, 19, 70, .96), rgba(10, 8, 32, .95)); }
+body.eco .sidebar { background: linear-gradient(180deg, rgba(20, 14, 54, .97), rgba(8, 6, 26, .96)); }
+body.eco .panel { background: linear-gradient(165deg, rgba(18, 13, 50, .93), rgba(6, 5, 22, .92)); transition: opacity .25s var(--ease), visibility 0s .25s; transform: none; }
+body.eco .panel.active { transition: opacity .25s var(--ease), visibility 0s; }
+body.eco .modal-backdrop { background: rgba(3, 2, 10, .82); }
+body.eco .install-banner, body.eco .jump-bottom, body.eco .reaction-pop, body.eco .msg-sheet { background: rgb(18, 13, 46); }
+body.eco .chat-scroll { perspective: none; }
+body.eco .msg { animation: msgInLite .25s ease-out both; }
+@keyframes msgInLite { from { opacity: 0; transform: translateY(8px); } }
+body.eco .tilt { transform: none !important; }
+body.eco .bubble, body.eco .msg.mine .bubble { box-shadow: none; }
+body.eco .logo-ring, body.eco .bday-cake, body.eco .install-icon img { animation: none; }
+.perf-title { margin: 20px 0 4px; font-size: 15px; }
+.perf-seg { margin-top: 8px; }
+
+/* ---------------------------------------------------------------- privacy page */
+.tldr { margin: 18px 0 22px; padding: 16px 18px; border-radius: 16px; background: linear-gradient(135deg, rgba(61, 255, 168, .08), rgba(0, 212, 255, .06)); border: 1px solid rgba(61, 255, 168, .35); }
+.tldr h2 { margin: 0 0 8px; font-size: 18px; }
+.tldr ul { margin: 0; padding-left: 4px; list-style: none; display: grid; gap: 8px; }
+.tldr li { line-height: 1.5; }
+.toc { display: flex; flex-direction: column; gap: 4px; margin: 0 0 24px; padding: 14px 16px; border-radius: 14px; background: rgba(255, 255, 255, .03); border: 1px solid var(--border); }
+.toc a { color: var(--accent-2); text-decoration: none; font-size: 14px; }
+.toc a:hover { text-decoration: underline; }
+.doc-card h2[id] { scroll-margin-top: 16px; }
+.doc-card h3 { margin: 18px 0 6px; font-size: 15px; color: var(--accent-2); }
+.legend { font-size: 13px; color: var(--muted); }
+.tag { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.tag-e2e { background: rgba(61, 255, 168, .14); color: #3dffa8; border: 1px solid rgba(61, 255, 168, .4); }
+.tag-clear { background: rgba(255, 207, 107, .12); color: var(--gold); border: 1px solid rgba(255, 207, 107, .35); }
+.warn { padding: 12px 14px; border-radius: 12px; background: rgba(255, 107, 107, .08); border: 1px solid rgba(255, 107, 107, .35); }
+.rights td:last-child { color: var(--text); }
+@media (max-width: 600px) {
+  .rights thead { display: none; }
+  .rights, .rights tbody, .rights tr, .rights td { display: block; width: 100%; }
+  .rights tr { padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .rights td { padding: 2px 0; border: 0; }
+  .rights td:first-child { font-size: 15px; }
+  .rights td:nth-child(2) { color: var(--muted); font-size: 13px; }
+}

@@ -5,7 +5,8 @@ import { sub, plain, userRef } from './fb.js';
 import { state, on, emit, isTeacher, isDelegate } from './state.js';
 import { encryptJSON, decryptJSON } from './crypto.js';
 import { currentKey } from './keyring.js';
-import { h, icon, avatar, modal, toast, toastError, busy } from './ui.js';
+import { h, icon, avatar, modal, toast, toastError, busy, GIF_RE } from './ui.js';
+import { GIPHY_API_KEY } from './config.js';
 
 const BIO_MAX = 160;
 const NAME_MAX = 60;
@@ -79,6 +80,7 @@ async function decryptAll() {
       profiles.set(uid, {
         bio: String(p.bio || '').slice(0, BIO_MAX),
         photo: PHOTO_RE.test(p.photo || '') ? p.photo : '',
+        gif: GIF_RE.test(p.gif || '') ? p.gif : '',
         status: String(p.status || '').slice(0, STATUS_MAX),
         birthday: BDAY_RE.test(p.birthday || '') ? p.birthday : '',
       });
@@ -163,29 +165,60 @@ export function openProfileEditor() {
   const me = state.me;
   const current = state.profiles.get(me.id) || {};
   let photo = current.photo || '';
+  let gif = current.gif || '';   // an animated GIF (GIPHY link) wins over the photo
 
   const preview = h('div.profile-photo');
   const renderPreview = () => {
-    preview.replaceChildren(avatar({ ...me, id: me.id }, 96, photo));
-    removeBtn.hidden = !photo;
+    preview.replaceChildren(avatar({ ...me, id: me.id }, 96, gif || photo));
+    removeBtn.hidden = !photo && !gif;
   };
   const fileInput = h('input', { type: 'file', accept: 'image/*', hidden: true, onchange: async () => {
     const f = fileInput.files[0];
     fileInput.value = '';
     if (!f) return;
-    try { photo = await photoFrom(f); renderPreview(); } catch (err) { toastError(err); }
+    try { photo = await photoFrom(f); gif = ''; renderPreview(); } catch (err) { toastError(err); }
   } });
-  const removeBtn = h('button.btn.btn-ghost.btn-sm', { type: 'button', onclick: () => { photo = ''; renderPreview(); } }, 'Retirer');
+  const removeBtn = h('button.btn.btn-ghost.btn-sm', { type: 'button', onclick: () => { photo = ''; gif = ''; renderPreview(); } }, 'Retirer');
 
   const funGrid = h('div.fun-avatars', { role: 'listbox', 'aria-label': 'Avatars rigolos' }, FUN_AVATARS.map((a) => h('button.fun-avatar', {
     type: 'button', role: 'option', title: 'Choisir cet avatar', 'aria-label': `Avatar ${a[0]}`,
     style: { background: `radial-gradient(circle at 35% 30%, ${a[1]}, ${a[2]})` },
     onclick: (e) => {
       photo = funAvatar(a);
+      gif = '';
       renderPreview();
       funGrid.querySelectorAll('.fun-avatar').forEach((b) => b.classList.toggle('active', b === e.currentTarget));
     },
   }, a[0])));
+
+  // Animated avatar: GIPHY search (same service as the chat GIFs)
+  const gifGrid = h('div.gif-avatars', { role: 'listbox', 'aria-label': 'GIF animés' });
+  const gifSearch = h('input', { type: 'search', placeholder: 'Rechercher un GIF (chat, danse, espace…)', 'aria-label': 'Rechercher un GIF' });
+  let gifTimer;
+  async function searchGifs(term) {
+    if (!GIPHY_API_KEY) { gifGrid.replaceChildren(h('p.muted.small', 'Recherche GIF indisponible')); return; }
+    gifGrid.replaceChildren(h('div.spinner'));
+    try {
+      const endpoint = term.trim() ? 'search' : 'trending';
+      const params = new URLSearchParams({ api_key: GIPHY_API_KEY, q: term.trim(), limit: '18', rating: 'pg', lang: 'fr' });
+      const json = await (await fetch(`https://api.giphy.com/v1/gifs/${endpoint}?${params}`)).json();
+      const items = (json.data || []).map((g) => g.images?.fixed_width_small?.url || g.images?.fixed_height_small?.url)
+        .map((u) => (u || '').replace(/^http:/, 'https:')).filter((u) => GIF_RE.test(u));
+      gifGrid.replaceChildren(...items.map((u) => h(`button.gif-avatar${u === gif ? '.active' : ''}`, {
+        type: 'button', role: 'option', 'aria-label': 'Choisir ce GIF',
+        onclick: (e) => {
+          gif = u;
+          renderPreview();
+          gifGrid.querySelectorAll('.gif-avatar').forEach((b) => b.classList.toggle('active', b === e.currentTarget));
+          funGrid.querySelectorAll('.fun-avatar').forEach((b) => b.classList.remove('active'));
+        },
+      }, h('img', { src: u, alt: '', loading: 'lazy' }))));
+      if (!items.length) gifGrid.append(h('p.muted.small', 'Aucun GIF trouvé'));
+    } catch { gifGrid.replaceChildren(h('p.muted.small', 'Recherche GIF indisponible')); }
+  }
+  gifSearch.addEventListener('input', () => { clearTimeout(gifTimer); gifTimer = setTimeout(() => searchGifs(gifSearch.value), 350); });
+  const gifBox = h('details.gif-avatar-box', { ontoggle: (e) => { if (e.currentTarget.open && !gifGrid.childElementCount) searchGifs(''); } },
+    h('summary', '🎞️ Ou un avatar animé (GIF)'), gifSearch, gifGrid);
 
   const displayName = h('input', { value: me.display_name, maxLength: 40, required: true, 'aria-label': 'Pseudo affiché' });
   const bio = h('textarea', { rows: 3, maxLength: BIO_MAX, placeholder: 'Ex. Fan d\'astronomie, capitaine de l\'équipe de hand 🤾', 'aria-label': 'Bio' });
@@ -202,6 +235,7 @@ export function openProfileEditor() {
       h('div.btn-row', h('button.btn.btn-primary.btn-sm', { type: 'button', onclick: () => fileInput.click() }, icon('image'), h('span', 'Choisir une photo')), removeBtn),
       fileInput),
     h('div.field', h('span', 'Ou choisis un avatar rigolo'), funGrid),
+    gifBox,
     h('label.field', h('span', 'Pseudo affiché'), displayName),
     h('label.field', h('span', 'Statut / humeur'), status), presets,
     h('label.field', h('span', 'Bio'), bio), bioCount,
@@ -221,7 +255,7 @@ export function openProfileEditor() {
         const jobs = [];
         if (name !== me.display_name) jobs.push(updateDoc(userRef(me.id), { display_name: name }));
         const birthday = bday.value();
-        jobs.push(encryptedDoc('profile', me.id, { v: 1, bio: bio.value.trim().slice(0, BIO_MAX), photo, status: status.value.trim().slice(0, STATUS_MAX), birthday })
+        jobs.push(encryptedDoc('profile', me.id, { v: 1, bio: bio.value.trim().slice(0, BIO_MAX), photo: gif ? '' : photo, gif, status: status.value.trim().slice(0, STATUS_MAX), birthday })
           .then((d) => setDoc(sub(state.cls.id, 'profiles', me.id), d)));
         if (real.value.trim() !== realName(me.id)) jobs.push(saveRealName(me.id, real.value.trim()));
         await Promise.all(jobs);
@@ -303,7 +337,7 @@ export function rememberBirthday(md) {
 async function saveMyBirthday(birthday) {
   const current = state.profiles.get(state.me.id) || {};
   const d = await encryptedDoc('profile', state.me.id, {
-    v: 1, bio: current.bio || '', photo: current.photo || '', status: current.status || '', birthday,
+    v: 1, bio: current.bio || '', photo: current.photo || '', gif: current.gif || '', status: current.status || '', birthday,
   });
   await setDoc(sub(state.cls.id, 'profiles', state.me.id), d);
 }

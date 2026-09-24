@@ -99,3 +99,10 @@ test('le site en ligne répond en HTTPS et ne publie pas les fichiers sensibles'
   const http = await fetch(base.replace('https:', 'http:'), { redirect: 'manual' }).catch(() => null);
   if (http) assert.ok([301, 302, 307, 308].includes(http.status), `HTTP devrait rediriger vers HTTPS (${http.status})`);
 });
+
+test('aucun sélecteur « $(…) » utilisé comme une liste (bug qui bloquait le démarrage)', () => {
+  for (const f of publicFiles.filter((x) => x.endsWith('.js'))) {
+    const bad = read(f).match(/[^$]\$\([^)]*\)\.(forEach|map|filter)\(/);
+    assert.ok(!bad, `${rel(f)} : ${bad?.[0]} — utiliser $$(…) pour une liste`);
+  }
+});

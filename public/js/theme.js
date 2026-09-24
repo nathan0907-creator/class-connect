@@ -2,6 +2,7 @@
 // The choice is kept on this device only.
 import { state } from './state.js';
 import { $$, h, modal, toast } from './ui.js';
+import { QUALITY, savedQuality, saveQuality, chosenQuality, autoQuality, applyQualityClass } from './quality.js';
 
 const KEY = 'cc-theme';
 export const THEMES = {
@@ -52,6 +53,8 @@ export function applyTheme(key = currentTheme()) {
 
 export function initTheme() {
   applyTheme();
+  // The 3D scene lowered its quality by itself because the device was struggling.
+  document.addEventListener('cc-quality-auto', () => toast('Animations allégées pour garder l\'appli fluide ⚡ (réglable dans « 🎨 Thème »)'));
   $$('[data-action="theme"]').forEach((b) => b.addEventListener('click', openThemePicker));
 }
 
@@ -68,5 +71,27 @@ function openThemePicker() {
   },
   h('span.theme-planet', { style: { '--p1': t.planet[1], '--p2': t.planet[2], '--p3': t.planet[3], '--r': t.rings[0] } }),
   h('b', t.label))));
-  modal({ title: '🎨 Thème de l\'espace', body: h('div', h('p.muted', 'Change la planète, les nébuleuses et les couleurs de l\'appli. Le choix est gardé sur cet appareil.'), grid) });
+  // Performance: automatic by default (economy on phones), can be forced.
+  const current = savedQuality();
+  const options = [['auto', `Auto (${QUALITY[autoQuality()].label.toLowerCase()})`], ...Object.entries(QUALITY).map(([k, q]) => [k, q.label])];
+  const perf = h('div.seg.seg-sm.seg-wrap.perf-seg', { role: 'radiogroup', 'aria-label': 'Performances' },
+    options.map(([k, label]) => h(`button${k === current ? '.active' : ''}`, {
+      type: 'button', role: 'radio', 'aria-checked': String(k === current), title: QUALITY[k]?.hint || 'Choisi selon ton appareil',
+      onclick: (e) => {
+        saveQuality(k);
+        const q = chosenQuality();
+        state.space?.setQuality?.(q);
+        applyQualityClass(q);
+        perf.querySelectorAll('button').forEach((b) => { b.classList.toggle('active', b === e.currentTarget); b.setAttribute('aria-checked', String(b === e.currentTarget)); });
+        toast(`Performances : ${QUALITY[q].label} ⚡`);
+      },
+    }, label)));
+  modal({
+    title: '🎨 Thème de l\'espace',
+    body: h('div',
+      h('p.muted', 'Change la planète, les nébuleuses et les couleurs de l\'appli. Le choix est gardé sur cet appareil.'), grid,
+      h('h4.perf-title', '⚡ Performances'),
+      h('p.muted.small', 'Si l\'appli rame sur ton téléphone, choisis « Économie » : fond plus simple, moins d\'effets, batterie préservée.'),
+      perf),
+  });
 }

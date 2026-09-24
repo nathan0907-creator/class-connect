@@ -21,6 +21,7 @@ import { initGuide } from './guide.js';
 import { initProfiles, startProfiles, stopProfiles } from './profiles.js';
 import { initEvents, startEvents, stopEvents } from './events.js';
 import { initTheme, applyTheme } from './theme.js';
+import { applyQualityClass } from './quality.js';
 import { initDM, startDM, stopDM, bindDMComposer } from './dm.js';
 import { $, $$, h, toast, toastError, enableTilt, busy, avatar } from './ui.js';
 
@@ -344,6 +345,7 @@ function watchNetwork() {
 // ------------------------------------------------------------ boot
 async function boot() {
   initConsent({ onGranted: startAnalytics });
+  applyQualityClass();
   initInstall();
   initGuide();
   initTheme();

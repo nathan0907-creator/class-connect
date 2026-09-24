@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { parseHTML } from 'linkedom';
 
 const { window, document } = parseHTML('<!doctype html><html><head></head><body><div class="toasts"></div><div class="modal-root"></div></body></html>');
-Object.assign(globalThis, { window, document, Node: window.Node, HTMLElement: window.HTMLElement, matchMedia: () => ({ matches: true }) });
+Object.assign(globalThis, { window, document, Node: window.Node, HTMLElement: window.HTMLElement, matchMedia: () => ({ matches: true }), location: new URL('http://localhost:5173/') });
 window.matchMedia = globalThis.matchMedia;
 
 const c = await import('../public/js/crypto.js');
@@ -61,6 +61,23 @@ describe('injection de code (XSS)', () => {
     assert.ok(!String(el.getAttribute('style')).includes('evil'));
     const ok = avatar({ id: 'u2', display_name: 'Léa' }, 40, 'data:image/png;base64,iVBORw0KGgo=');
     assert.ok(ok.classList.contains('has-photo'));
+  });
+  test('un avatar GIF : seuls les vrais liens GIPHY passent, jamais un lien piégé', () => {
+    const bad = [
+      'https://evil.example/cat.gif',
+      'https://media.giphy.com.evil.example/media/x/giphy.gif',
+      'https://media.giphy.com/media/abc/giphy.gif"); background:url("https://evil.example',
+      'https://media.giphy.com/media/abc/giphy.gif)',
+      'javascript:alert(1)',
+      'http://media.giphy.com/media/abc/giphy.gif',
+    ];
+    for (const gif of bad) {
+      state.profiles = new Map([['u3', { gif }]]);
+      const el = avatar({ id: 'u3', display_name: 'Pirate' }, 40);
+      assert.ok(!el.classList.contains('has-photo'), gif);
+    }
+    state.profiles = new Map([['u4', { gif: 'https://media2.giphy.com/media/v1.Y2lk/3o7TKSjRrfIPjeiVyM/100w.gif?cid=abc&rid=100w.gif' }]]);
+    assert.ok(avatar({ id: 'u4', display_name: 'Tom' }, 40).classList.contains('has-photo'));
   });
 });
 

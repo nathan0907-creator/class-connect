@@ -20,6 +20,7 @@ const MUTANTS = [
   ['jetons de notification lisibles', "match /push_tokens/{id} {\n      allow read: if false;", "match /push_tokens/{id} {\n      allow read: if signedIn();"],
   ['réactions des autres modifiables', ".affectedKeys().hasOnly([uid()])", '.affectedKeys().size() >= 0'],
   ['adhésion sans validation', "&& a.status == 'pending' && a.invite_code is string", "&& a.status in ['pending', 'active'] && a.invite_code is string"],
+  ['nommer prof en donnant aussi « prof principal »', "&& notTrusted(a) && notPrincipal(a)\n            && ((b.role != 'teacher'", "&& notTrusted(a)\n            && ((b.role != 'teacher'"],
   ['clé privée lisible par tous', "match /private/{userId} {\n      allow read: if signedIn() && userId == uid();", "match /private/{userId} {\n      allow read: if signedIn();"],
 ];
 
