@@ -124,6 +124,18 @@ describe('messages piégés par un membre de la classe (contenu chiffré mais ma
     assert.equal(polluted.admin, undefined);
     assert.equal({}.admin, undefined);
   });
+  test('sondages, stickers et messages transférés truqués sont neutralisés', () => {
+    assert.deepEqual(cleanPayload({ t: 'poll', poll: { q: 'Sortie ?', options: ['Parc', 'Bowling', 42, '', 'x'.repeat(500)], wyr: 'oui' } }).poll,
+      { q: 'Sortie ?', options: ['Parc', 'Bowling'], wyr: false });
+    assert.equal(cleanPayload({ t: 'poll', poll: { q: 'Seul', options: ['A'] } }).t, 'text');
+    assert.equal(cleanPayload({ t: 'poll', poll: { q: 'Trop', options: Array(20).fill('o') } }).poll.options.length, 6);
+    for (const img of ['data:image/svg+xml;base64,PHN2Zz4=', 'javascript:alert(1)', 'https://evil.example/s.png', 'data:image/png;base64,AAA"onerror="x']) {
+      assert.equal(cleanPayload({ t: 'sticker', img }).t, 'text', img);
+    }
+    assert.equal(cleanPayload({ t: 'sticker', img: 'data:image/webp;base64,UklGRg==' }).img, 'data:image/webp;base64,UklGRg==');
+    assert.deepEqual(cleanPayload({ t: 'text', text: 'x', fwd: { user_id: 'bob', admin: true } }).fwd, { user_id: 'bob' });
+    assert.equal(cleanPayload({ t: 'text', text: 'x', blur: true }).blur, undefined);
+  });
   test('une couleur de membre piégée ne peut pas injecter de CSS', () => {
     for (const bad of ['url(https://evil.example/pixel)', 'red;background:url(x)', 'var(--x)', '#12345', '#1234567', 42, null]) {
       assert.equal(safeColor(bad), '#7c5cff', String(bad));

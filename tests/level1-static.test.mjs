@@ -144,6 +144,14 @@ test('les fichiers reçus ne sont jamais ouverts avec le type choisi par l\'exp�
   }
 });
 
+test('les réactions proposées par l\'appli sont exactement celles autorisées par le serveur', () => {
+  const inApp = read(path.join(pub, 'js', 'chat.js')).match(/export const REACTIONS = \[([^\]]+)\]/)[1];
+  const inRules = read(path.join(root, 'firestore.rules')).match(/reactions\[uid\(\)\] in \[([^\]]+)\]/)[1];
+  const list = (s) => [...s.matchAll(/'([^']+)'/g)].map((m) => m[1]);
+  assert.deepEqual(list(inApp), list(inRules));
+  assert.equal(new Set(list(inApp)).size, list(inApp).length);
+});
+
 test('aucun sélecteur « $(…) » utilisé comme une liste (bug qui bloquait le démarrage)', () => {
   for (const f of publicFiles.filter((x) => x.endsWith('.js'))) {
     const bad = read(f).match(/[^$]\$\([^)]*\)\.(forEach|map|filter)\(/);

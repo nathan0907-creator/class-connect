@@ -88,13 +88,21 @@ export function voicePlayer(file, epoch) {
   const fill = h('i');
   const track = h('div.voice-track', fill);
   const time = h('span.voice-time', fmt(file.duration || 0));
-  const box = h('div.voice-msg', btn, track, time, h('span.voice-mic', '🎤'));
+  // Playback speed: 1× → 1.5× → 2× (kept when the audio is loaded later).
+  let rate = 1;
+  const speed = h('button.voice-speed', { type: 'button', 'aria-label': 'Vitesse de lecture', onclick: () => {
+    rate = rate === 1 ? 1.5 : rate === 1.5 ? 2 : 1;
+    speed.textContent = `${rate}×`;
+    if (audio) audio.playbackRate = rate;
+  } }, '1×');
+  const box = h('div.voice-msg', btn, track, time, speed, h('span.voice-mic', '🎤'));
 
   async function load() {
     box.classList.add('loading');
     try {
       const bytes = await downloadDecrypted(file, state.classKeys.get(epoch));
       audio = new Audio(URL.createObjectURL(new Blob([bytes], { type: safeMime(file.mime, ['audio']) })));
+      audio.playbackRate = rate;
       audio.addEventListener('timeupdate', () => {
         const d = audio.duration && Number.isFinite(audio.duration) ? audio.duration : file.duration || 1;
         fill.style.width = `${Math.min(100, (audio.currentTime / d) * 100)}%`;

@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { initializeApp, cert } from 'firebase-admin/app';
-import { getFirestore, Timestamp } from 'firebase-admin/firestore';
+import { getFirestore, Timestamp, FieldValue } from 'firebase-admin/firestore';
 import { getMessaging } from 'firebase-admin/messaging';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -146,6 +146,44 @@ async function sendTo(recipients, data, label) {
     log('   → La clé service-account.json est refusée par Google (supprimée ou désactivée ?) : génère-en une nouvelle (voir LISEZMOI.md).');
   }
 }
+
+// ------------------------------------------------------------ scheduled messages ("envoyer demain à 7 h")
+// The message was encrypted by its author when it was written; at the chosen time this server only moves it into the
+// channel (it still can't read it), after checking that the author may still write there.
+const timers = new Map();   // scheduled doc path -> timeout
+const MAX_WAIT = 2 ** 31 - 1;
+function plan(ref, data) {
+  clearTimeout(timers.get(ref.path));
+  const wait = data.send_at.toMillis() - Date.now();
+  if (wait > MAX_WAIT) return;   // can't happen: the rules allow 24 days at most
+  timers.set(ref.path, setTimeout(() => deliver(ref).catch((err) => log('⚠ message programmé :', err.message)), Math.max(0, wait)));
+}
+async function deliver(ref) {
+  timers.delete(ref.path);
+  const snap = await ref.get();
+  if (!snap.exists) return;
+  const m = snap.data();
+  const cid = ref.parent.parent.id;
+  const author = users.get(m.user_id);
+  const ch = CHANNELS[m.channel];
+  const allowed = author && author.class_id === cid && ch && ch.canRead(author.role)
+    && (m.channel !== 'announcements' || ['delegate', 'deputy', 'teacher'].includes(author.role));
+  const batch = db.batch();
+  if (allowed) {
+    batch.set(db.collection(`classes/${cid}/${m.channel}`).doc(), {
+      user_id: m.user_id, epoch: m.epoch, iv: m.iv, ciphertext: m.ciphertext, pinned: false, created_at: FieldValue.serverTimestamp(),
+    });
+  }
+  batch.delete(ref);
+  await batch.commit();
+  log(allowed ? `⏰ message programmé envoyé (${classes.get(cid) || cid})` : '⏰ message programmé annulé : l\'auteur n\'a plus accès au canal');
+}
+db.collectionGroup('scheduled').where('send_at', '>', Timestamp.fromMillis(0)).onSnapshot((snap) => {
+  for (const c of snap.docChanges()) {
+    if (c.type === 'removed') { clearTimeout(timers.get(c.doc.ref.path)); timers.delete(c.doc.ref.path); }
+    else plan(c.doc.ref, c.doc.data());
+  }
+}, (err) => { log('⚠ écoute des messages programmés interrompue :', err.message); setTimeout(() => process.exit(1), 30000); });
 
 log('🚀 Serveur de notifications Class Connect démarré. Laisse cette fenêtre ouverte.');
 setInterval(() => log(`… toujours en marche · ${users.size} membres · ${tokens.size} appareil(s) abonné(s)`), 6 * 3600e3);

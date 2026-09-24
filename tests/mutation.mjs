@@ -27,6 +27,9 @@ const MUTANTS = [
   ['code professeurs lisible par les élèves', "match /secrets/{docId} {\n        allow read: if isDelegate(cid);", "match /secrets/{docId} {\n        allow read: if isActiveMember(cid);"],
   ['un élève publie dans les annonces', "(ch != 'announcements' || isStaff(cid) || d.get('kind', '') == 'alert')", 'true'],
   ['alerte signée au nom d\'un autre', '&& request.resource.data.slot_id is string && request.resource.data.by == uid()', '&& request.resource.data.slot_id is string'],
+  ['voter à la place d\'un autre', "request.resource.data.votes.diff(resource.data.get('votes', {})).affectedKeys().hasOnly([uid()])", 'true'],
+  ['réécrire un vieux message', '&& request.time < resource.data.created_at + duration.value(15, \'m\')', ''],
+  ['messages programmés lisibles par tous', 'allow read, delete: if signedIn() && resource.data.user_id == uid();', 'allow read, delete: if signedIn();'],
   ['clé privée lisible par tous', "match /private/{userId} {\n      allow read: if signedIn() && userId == uid();", "match /private/{userId} {\n      allow read: if signedIn();"],
 ];
 

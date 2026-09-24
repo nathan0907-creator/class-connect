@@ -91,6 +91,8 @@ async function preview(d) {
     const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromB64(d.iv), additionalData: new TextEncoder().encode(aad) }, key, fromB64(d.ciphertext));
     const p = JSON.parse(new TextDecoder().decode(plain));
     if (typeof p.text === 'string' && p.text) return p.text.length > 180 ? p.text.slice(0, 177) + '…' : p.text;
+    if (p.t === 'poll' && p.poll) return `📊 ${String(p.poll.q || 'Sondage').slice(0, 120)}`;
+    if (p.t === 'sticker') return '🏷️ Sticker';
     if (p.t === 'alert' && p.alert) {
       const label = { absent: '🚫 Prof absent', room: '🔁 Changement de salle', cancel: '❌ Cours annulé' }[p.alert.kind] || '📢 Info';
       return `${label} · ${String(p.alert.subject || '').slice(0, 40)} · ${String(p.alert.date || '').slice(0, 10)}`;

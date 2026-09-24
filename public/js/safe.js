@@ -34,7 +34,8 @@ export function cleanFile(f, kinds) {
   };
 }
 
-const KINDS = ['text', 'gif', 'image', 'video', 'audio', 'alert'];
+const KINDS = ['text', 'gif', 'image', 'video', 'audio', 'alert', 'poll', 'sticker'];
+const STICKER = /^data:image\/(webp|png|jpeg);base64,[A-Za-z0-9+/=]+$/;
 const DATE = /^20\d\d-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 const str = (v, max) => (typeof v === 'string' ? v.slice(0, max) : '');
 
@@ -42,7 +43,15 @@ const str = (v, max) => (typeof v === 'string' ? v.slice(0, max) : '');
 export function cleanPayload(p) {
   if (!p || typeof p !== 'object' || Array.isArray(p)) return null;
   const out = { v: 1, t: KINDS.includes(p.t) ? p.t : 'text', text: isStr(p.text, 20000) ? p.text : '' };
-  if (out.t === 'alert') {
+  if (out.t === 'poll') {
+    const q = p.poll && typeof p.poll === 'object' ? p.poll : {};
+    const options = Array.isArray(q.options) ? q.options.filter((o) => isStr(o, 100) && o.trim()).slice(0, 6) : [];
+    if (isStr(q.q, 200) && q.q.trim() && options.length >= 2) out.poll = { q: q.q, options, wyr: q.wyr === true };
+    else out.t = 'text';
+  } else if (out.t === 'sticker') {
+    if (isStr(p.img, 60000) && STICKER.test(p.img)) out.img = p.img;
+    else out.t = 'text';
+  } else if (out.t === 'alert') {
     // "Prof absent / salle changée / cours annulé" posted in the announcements channel.
     const a = p.alert && typeof p.alert === 'object' ? p.alert : {};
     if (['absent', 'room', 'cancel'].includes(a.kind) && DATE.test(a.date)) {
@@ -61,6 +70,9 @@ export function cleanPayload(p) {
   if (r && typeof r === 'object' && isStr(r.id, 64) && r.id) {
     out.reply = { id: r.id, user_id: isStr(r.user_id, 128) ? r.user_id : '', text: isStr(r.text, 400) ? r.text : '' };
   }
+  // Forwarded from another member; photo / video hidden behind a blur until tapped.
+  if (p.fwd && typeof p.fwd === 'object' && isStr(p.fwd.user_id, 128)) out.fwd = { user_id: p.fwd.user_id };
+  if (p.blur === true && (out.t === 'image' || out.t === 'video')) out.blur = true;
   return out;
 }
 

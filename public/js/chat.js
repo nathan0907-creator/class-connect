@@ -7,20 +7,28 @@ import { notify } from './notify.js';
 import { recordVoice, voicePlayer, voiceSupported } from './voice.js';
 import { statusEmoji, isBirthday, birthdaysToday } from './profiles.js';
 import { db, sub, plain } from './fb.js';
-import { state, on, isDelegate, isDeputy, isTeacher, memberName, CHANNELS, channelsFor, canAnnounce } from './state.js';
+import { state, on, emit, isDelegate, isDeputy, isTeacher, memberName, CHANNELS, channelsFor, canAnnounce } from './state.js';
 import { encryptJSON, decryptJSON } from './crypto.js';
 import { cleanPayload, safeColor, safeMime } from './safe.js';
 import { MAX_FILE, uploadEncrypted, downloadDecrypted, deleteFileChunks, compressImage } from './media.js';
 import { currentKey } from './keyring.js';
 import { sendTyping, watchTyping } from './presence.js';
 import { GIPHY_API_KEY } from './config.js';
+import { renderMath } from './md.js';
+import {
+  openTools, renderPoll, openSearch, openGallery, openPinnedAll, openThread, translate, transcribe, forward,
+} from './chatplus.js';
 import { $, h, icon, avatar, toast, toastError, fmtTime, fmtDay, fmtSize, linkify, confirmDialog } from './ui.js';
 
 const PAGE = 50;
 const GROUP_MS = 5 * 60 * 1000;
+const EDIT_MS = 15 * 60 * 1000;   // same limit as the security rules
 const EMOJIS = ['😀','😂','🥹','😍','😎','🤔','😴','😭','😡','🤯','🥳','🤝','👍','👎','👏','🙏','💪','🔥','✨','🚀','🌌','🪐','⭐','🌙','☄️','👽','🛸','🌍','❤️','💜','💙','💯','✅','❌','⚠️','📚','📝','📅','⏰','🎉','🎮','⚽','🍕','☕','🎧','📸','🤫','👀'];
-/** Quick reactions (same list as the security rules). */
-const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🔥', '🎉', '🚀'];
+/** Reactions (same list as the security rules): the first 8 are offered first, the others behind "＋". */
+export const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🔥', '🎉', '🚀',
+  '👏', '🙏', '💯', '😍', '🤔', '😡', '😭', '🥳', '😎', '🤯', '👀', '✅', '❌', '💀', '🫡', '🤝',
+  '💪', '⭐', '💜', '💙', '🍕', '☕', '😴', '🤡', '🙈', '🥲', '😅', '🤣', '👌', '✨', '🪐', '🌙'];
+const QUICK = REACTIONS.slice(0, 8);
 
 let root, list, scroller, textarea, fileInput, pinnedBar;
 let oldestSnap = null;
@@ -36,12 +44,12 @@ const unreadChannels = new Set();
 export const currentChannel = () => channel;
 
 // The students' channel keeps the original format; other channels bind the channel name into the ciphertext.
-const aadFor = (row) => {
-  const ch = row.channel || channel;
-  return ch === 'messages'
-    ? `msg|${state.cls.id}|${row.epoch}|${row.user_id}`
-    : `msg|${state.cls.id}|${ch}|${row.epoch}|${row.user_id}`;
-};
+export const messageAad = (ch, epoch, uid) => (ch === 'messages'
+  ? `msg|${state.cls.id}|${epoch}|${uid}`
+  : `msg|${state.cls.id}|${ch}|${epoch}|${uid}`);
+const aadFor = (row) => messageAad(row.channel || channel, row.epoch, row.user_id);
+/** Ephemeral messages disappear from the screen once their time is up. */
+export const isExpired = (row) => !!row.expire_at && row.expire_at <= Date.now();
 const messagesCol = () => sub(state.cls.id, channel);
 /** Who may pin / delete others' messages in a channel. */
 const moderates = (ch = channel) => (ch === 'messages' ? isDelegate() || isDeputy()
@@ -54,8 +62,58 @@ export const fmtDate = (ymd) => { const [y, m, d] = ymd.split('-').map(Number); 
 export function payloadPreview(p) {
   if (!p) return '🔒 message chiffré';
   if (p.t === 'alert') return `${ALERTS[p.alert.kind]} · ${p.alert.subject} · ${fmtDate(p.alert.date)}`;
+  if (p.t === 'poll') return `${p.poll.wyr ? '🤔' : '📊'} ${p.poll.q}`;
+  if (p.t === 'sticker') return '🏷️ Sticker';
   return p.text || (p.t === 'audio' ? '🎤 Message vocal' : p.t === 'video' ? '🎬 Vidéo' : p.t === 'gif' ? 'GIF' : '🖼️ Image');
 }
+
+// ------------------------------------------------------------ composer modes (edit, ephemeral, blurred photo)
+const compose = { edit: null, ephemeral: false, blur: false };
+let modeBar;
+export const composeMode = () => ({ ...compose });
+export function setComposeMode(key, value) {
+  compose[key] = value;
+  if (key === 'ephemeral' && value) toast('⏳ Tes prochains messages disparaîtront au bout de 24 h', 'info');
+  if (key === 'blur' && value) toast('🙈 Tes prochaines photos et vidéos seront floutées jusqu\'à ce qu\'on touche', 'info');
+  renderModes();
+}
+function renderModes() {
+  if (!modeBar) return;
+  const pill = (text, off) => h('span.mode-pill', text, h('button', { type: 'button', 'aria-label': 'Désactiver', onclick: off }, '✕'));
+  modeBar.replaceChildren(...[
+    compose.edit ? pill('✏️ Modification du message', cancelEdit) : null,
+    compose.ephemeral ? pill('⏳ Éphémère (24 h)', () => setComposeMode('ephemeral', false)) : null,
+    compose.blur ? pill('🙈 Photos floutées', () => setComposeMode('blur', false)) : null,
+  ].filter(Boolean));
+}
+function startEdit(row) {
+  const p = decrypted.get(row.id);
+  if (!p || p.t !== 'text') return;
+  cancelReply();
+  compose.edit = row;
+  textarea.value = p.text;
+  textarea.focus();
+  textarea.dispatchEvent(new Event('input'));
+  renderModes();
+}
+function cancelEdit() {
+  if (!compose.edit) return;
+  compose.edit = null;
+  textarea.value = '';
+  restoreDraft();
+  renderModes();
+}
+export const composerText = () => textarea.value;
+export function clearComposer() { textarea.value = ''; textarea.style.height = 'auto'; saveDraft(); }
+export function insertInComposer(s) {
+  const { selectionStart: a, selectionEnd: b, value } = textarea;
+  textarea.value = value.slice(0, a) + s + value.slice(b);
+  textarea.focus();
+  textarea.dispatchEvent(new Event('input'));
+}
+/** Messages currently displayed (oldest first). */
+export const loadedRows = () => [...list.querySelectorAll('.msg')].map((el) => el._row).filter(Boolean);
+export const cachedPayload = (id) => decrypted.get(id) || null;
 
 export function initChat() {
   root = $('#panel-chat');
@@ -86,7 +144,16 @@ export function initChat() {
     if (tool === 'emoji') togglePopover('.emoji-pop');
     if (tool === 'voice') recordVoice($('.composer', root), sendVoice);
     if (tool === 'gif-upload') { closePopovers(); fileInput.accept = 'image/gif'; fileInput.click(); fileInput.accept = 'image/*,video/*'; }
+    if (tool === 'more') openTools();
+    const head = e.target.closest('[data-chat-tool]')?.dataset.chatTool;
+    if (head === 'search') openSearch();
+    if (head === 'gallery') openGallery();
+    if (head === 'pinned') openPinnedAll();
   });
+  modeBar = h('div.composer-mode', { 'aria-live': 'polite' });
+  $('.composer', root).before(modeBar);
+  // Ephemeral messages vanish when their time is up.
+  setInterval(() => { for (const el of list.querySelectorAll('.msg')) if (el._row && isExpired(el._row)) onRemoved(el._row.id); }, 60_000);
   document.addEventListener('click', (e) => {
     if (!e.target.closest('.popover, [data-tool]')) closePopovers();
   });
@@ -140,7 +207,7 @@ export function startChat(requested) {
     let first = true;
     watchers.push(onSnapshot(query(sub(state.cls.id, ch), orderBy('created_at', 'desc'), limit(1)), (snap) => {
       if (first) { first = false; return; }
-      const added = snap.docChanges().some((c) => c.type === 'added' && c.doc.get('user_id') !== state.me.id && !c.doc.get('deleted_at'));
+      const added = snap.docChanges().some((c) => c.type === 'added' && c.doc.get('user_id') !== state.me.id && !c.doc.get('deleted_at') && isFresh(plain(c.doc)));
       if (added && ch !== channel) {
         unreadChannels.add(ch); renderChannelTabs(); setUnread(unread + 1);
         const from = snap.docs[0]?.get('user_id');
@@ -217,6 +284,8 @@ function renderChannelTabs() {
 function onIncoming(row) {
   const atBottom = nearBottom();
   appendMessage(row);
+  // An old message that was only missing from the offline copy: put in place, without alerting anyone.
+  if (!isFresh(row)) return;
   if (row.user_id !== state.me.id) {
     state.space.pulse();
     if (document.hidden || !root.classList.contains('active')) setUnread(unread + 1);
@@ -246,14 +315,27 @@ function onModified(row) {
   if (row.deleted_at) return onRemoved(row.id);
   const el = list.querySelector(`[data-id="${row.id}"]`);
   if (!el) return;
+  const before = el._row;
+  row.channel = before.channel;
+  el._row = row;
   el.classList.toggle('pinned', !!row.pinned);
-  el._row.pinned = row.pinned;
-  el._row.reactions = row.reactions;
   renderReactions(el);
   if (row.created_at && Number(el.dataset.ts) !== row.created_at) {
     el.dataset.ts = row.created_at;
     el.querySelector('.msg-head time').textContent = fmtTime(row.created_at);
+    placeByTime(el);
   }
+  // Edited text (new ciphertext) or new poll votes: the bubble is drawn again.
+  if (row.ciphertext !== before.ciphertext) decrypted.delete(row.id);
+  if (row.ciphertext !== before.ciphertext || JSON.stringify(row.votes || {}) !== JSON.stringify(before.votes || {})) fillBubble(el, row);
+  el.querySelector('.msg-flags')?.replaceWith(flags(row));
+}
+/** "(modifié)" and the time left of an ephemeral message, next to the time. */
+function flags(row) {
+  const left = row.expire_at ? row.expire_at - Date.now() : 0;
+  return h('span.msg-flags',
+    row.edited_at ? ' (modifié)' : '',
+    left > 0 ? h('span.eph-tag', { title: 'Message éphémère' }, ` ⏳ ${left > 3600e3 ? `${Math.ceil(left / 3600e3)} h` : `${Math.ceil(left / 60000)} min`}`) : '');
 }
 
 function onRemoved(id) {
@@ -266,7 +348,7 @@ async function loadOlder() {
   const snap = await getDocs(query(messagesCol(), orderBy('created_at', 'desc'), startAfter(oldestSnap), limit(PAGE)));
   const prevHeight = scroller.scrollHeight;
   const frag = document.createDocumentFragment();
-  [...snap.docs].reverse().map(plain).filter((r) => !r.deleted_at).forEach((r) => frag.append(messageEl(r)));
+  [...snap.docs].reverse().map(plain).filter((r) => !r.deleted_at && !isExpired(r)).forEach((r) => frag.append(messageEl(r)));
   list.prepend(frag);
   regroup();
   scroller.scrollTop += scroller.scrollHeight - prevHeight;
@@ -276,10 +358,33 @@ async function loadOlder() {
 
 // ------------------------------------------------------------ rendering
 function appendMessage(row) {
-  if (row.deleted_at || list.querySelector(`[data-id="${row.id}"]`)) return;
-  list.append(messageEl(row));
-  regroup(list.lastElementChild);
+  if (row.deleted_at || isExpired(row) || list.querySelector(`[data-id="${row.id}"]`)) return;
+  const el = messageEl(row);
+  list.append(el);
+  placeByTime(el);
 }
+
+/**
+ * Keeps the messages in chronological order. The offline copy is shown first, then messages missing from it
+ * arrive from the server: an older one must slide in at its place, not at the bottom.
+ */
+function placeByTime(el) {
+  const ts = Number(el.dataset.ts);
+  let prev = el.previousElementSibling;
+  while (prev && (!prev.classList.contains('msg') || Number(prev.dataset.ts) > ts)) prev = prev.previousElementSibling;
+  if (prev ? prev.nextElementSibling !== el : list.firstElementChild !== el) {
+    // Day separators are rebuilt by regroup().
+    if (prev) prev.after(el); else list.prepend(el);
+    list.querySelectorAll('.day-sep').forEach((s) => s.remove());
+    regroup();
+  } else {
+    regroup(el);
+    const next = el.nextElementSibling;
+    if (next) regroup(next);
+  }
+}
+/** Only a message written just now counts as "new" (notification, unread counter, sound). */
+const isFresh = (row) => Date.now() - (row.created_at || Date.now()) < 3 * 60_000;
 
 const roleTag = (author) => (author?.role === 'teacher' ? h('span.role-badge.teacher', author.principal ? '🎓 prof principal' : '🎓 prof')
   : author?.role === 'delegate' ? h('span.role-badge', '★ délégué')
@@ -298,7 +403,8 @@ function messageEl(row) {
       h('b', { style: { color: author && safeColor(author.color) } }, memberName(row.user_id)),
       h('span.head-extra', headExtra(row.user_id)),
       roleTag(author),
-      h('time', fmtTime(row.created_at))),
+      h('time', fmtTime(row.created_at)),
+      flags(row)),
     h('div.bubble', h('span.decrypting', icon('lock'), ' déchiffrement…')),
     h('div.reactions')),
   h('div.msg-actions', actionButtons(row)));
@@ -331,14 +437,20 @@ function renderReactions(el) {
 /** Toggles my reaction (one per message; choosing another one replaces it). */
 function react(row, emoji) {
   const mine = row.reactions?.[state.me.id];
-  updateDoc(doc(messagesCol(), row.id), { [`reactions.${state.me.id}`]: mine === emoji ? deleteField() : emoji }).catch(toastError);
+  updateDoc(doc(messagesCol(), row.id), { [`reactions.${state.me.id}`]: mine === emoji ? deleteField() : emoji })
+    .then(() => { if (mine !== emoji) emit('activity', 'reactions'); })
+    .catch(toastError);
 }
 
 function openReactionPicker(btn, row) {
   document.querySelector('.reaction-pop')?.remove();
-  const pop = h('div.reaction-pop', { role: 'menu' }, REACTIONS.map((e) => h('button', {
-    type: 'button', role: 'menuitem', 'aria-label': `Réagir ${e}`, onclick: () => { pop.remove(); react(row, e); },
-  }, e)));
+  const pick = (e) => h('button', { type: 'button', role: 'menuitem', 'aria-label': `Réagir ${e}`, onclick: () => { pop.remove(); react(row, e); } }, e);
+  const pop = h('div.reaction-pop', { role: 'menu' }, QUICK.map(pick),
+    h('button.more', { type: 'button', 'aria-label': 'Plus de réactions', onclick: (ev) => {
+      ev.stopPropagation();
+      pop.classList.add('all');
+      pop.replaceChildren(...REACTIONS.map(pick));
+    } }, '＋'));
   btn.closest('.msg').append(pop);
   const off = (e) => { if (!pop.contains(e.target) && e.target !== btn) { pop.remove(); document.removeEventListener('pointerdown', off); } };
   setTimeout(() => document.addEventListener('pointerdown', off));
@@ -386,10 +498,20 @@ function refreshAuthors() {
 /** What can be done with a message (shared by the hover buttons and the phone long-press sheet). */
 function messageActions(row) {
   const out = [{ icon: 'reply', label: 'Répondre', run: () => startReply(row) }];
-  const text = decrypted.get(row.id)?.text;
+  const p = decrypted.get(row.id);
+  const text = p?.text;
+  const el = () => list.querySelector(`[data-id="${row.id}"]`);
   if (text) {
     out.push({ icon: 'edit', label: 'Copier le texte', run: () => navigator.clipboard.writeText(text).then(() => toast('Texte copié 📋'), () => toast('Copie impossible', 'error')), sheetOnly: true });
   }
+  if (p?.t === 'text' && row.user_id === state.me.id && Date.now() - row.created_at < EDIT_MS) {
+    out.push({ icon: 'edit', label: 'Modifier', run: () => startEdit(row), sheetOnly: true });
+  }
+  const hasReplies = loadedRows().some((r) => decrypted.get(r.id)?.reply?.id === row.id);
+  if (p?.reply?.id || hasReplies) out.push({ icon: 'chat', label: 'Voir le fil', run: () => openThread(row), sheetOnly: true });
+  if (p) out.push({ icon: 'send', label: 'Transférer', run: () => forward(row), sheetOnly: true });
+  if (text) out.push({ icon: 'sparkles', label: 'Traduire (IA)', run: () => translate(row, el()), sheetOnly: true });
+  if (p?.t === 'audio') out.push({ icon: 'mic', label: 'Transcrire (IA)', run: () => transcribe(row, el()), sheetOnly: true });
   if (moderates(row.channel)) {
     out.push({ icon: 'pin', label: row.pinned ? 'Désépingler' : 'Épingler', title: 'Épingler / désépingler',
       run: () => updateDoc(doc(messagesCol(), row.id), { pinned: !row.pinned }).catch(toastError) });
@@ -415,6 +537,8 @@ function actionButtons(row) {
     ...messageActions(row).filter((a) => !a.sheetOnly).map((a) => h('button.icon-btn', {
       title: a.title || a.label, 'aria-label': a.title || a.label, onclick: a.run,
     }, icon(a.icon))),
+    // Everything else (edit, forward, translate, thread…) in the same sheet as the long press on a phone.
+    h('button.icon-btn', { title: 'Plus d\'options', 'aria-label': 'Plus d\'options', onclick: (e) => openMessageSheet(e.currentTarget.closest('.msg')) }, '⋯'),
   ];
 }
 
@@ -430,9 +554,13 @@ function openMessageSheet(el) {
   const mine = row.reactions?.[state.me.id];
   const sheet = h('div.msg-sheet', { role: 'dialog', 'aria-label': 'Options du message' },
     h('div.sheet-grip'),
-    h('div.sheet-reactions', REACTIONS.map((e) => h(`button${e === mine ? '.mine' : ''}`, {
+    h('div.sheet-reactions', QUICK.map((e) => h(`button${e === mine ? '.mine' : ''}`, {
       type: 'button', 'aria-label': `Réagir ${e}`, onclick: () => { close(); react(row, e); },
-    }, e))),
+    }, e)), h('button', { type: 'button', 'aria-label': 'Plus de réactions', onclick: (ev) => {
+      ev.currentTarget.parentElement.replaceChildren(...REACTIONS.map((e) => h(`button${e === mine ? '.mine' : ''}`, {
+        type: 'button', 'aria-label': `Réagir ${e}`, onclick: () => { close(); react(row, e); },
+      }, e)));
+    } }, '＋')),
     h('div.sheet-actions', messageActions(row).map((a) => h(`button.sheet-action${a.danger ? '.danger' : ''}`, {
       type: 'button', onclick: () => { close(); a.run(); },
     }, icon(a.icon), h('span', a.label)))),
@@ -529,8 +657,9 @@ function bindLongPress() {
 export async function purgeExpired() {
   const cutoff = Timestamp.fromMillis(Date.now() - 30 * 864e5);
   for (const ch of channelsFor().filter((c) => moderates(c))) {
-    const old = await getDocs(query(sub(state.cls.id, ch), where('deleted_at', '<', cutoff), limit(100))).catch(() => null);
-    for (const d of old?.docs || []) {
+    const [deleted, expired] = await Promise.all(['deleted_at', 'expire_at'].map((field) =>
+      getDocs(query(sub(state.cls.id, ch), where(field, '<', cutoff), limit(100))).catch(() => null)));
+    for (const d of [...(deleted?.docs || []), ...(expired?.docs || [])]) {
       const row = { ...plain(d), channel: ch };
       const payload = await decryptRow(row);
       if (payload?.file?.id) await deleteFileChunks(payload.file);
@@ -573,6 +702,10 @@ async function fillBubble(el, row) {
       h('b', ALERTS[a.kind]), h('span', `${a.subject} · ${fmtDate(a.date)}`),
       a.kind === 'room' && a.room ? h('span', `Nouvelle salle : ${a.room}`) : null,
       a.note ? h('small', a.note) : null));
+  } else if (payload.t === 'poll') {
+    parts.push(renderPoll(row, payload));
+  } else if (payload.t === 'sticker') {
+    parts.push(h('img.sticker-img', { src: payload.img, alt: 'Sticker' }));
   } else if (payload.t === 'gif' && payload.gif) {
     parts.push(h('div.media.gif', { style: ratio(payload.gif) },
       h('img', { src: payload.gif.url, alt: payload.gif.title || 'GIF', loading: 'lazy' }), h('span.media-tag', 'GIF')));
@@ -581,7 +714,14 @@ async function fillBubble(el, row) {
   } else if ((payload.t === 'image' || payload.t === 'video') && payload.file) {
     parts.push(mediaEl(payload, row.epoch));
   }
-  if (payload.text) parts.push(h('div.text', linkify(payload.text)));
+  if (payload.text) {
+    const text = h('div.text', linkify(payload.text));
+    parts.push(text);
+    // Formulas written as $…$ are drawn by KaTeX (text only, never HTML).
+    if (payload.text.includes('$')) renderMath(text);
+  }
+  if (payload.fwd) parts.unshift(h('span.fwd-tag', `↪️ Transféré · message de ${memberName(payload.fwd.user_id)}`));
+  bubble.classList.toggle('sticker-bubble', payload.t === 'sticker');
   if (isOnlyEmoji(payload.text) && parts.length === 1) bubble.classList.add('jumbo');
   // Quoted message (reply): tap to jump to the original.
   if (payload.reply?.id) {
@@ -677,9 +817,20 @@ const mediaObserver = new IntersectionObserver((entries) => {
   }
 }, { rootMargin: '300px' });
 
-function mediaEl({ t, file }, epoch) {
+export const mediaBox = (payload, epoch) => mediaEl(payload, epoch);
+function mediaEl({ t, file, blur }, epoch) {
   const box = h(`div.media.loading${t === 'video' ? '.video' : ''}`, { style: ratio(file) },
     h('div.media-lock', icon('lock'), h('small', `${t === 'video' ? 'Vidéo' : 'Image'} chiffrée · ${fmtSize(file.size || 0)}`)));
+  // Blurred by the sender (or by my display settings) until tapped.
+  if (blur || document.body.classList.contains('blur-media')) {
+    box.classList.add('blurred');
+    box.addEventListener('click', (e) => {
+      if (!box.classList.contains('blurred')) return;
+      e.stopPropagation();
+      e.preventDefault();
+      box.classList.remove('blurred');
+    }, true);
+  }
   box._load = async () => {
     try {
       let url = mediaCache.get(file.id);
@@ -747,6 +898,12 @@ async function renderPinned(rows) {
   pinnedBar.hidden = false;
 }
 
+/** Scrolls to a message, loading older history if needed (search results, pinned list). */
+export async function reveal(id) {
+  for (let i = 0; i < 12 && !list.querySelector(`[data-id="${id}"]`) && oldestSnap && !$('.load-more', root).hidden; i++) await loadOlder();
+  jumpTo(id);
+}
+
 function jumpTo(id) {
   const el = list.querySelector(`[data-id="${id}"]`);
   if (!el) return toast('Message trop ancien : charge plus d\'historique');
@@ -775,13 +932,19 @@ export async function postTo(ch, payload, extra = {}) {
     if (err.code === 'permission-denied') throw new Error('Doucement ! Un message par seconde maximum.');
     throw err;
   }
+  emit('activity', payload.t === 'audio' ? 'voice' : 'messages');
   return ref.id;
 }
-const postPayload = (payload, extra) => postTo(channel, payload, extra);
+/** Posts in the open channel (ephemeral if that mode is on). */
+const postPayload = (payload, extra = {}) => postTo(channel, payload,
+  compose.ephemeral ? { ...extra, expire_at: Timestamp.fromMillis(Date.now() + 24 * 3600e3) } : extra);
+export const sendPayload = postPayload;
+export const sendFile = (file) => sendFileImpl(file);
 
 async function sendText() {
   const text = textarea.value.trim();
   if (!text) return;
+  if (compose.edit) return saveEdit(text);
   const reply = replyTo;
   textarea.value = '';
   textarea.style.height = 'auto';
@@ -789,12 +952,43 @@ async function sendText() {
   saveDraft();
   try {
     await postPayload({ v: 1, t: 'text', text, ...(reply ? { reply } : {}) });
+    launchRocket();
   } catch (err) {
     textarea.value = text;
     if (reply) { replyTo = reply; replyBar.hidden = false; root.classList.add('replying'); }
     saveDraft();
     toastError(err);
   }
+}
+
+/** Saves the edited text of my message: same key epoch and author, so the others can still decrypt it. */
+async function saveEdit(text) {
+  const row = compose.edit;
+  const old = decrypted.get(row.id);
+  const key = state.classKeys.get(row.epoch);
+  if (!old || !key) return toast('Ce message ne peut plus être modifié', 'error');
+  if (Date.now() - row.created_at >= EDIT_MS) { cancelEdit(); return toast('Trop tard : un message se modifie pendant 15 minutes', 'error'); }
+  const payload = { ...old, text };
+  try {
+    const enc = await encryptJSON(key, payload, aadFor(row));
+    await updateDoc(doc(sub(state.cls.id, row.channel), row.id), { iv: enc.iv, ciphertext: enc.ciphertext, edited_at: serverTimestamp() });
+    decrypted.set(row.id, payload);
+    compose.edit = null;
+    textarea.value = '';
+    textarea.style.height = 'auto';
+    renderModes();
+    restoreDraft();
+  } catch (err) { toastError(err); }
+}
+
+/** Little rocket taking off from the send button. */
+function launchRocket() {
+  const btn = $('.send-btn', root);
+  const r = btn?.getBoundingClientRect();
+  if (!r || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const rocket = h('span.rocket-fly', { style: { left: `${r.left + r.width / 2 - 11}px`, top: `${r.top - 6}px` } }, '🚀');
+  document.body.append(rocket);
+  setTimeout(() => rocket.remove(), 950);
 }
 
 /** Voice message: encrypted and uploaded like a photo, then posted (as a reply if one is being written). */
@@ -818,7 +1012,7 @@ async function sendVoice(blob, seconds) {
   }
 }
 
-async function sendFile(original) {
+async function sendFileImpl(original) {
   const kind = original.type.startsWith('video/') ? 'video' : original.type.startsWith('image/') ? 'image' : null;
   if (!kind) return toast('Seules les images, GIFs et vidéos sont acceptés', 'error');
   // SVG images can contain code: refused (a photo or a screenshot works).
@@ -843,7 +1037,7 @@ async function sendFile(original) {
       bar.style.width = p * 100 + '%';
     });
     mediaCache.set(desc.id, URL.createObjectURL(file));
-    await postPayload({ v: 1, t: kind, file: { ...desc, name: original.name.slice(0, 120), ...dims } });
+    await postPayload({ v: 1, t: kind, file: { ...desc, name: original.name.slice(0, 120), ...dims }, ...(compose.blur ? { blur: true } : {}) });
   } catch (err) {
     toastError(err);
   } finally {

@@ -455,6 +455,59 @@ describe('NIVEAU 3 — attaques poussées', () => {
       await assertFails(updateDoc(c(as('alice'), C1, 'alerts', 'a1'), { kind: 'room' }));
       await assertSucceeds(deleteDoc(c(as('dele'), C1, 'alerts', 'a1')));
     });
+    test('sondages : un vote par personne, seulement le sien, seulement sur un sondage', async () => {
+      await env.withSecurityRulesDisabled((ctx) => setDoc(c(ctx.firestore(), C1, 'messages', 'p1'), { user_id: 'dele', epoch: 1, ...enc, pinned: false, created_at: Timestamp.now(), kind: 'poll' }));
+      await assertSucceeds(updateDoc(c(as('alice'), C1, 'messages', 'p1'), { 'votes.alice': 1 }));
+      await assertSucceeds(updateDoc(c(as('alice'), C1, 'messages', 'p1'), { 'votes.alice': 0 }));
+      await assertFails(updateDoc(c(as('alice'), C1, 'messages', 'p1'), { 'votes.bob': 1 }));
+      await assertFails(updateDoc(c(as('alice'), C1, 'messages', 'p1'), { 'votes.alice': 42 }));
+      await assertFails(updateDoc(c(as('alice'), C1, 'messages', 'p1'), { 'votes.alice': 'oui' }));
+      await assertFails(updateDoc(c(as('alice'), C1, 'messages', 'm1'), { 'votes.alice': 1 }));   // pas un sondage
+      await assertFails(updateDoc(c(as('prof'), C1, 'messages', 'p1'), { 'votes.prof': 1 }));    // canal élèves
+    });
+    test('modifier son message : seulement l\'auteur, dans les 15 minutes', async () => {
+      await env.withSecurityRulesDisabled(async (ctx) => {
+        await setDoc(c(ctx.firestore(), C1, 'messages', 'recent'), { user_id: 'alice', epoch: 1, ...enc, pinned: false, created_at: Timestamp.now() });
+        await setDoc(c(ctx.firestore(), C1, 'messages', 'vieux'), { user_id: 'alice', epoch: 1, ...enc, pinned: false, created_at: Timestamp.fromMillis(Date.now() - 3600e3) });
+      });
+      const edit = { iv: 'J'.repeat(16), ciphertext: 'D'.repeat(40), edited_at: serverTimestamp() };
+      await assertSucceeds(updateDoc(c(as('alice'), C1, 'messages', 'recent'), edit));
+      await assertFails(updateDoc(c(as('bob'), C1, 'messages', 'recent'), edit));
+      await assertFails(updateDoc(c(as('dele'), C1, 'messages', 'recent'), edit));
+      await assertFails(updateDoc(c(as('alice'), C1, 'messages', 'vieux'), edit));
+      await assertFails(updateDoc(c(as('alice'), C1, 'messages', 'recent'), { ...edit, user_id: 'bob' }));
+    });
+    test('messages éphémères : 7 jours maximum, et conservés 30 jours comme preuve', async () => {
+      await assertSucceeds(postMessage(as('alice'), 'alice', 'messages', { expire_at: Timestamp.fromMillis(Date.now() + 864e5) }));
+      await assertFails(postMessage(as('bob'), 'bob', 'messages', { expire_at: Timestamp.fromMillis(Date.now() + 30 * 864e5) }));
+      await assertFails(postMessage(as('depu'), 'depu', 'messages', { expire_at: Timestamp.fromMillis(Date.now() - 1000) }));
+      await env.withSecurityRulesDisabled((ctx) => setDoc(c(ctx.firestore(), C1, 'messages', 'eph'), { user_id: 'alice', epoch: 1, ...enc, pinned: false, created_at: Timestamp.now(), expire_at: Timestamp.fromMillis(Date.now() - 864e5) }));
+      await assertFails(deleteDoc(c(as('dele'), C1, 'messages', 'eph')));
+    });
+    test('messages programmés : invisibles pour les autres, jamais au nom d\'un autre', async () => {
+      const sched = (uid, extra = {}) => ({ user_id: uid, channel: 'messages', epoch: 1, ...enc, send_at: Timestamp.fromMillis(Date.now() + 3600e3), created_at: serverTimestamp(), ...extra });
+      await assertSucceeds(setDoc(c(as('alice'), C1, 'scheduled', 's1'), sched('alice')));
+      await assertFails(setDoc(c(as('alice'), C1, 'scheduled', 's2'), sched('bob')));
+      await assertFails(setDoc(c(as('alice'), C1, 'scheduled', 's3'), sched('alice', { channel: 'staff_messages' })));
+      await assertFails(setDoc(c(as('alice'), C1, 'scheduled', 's4'), sched('alice', { channel: 'announcements' })));
+      await assertFails(setDoc(c(as('alice'), C1, 'scheduled', 's5'), sched('alice', { send_at: Timestamp.fromMillis(Date.now() + 60 * 864e5) })));
+      await assertFails(getDoc(c(as('bob'), C1, 'scheduled', 's1')));
+      await assertFails(getDocs(collection(as('dele'), 'classes', C1, 'scheduled')));
+      await assertSucceeds(getDocs(query(collection(as('alice'), 'classes', C1, 'scheduled'), where('user_id', '==', 'alice'))));
+      await assertFails(deleteDoc(c(as('bob'), C1, 'scheduled', 's1')));
+    });
+    test('stickers : ajoutés par les membres, supprimés par leur auteur ou l\'équipe', async () => {
+      const st = { by: 'alice', epoch: 1, ...enc, created_at: serverTimestamp() };
+      await assertSucceeds(setDoc(c(as('alice'), C1, 'stickers', 'st1'), st));
+      await assertFails(setDoc(c(as('bob'), C1, 'stickers', 'st2'), st));
+      await assertFails(setDoc(c(as('eve'), C1, 'stickers', 'st3'), { ...st, by: 'eve' }));
+      await assertFails(deleteDoc(c(as('bob'), C1, 'stickers', 'st1')));
+      await assertSucceeds(deleteDoc(c(as('dele'), C1, 'stickers', 'st1')));
+    });
+    test('réactions : seulement les emojis de la liste (rien de lisible en clair)', async () => {
+      await assertSucceeds(updateDoc(c(as('alice'), C1, 'messages', 'm1'), { 'reactions.alice': '🫡' }));
+      await assertFails(updateDoc(c(as('alice'), C1, 'messages', 'm1'), { 'reactions.alice': 'message secret' }));
+    });
     test('semaines A / B : cours marqués A ou B, et seul un délégué fixe la semaine A', async () => {
       await assertSucceeds(setDoc(c(as('dele'), C1, 'slots', 'sa'), { ...slot, week: 'A' }));
       await assertFails(setDoc(c(as('dele'), C1, 'slots', 'sc'), { ...slot, week: 'C' }));

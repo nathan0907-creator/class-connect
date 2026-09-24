@@ -305,7 +305,12 @@
               <p class="e2ee-line"><i class="ico ico-lock" aria-hidden="true"></i> Chiffré de bout en bout · <span data-channel-hint></span> · <span data-online-count>0</span> en ligne</p>
               <div class="head-chips"><button type="button" class="next-class dm-shortcut" data-open-dm><span data-dm-label>✉️ Contacter les délégués</span><b class="badge" data-badge="dm"></b></button><button type="button" class="next-class" data-next-class hidden></button><button type="button" class="next-class next-event" data-next-event hidden></button></div>
             </div>
-            <div class="online-stack" data-online-stack></div>
+            <div class="chat-head-tools">
+              <button type="button" class="icon-btn" data-chat-tool="search" title="Rechercher" aria-label="Rechercher dans le canal">🔍</button>
+              <button type="button" class="icon-btn" data-chat-tool="gallery" title="Galerie photos" aria-label="Galerie des photos et vidéos">🖼️</button>
+              <button type="button" class="icon-btn" data-chat-tool="pinned" title="Messages épinglés" aria-label="Tous les messages épinglés">📌</button>
+              <div class="online-stack" data-online-stack></div>
+            </div>
           </header>
           <div class="channel-tabs" role="tablist" aria-label="Canaux de discussion"></div>
           <div class="pinned-bar" hidden></div>
@@ -320,6 +325,7 @@
               <button type="button" class="icon-btn gif-btn" data-tool="gif" title="GIF" aria-label="Envoyer un GIF">GIF</button>
               <button type="button" class="icon-btn" data-tool="voice" title="Message vocal" aria-label="Enregistrer un message vocal"><i class="ico ico-mic" aria-hidden="true"></i></button>
               <button type="button" class="icon-btn" data-tool="emoji" title="Emoji" aria-label="Insérer un emoji"><i class="ico ico-smile" aria-hidden="true"></i></button>
+              <button type="button" class="icon-btn more-btn" data-tool="more" title="Plus d'outils : sondage, dessin, stickers, roue, formule, programmer…" aria-label="Plus d'outils">＋</button>
             </div>
             <textarea rows="1" placeholder="Message chiffré…" maxlength="4000" aria-label="Écrire un message"></textarea>
             <button type="submit" class="send-btn" title="Envoyer" aria-label="Envoyer"><i class="ico ico-send" aria-hidden="true"></i></button>

@@ -1893,3 +1893,10 @@ body.eco .logo-ring, body.eco .bday-cake, body.eco .install-icon img { animation
 @keyframes rocket-fly { 0% { transform: translate(0, 0) rotate(-45deg); opacity: 1; } 100% { transform: translate(40px, -260px) rotate(-45deg) scale(.4); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .rocket-fly { display: none; } }
 .voice-speed { border: 1px solid var(--border-strong); background: rgba(0, 0, 0, .25); color: var(--text); border-radius: 8px; padding: 1px 6px; font: 700 11px var(--font); cursor: pointer; }
+.chat-head-tools { display: flex; align-items: center; gap: 4px; }
+.chat-head-tools .icon-btn { font-size: 16px; }
+.reaction-pop.all { display: grid; grid-template-columns: repeat(8, 1fr); width: min(320px, 86vw); }
+.reaction-pop .more, .sheet-reactions button:last-child { font-weight: 700; }
+.sheet-reactions { flex-wrap: wrap; }
+.more-btn { font-size: 20px; font-weight: 700; }
+@media (max-width: 600px) { .chat-head-tools .icon-btn { width: 32px; height: 32px; } }

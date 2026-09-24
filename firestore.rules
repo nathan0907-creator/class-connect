@@ -258,8 +258,11 @@ service cloud.firestore {
       match /{channel}/{mid} {
         allow read: if isChannel(channel) && canChannel(cid, channel);
         allow create: if isChannel(channel) && canPost(cid, channel, request.resource.data)
-          && request.resource.data.keys().hasOnly(['user_id', 'epoch', 'iv', 'ciphertext', 'pinned', 'created_at', 'kind'])
-          && request.resource.data.get('kind', 'alert') in ['alert']
+          && request.resource.data.keys().hasOnly(['user_id', 'epoch', 'iv', 'ciphertext', 'pinned', 'created_at', 'kind', 'expire_at'])
+          && request.resource.data.get('kind', 'alert') in ['alert', 'poll']
+          // Ephemeral message: hidden after at most 7 days (still kept encrypted 30 days more as evidence).
+          && (!('expire_at' in request.resource.data) || (request.resource.data.expire_at is timestamp
+              && request.resource.data.expire_at > request.time && request.resource.data.expire_at <= request.time + duration.value(7, 'd')))
           && request.resource.data.user_id == uid()
           && request.resource.data.epoch == get(classPath(cid)).data.key_epoch
           && request.resource.data.pinned == false
@@ -280,10 +283,24 @@ service cloud.firestore {
               && request.resource.data.reactions is map && request.resource.data.reactions.size() <= 200
               && request.resource.data.reactions.diff(resource.data.get('reactions', {})).affectedKeys().hasOnly([uid()])
               && (!(uid() in request.resource.data.reactions)
-                  || request.resource.data.reactions[uid()] in ['👍', '❤️', '😂', '😮', '😢', '🔥', '🎉', '🚀'])));
-        // Permanent removal only once the 30-day retention period is over.
-        allow delete: if isChannel(channel) && canChannel(cid, channel) && 'deleted_at' in resource.data
-          && resource.data.deleted_at < request.time - duration.value(30, 'd');
+                  || request.resource.data.reactions[uid()] in ['👍', '❤️', '😂', '😮', '😢', '🔥', '🎉', '🚀',
+                       '👏', '🙏', '💯', '😍', '🤔', '😡', '😭', '🥳', '😎', '🤯', '👀', '✅', '❌', '💀', '🫡', '🤝',
+                       '💪', '⭐', '💜', '💙', '🍕', '☕', '😴', '🤡', '🙈', '🥲', '😅', '🤣', '👌', '✨', '🪐', '🌙']))
+          // Poll: each member votes for one option (and may change or take back their vote).
+          || (canChannel(cid, channel) && !('deleted_at' in resource.data) && resource.data.get('kind', '') == 'poll'
+              && onlyChanged(['votes']) && request.resource.data.votes is map && request.resource.data.votes.size() <= 200
+              && request.resource.data.votes.diff(resource.data.get('votes', {})).affectedKeys().hasOnly([uid()])
+              && (!(uid() in request.resource.data.votes)
+                  || (request.resource.data.votes[uid()] is int && request.resource.data.votes[uid()] >= 0 && request.resource.data.votes[uid()] < 10)))
+          // Editing: the author, within 15 minutes, same key (a harassing message can't be rewritten much later).
+          || (canChannel(cid, channel) && resource.data.user_id == uid() && !('deleted_at' in resource.data)
+              && onlyChanged(['iv', 'ciphertext', 'edited_at']) && request.resource.data.edited_at == request.time
+              && request.time < resource.data.created_at + duration.value(15, 'm')
+              && str(request.resource.data.iv, 10, 32) && str(request.resource.data.ciphertext, 10, 60000)));
+        // Permanent removal only once the 30-day retention period is over (after deletion, or after an ephemeral message expired).
+        allow delete: if isChannel(channel) && canChannel(cid, channel) && (
+          ('deleted_at' in resource.data && resource.data.deleted_at < request.time - duration.value(30, 'd'))
+          || ('expire_at' in resource.data && resource.data.expire_at < request.time - duration.value(30, 'd')));
       }
 
       // Harassment reports: evidence decrypted by the reporter's device, kept 30 days.
@@ -444,6 +461,33 @@ service cloud.firestore {
           && request.resource.data.kind in ['absent', 'room', 'cancel'] && isDate(request.resource.data.date)
           && request.resource.data.slot_id is string && request.resource.data.by == uid()
           && request.resource.data.created_at == request.time && sealed(request.resource.data, 2000);
+        allow update: if false;
+        allow delete: if isActiveMember(cid) && (resource.data.by == uid() || isStaff(cid));
+      }
+
+      // Scheduled messages: encrypted by their author when written, moved into the channel at the chosen time by the
+      // notification server (which still can't read them). Only the author sees or cancels them.
+      match /scheduled/{sid} {
+        allow read, delete: if signedIn() && resource.data.user_id == uid();
+        allow create: if isActiveMember(cid)
+          && request.resource.data.keys().hasOnly(['user_id', 'channel', 'epoch', 'iv', 'ciphertext', 'send_at', 'created_at'])
+          && request.resource.data.user_id == uid()
+          && isChannel(request.resource.data.channel) && canPost(cid, request.resource.data.channel, request.resource.data)
+          && request.resource.data.epoch == get(classPath(cid)).data.key_epoch
+          && str(request.resource.data.iv, 10, 32) && str(request.resource.data.ciphertext, 10, 60000)
+          && request.resource.data.send_at is timestamp && request.resource.data.send_at > request.time
+          && request.resource.data.send_at < request.time + duration.value(24, 'd')
+          && request.resource.data.created_at == request.time;
+        allow update: if false;
+      }
+
+      // Class stickers (small encrypted images made from members' photos).
+      match /stickers/{stid} {
+        allow read: if isActiveMember(cid);
+        allow create: if isActiveMember(cid)
+          && request.resource.data.keys().hasOnly(['by', 'epoch', 'iv', 'ciphertext', 'created_at'])
+          && request.resource.data.by == uid() && request.resource.data.created_at == request.time
+          && sealed(request.resource.data, 80000);
         allow update: if false;
         allow delete: if isActiveMember(cid) && (resource.data.by == uid() || isStaff(cid));
       }
