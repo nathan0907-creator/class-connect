@@ -31,11 +31,14 @@ function model(name, system, schema, temperature) {
   });
 }
 
-const isOverloaded = (e) => /429|503|RESOURCE_EXHAUSTED|quota|overloaded|UNAVAILABLE/i.test(String(e?.message || e));
+// Saturated model (quota, high demand, temporary server error): the lighter model takes over.
+const isOverloaded = (e) => /\b(429|500|503|504)\b|RESOURCE_EXHAUSTED|quota|overloaded|UNAVAILABLE|high demand|try again later|INTERNAL/i
+  .test(String(e?.message || e));
 
 function friendly(e) {
-  const msg = String(e?.message || e);
-  if (/API_NOT_ENABLED|has not been used|is disabled|firebasevertexai|generativelanguage|SERVICE_DISABLED|403/i.test(msg)) {
+  // The error text contains the service address: only the reason is looked at, never the URL.
+  const msg = String(e?.message || e).replace(/https?:\/\/\S+/g, '');
+  if (/API_NOT_ENABLED|has not been used|is disabled|SERVICE_DISABLED|\b403\b/i.test(msg)) {
     return new Error('L\'assistant IA n\'est pas encore activé sur ce projet (Firebase → AI Logic → Gemini Developer API).');
   }
   if (isOverloaded(e)) return new Error('L\'IA est très sollicitée ou le quota gratuit du jour est atteint. Réessaie dans quelques minutes.');

@@ -15,7 +15,7 @@ const HOUR_PX = 64;
 const SWATCHES = ['#7c5cff', '#00d4ff', '#ff4fd8', '#ffb547', '#3dffa8', '#ff6b6b', '#5b8cff', '#c77dff'];
 /** Usual colours per subject, so an imported timetable looks like a hand-made one. */
 const SUBJECT_COLORS = [
-  [/math/i, '#7c5cff'], [/fran[cç]ais|litt/i, '#ff6b6b'], [/hist|g[ée]o|emc/i, '#ffb547'], [/physi|chimie/i, '#00d4ff'],
+  [/^eps$|sport/i, '#3dffa8'], [/math/i, '#7c5cff'], [/fran[cç]ais|litt/i, '#ff6b6b'], [/hist|g[ée]o|emc/i, '#ffb547'], [/physi|chimie/i, '#00d4ff'],
   [/svt|bio|vie et de la terre/i, '#3dffa8'], [/anglais|espagnol|allemand|italien|lv\d|langue/i, '#ff4fd8'],
   [/philo|ses|[ée]co/i, '#c77dff'], [/nsi|info|techno|sni/i, '#5b8cff'], [/eps|sport/i, '#3dffa8'], [/art|musi/i, '#ff4fd8'],
 ];
@@ -356,13 +356,30 @@ const fixTime = (t) => {
   return HHMM.test(v) ? v : '';
 };
 
+// Pronote / ENT write in capitals without accents: usual subjects get their proper name back.
+const SUBJECT_NAMES = [
+  [/^(ed(ucation)?\.? ?physique.*sport.*|e\.?p\.?s\.?)$/i, 'EPS'], [/^math[ée]matiques?$/i, 'Mathématiques'], [/^fran[cç]ais$/i, 'Français'],
+  [/^hist(oire)?\.?[\s\-&/]*g[ée]o(graphie)?\.?$/i, 'Histoire-Géographie'], [/^physique[\s\-&]*chimie$/i, 'Physique-Chimie'],
+  [/^sciences? [ée]cono.*sociales?$/i, 'SES'], [/^ens(eignement)?\.? moral.*civique$/i, 'EMC'], [/^philosophie$/i, 'Philosophie'],
+  [/^sciences? num[ée]riques? et techno.*$/i, 'SNT'], [/^num[ée]rique.*sc.*inform.*$/i, 'NSI'], [/^sciences? de la vie.*terre$/i, 'SVT'],
+];
+const ACRONYM = /^(lv\d|svt|ses|emc|nsi|snt|eps|ap|ds|td|tp|hggsp|llcer|ecjs|ase|dnl)$/i;
+const titleCase = (s) => s.toLowerCase().replace(/(^|[\s\-'./(&])(\p{L})/gu, (m, sep, ch) => sep + ch.toUpperCase())
+  .replace(/[\p{L}\d]+/gu, (w) => (ACRONYM.test(w) ? w.toUpperCase() : w));
+/** "MATHEMATIQUES" → "Mathématiques", "MME MARTIN" → "Mme Martin" (text already in mixed case is kept). */
+export function niceName(s, subject = false) {
+  const t = s.replace(/\s+/g, ' ').trim();
+  if (subject) { const hit = SUBJECT_NAMES.find(([re]) => re.test(t)); if (hit) return hit[1]; }
+  return /\p{Ll}/u.test(t) ? t : titleCase(t);
+}
+
 /** Cleans what the AI read: only valid slots with the lengths allowed by the security rules. */
 export function cleanImported(list) {
   const used = new Map();
   return (Array.isArray(list) ? list : []).map((s) => ({
     day: Number.isInteger(s?.day) && s.day >= 0 && s.day <= 5 ? s.day : -1,
     start_at: fixTime(s?.start_at), end_at: fixTime(s?.end_at),
-    subject: txt(s?.subject, 40).trim(), teacher: txt(s?.teacher, 40).trim(), room: txt(s?.room, 20).trim(),
+    subject: niceName(txt(s?.subject, 60), true).slice(0, 40), teacher: niceName(txt(s?.teacher, 60)).slice(0, 40), room: txt(s?.room, 20).trim(),
     week: ['A', 'B'].includes(String(s?.week || '').trim().toUpperCase()) ? String(s.week).trim().toUpperCase() : '',
   })).filter((s) => s.day >= 0 && s.start_at && s.end_at && s.start_at < s.end_at && s.subject)
     .map((s) => ({ ...s, color: colorFor(s.subject, used) }));

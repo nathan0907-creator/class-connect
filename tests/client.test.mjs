@@ -157,6 +157,20 @@ describe('emploi du temps importé par l\'IA (photo / PDF)', async () => {
     for (const s of out) assert.match(s.color, /^#[0-9a-fA-F]{6}$/);
     assert.deepEqual(cleanImported('pas une liste'), []);
   });
+  test('les noms en MAJUSCULES de Pronote sont remis au propre', () => {
+    const out = cleanImported([
+      { day: 0, start_at: '08:00', end_at: '09:00', subject: 'MATHEMATIQUES', teacher: 'M. DUPONT', room: 'B204' },
+      { day: 0, start_at: '09:00', end_at: '10:00', subject: 'ED.PHYSIQUE & SPORT.', teacher: 'MME MARTIN', room: 'GYMNASE' },
+      { day: 1, start_at: '09:00', end_at: '10:00', subject: 'ANGLAIS LV1', teacher: 'MS SMITH', room: 'C08' },
+      { day: 2, start_at: '09:00', end_at: '10:00', subject: 'HISTOIRE-GEOGRAPHIE', teacher: 'M. LE GOFF', room: 'A1' },
+      { day: 3, start_at: '09:00', end_at: '10:00', subject: 'Physique-chimie (gr. 1)', teacher: 'Mme de la Tour', room: 'LABO 3' },
+    ]);
+    assert.deepEqual(out.map((s) => [s.subject, s.teacher, s.room]), [
+      ['Mathématiques', 'M. Dupont', 'B204'], ['EPS', 'Mme Martin', 'GYMNASE'], ['Anglais LV1', 'Ms Smith', 'C08'],
+      ['Histoire-Géographie', 'M. Le Goff', 'A1'], ['Physique-chimie (gr. 1)', 'Mme de la Tour', 'LABO 3'],
+    ]);
+    assert.notEqual(out[1].color, '#00d4ff');   // l'EPS n'a pas la couleur de la physique
+  });
   test('une même matière garde la même couleur', () => {
     const out = cleanImported([
       { day: 0, start_at: '08:00', end_at: '09:00', subject: 'Anglais' },
