@@ -6,7 +6,7 @@ import {
   createUserWithEmailAndPassword, signInWithEmailAndPassword, updatePassword, sendPasswordResetEmail, deleteUser, signOut,
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, writeBatch, serverTimestamp } from 'firebase/firestore';
-import { auth, db, synthEmail, isSynthetic, friendly } from './fb.js';
+import { auth, db, synthEmail, isSynthetic, saltEmail, otherSynth, friendly } from './fb.js';
 import { deriveAuthKey, createIdentity, unlockIdentity, storePrivateKey } from './crypto.js';
 import { resetIdentity } from './keyring.js';
 import { state } from './state.js';
@@ -134,7 +134,7 @@ export class Stage {
 // ------------------------------------------------------------ account operations
 async function lookup(identifier) {
   if (identifier.includes('@')) {
-    if (!EMAIL_RE.test(identifier)) throw new Error('Adresse e-mail invalide');
+    if (!EMAIL_RE.test(identifier) || isSynthetic(identifier.toLowerCase())) throw new Error('Adresse e-mail invalide');
     const email = identifier.toLowerCase();
     // Accounts register their e-mail in /emails so the site knows whether to log in or sign up.
     const known = await getDoc(doc(db, 'emails', email)).then((s) => s.exists()).catch(() => false);
@@ -144,19 +144,22 @@ async function lookup(identifier) {
   }
   if (!USERNAME_RE.test(identifier)) throw new Error('Pseudo : 3 à 24 caractères (lettres, chiffres, _ . -)');
   const snap = await getDoc(doc(db, 'usernames', identifier.toLowerCase()));
-  return snap.exists()
-    ? { mode: 'login', authEmail: snap.get('email'), label: identifier }
-    : { mode: 'register', username: identifier, label: identifier };
+  if (!snap.exists()) return { mode: 'register', username: identifier, label: identifier };
+  // Accounts with a real e-mail don't publish it next to their pseudo (anyone could read it): they log in with it.
+  const authEmail = snap.get('email');
+  if (!authEmail) throw new Error('Ce compte se connecte avec son adresse e-mail : tape-la à la place du pseudo.');
+  return { mode: 'login', authEmail, label: identifier };
 }
 
 async function createAccount({ username, password, email }) {
   const authEmail = (email || synthEmail(username)).toLowerCase();
-  const [authKey, identity] = await Promise.all([deriveAuthKey(authEmail, password), createIdentity(password)]);
+  const [authKey, identity] = await Promise.all([deriveAuthKey(saltEmail(authEmail), password), createIdentity(password)]);
   const cred = await createUserWithEmailAndPassword(auth, authEmail, authKey);
   const uid = cred.user.uid;
   try {
     const batch = writeBatch(db);
-    batch.set(doc(db, 'usernames', username.toLowerCase()), { uid, email: authEmail });
+    // Only the synthetic address of a pseudo account is stored with the pseudo (a real e-mail stays private).
+    batch.set(doc(db, 'usernames', username.toLowerCase()), isSynthetic(authEmail) ? { uid, email: authEmail } : { uid });
     batch.set(doc(db, 'users', uid), {
       username: username.toLowerCase(), display_name: username, color: COLORS[Math.floor(Math.random() * COLORS.length)],
       public_key: identity.publicKey, class_id: null, role: 'student', status: 'none', created_at: serverTimestamp(),
@@ -177,16 +180,24 @@ async function createAccount({ username, password, email }) {
  * e-mail (Firebase then stores the raw password): accept it once, re-harden it and regenerate keys.
  */
 async function signIn(authEmail, password) {
-  const derived = await deriveAuthKey(authEmail, password);
+  const derived = await deriveAuthKey(saltEmail(authEmail), password);
+  const refused = (err) => ['auth/invalid-credential', 'auth/wrong-password', 'auth/invalid-login-credentials', 'auth/user-not-found'].includes(err.code);
   let cred;
   let wasReset = false;
+  let firstErr;
   try {
     cred = await signInWithEmailAndPassword(auth, authEmail, derived);
   } catch (err) {
-    if (!['auth/invalid-credential', 'auth/wrong-password', 'auth/invalid-login-credentials'].includes(err.code)) throw err;
-    try {
-      cred = await signInWithEmailAndPassword(auth, authEmail, password);
-    } catch { throw err; }
+    if (!refused(err)) throw err;
+    firstErr = err;
+  }
+  // Pseudo account being moved to the new synthetic domain: try its other address (same password key).
+  if (!cred && isSynthetic(authEmail)) {
+    cred = await signInWithEmailAndPassword(auth, otherSynth(authEmail), derived).catch(() => { throw firstErr; });
+  }
+  if (!cred) {
+    // Real e-mail: the password may have just been reset by e-mail (raw password): accepted once, then re-hardened.
+    cred = await signInWithEmailAndPassword(auth, authEmail, password).catch(() => { throw firstErr; });
     await updatePassword(cred.user, derived);
     wasReset = true;
   }
@@ -195,7 +206,9 @@ async function signIn(authEmail, password) {
   if (!isSynthetic(authEmail)) setDoc(doc(db, 'emails', authEmail), { uid }).catch(() => {});
   const priv = await getDoc(doc(db, 'private', uid));
   if (wasReset || !priv.exists()) {
-    await resetIdentity(uid, password);
+    if (await resetIdentity(uid, password)) {
+      toast('Mot de passe changé : par sécurité, un délégué doit revalider ton accès à la classe.', 'info', 10000);
+    }
     return { reset: true };
   }
   try {
@@ -366,7 +379,7 @@ export function initAuthFlow({ onSuccess }) {
     if (f.password.value.length < 8) return error('Mot de passe : 8 caractères minimum');
     if (f.password.value !== f.confirm.value) return error('Les mots de passe ne correspondent pas');
     const email = ctx.email || f.email.value.trim();
-    if (email && !EMAIL_RE.test(email)) return error('Adresse e-mail invalide');
+    if (email && (!EMAIL_RE.test(email) || isSynthetic(email.toLowerCase()))) return error('Adresse e-mail invalide');
     if (!f.terms.checked) return error('Accepte les CGU et la politique de confidentialité pour continuer');
     if (!ctx.username) {
       const taken = await getDoc(doc(db, 'usernames', username.toLowerCase())).then((s) => s.exists()).catch(() => false);

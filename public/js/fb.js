@@ -40,10 +40,19 @@ export async function startAnalytics() {
   if (await isSupported()) getAnalytics(app);
 }
 
-// Accounts without an e-mail get a synthetic, never-mailed address.
-const SYNTH_DOMAIN = 'users.classconnect.app';
+// Accounts without an e-mail get a synthetic address on a reserved domain (".invalid", RFC 2606): no one can ever
+// own it or receive mail there, so no one can ask for a password-reset link for these accounts.
+const SYNTH_DOMAIN = 'pseudo.class-connect.invalid';
+// First domain used: it belongs to someone else, so the accounts were moved off it (server/migrate-securite.mjs).
+// It is still the salt of their password key, so moving an account doesn't change its password.
+const OLD_SYNTH_DOMAIN = 'users.classconnect.app';
 export const synthEmail = (username) => `${username.toLowerCase()}@${SYNTH_DOMAIN}`;
-export const isSynthetic = (email) => email.endsWith('@' + SYNTH_DOMAIN);
+export const isSynthetic = (email) => email.endsWith('@' + SYNTH_DOMAIN) || email.endsWith('@' + OLD_SYNTH_DOMAIN);
+/** Salt of the password key: the address the account was created with (same for both synthetic domains). */
+export const saltEmail = (email) => (email.endsWith('@' + SYNTH_DOMAIN) ? email.slice(0, -SYNTH_DOMAIN.length) + OLD_SYNTH_DOMAIN : email);
+/** The other synthetic address of a pseudo account (before / after the move). */
+export const otherSynth = (email) => (email.endsWith('@' + OLD_SYNTH_DOMAIN)
+  ? email.slice(0, -OLD_SYNTH_DOMAIN.length) + SYNTH_DOMAIN : saltEmail(email));
 
 // ---- paths
 export const userRef = (uid) => doc(db, 'users', uid);

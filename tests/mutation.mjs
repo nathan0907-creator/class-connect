@@ -21,7 +21,11 @@ const MUTANTS = [
   ['réactions des autres modifiables', ".affectedKeys().hasOnly([uid()])", '.affectedKeys().size() >= 0'],
   ['adhésion sans validation', "&& a.status == 'pending' && a.invite_code is string", "&& a.status in ['pending', 'active'] && a.invite_code is string"],
   ['nommer prof en donnant aussi « prof principal »', "&& notTrusted(a) && notPrincipal(a)\n            && ((b.role != 'teacher'", "&& notTrusted(a)\n            && ((b.role != 'teacher'"],
-  ['clé privée lisible par tous', "match /private/{userId} {\n      allow read: if signedIn() && userId == uid();", "match /private/{userId} {\n      allow read: if signedIn();"],
+  ['vraie adresse e-mail publiée avec le pseudo', "&& request.resource.data.email == name + '@pseudo.class-connect.invalid'", ''],
+  ['couleur non vérifiée (injection CSS)', "str(a.display_name, 1, 40) && validColor(a.color)", 'str(a.display_name, 1, 40)'],
+  ['nouvelle clé sans revalidation', "(a.public_key == b.public_key || b.status != 'active' || b.role == 'delegate')", 'true'],
+  ['code professeurs lisible par les élèves', "match /secrets/{docId} {\n        allow read: if isDelegate(cid);", "match /secrets/{docId} {\n        allow read: if isActiveMember(cid);"],
+  ['clé privée lisible par tous',"match /private/{userId} {\n      allow read: if signedIn() && userId == uid();", "match /private/{userId} {\n      allow read: if signedIn();"],
 ];
 
 let survived = 0;

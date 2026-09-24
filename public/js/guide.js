@@ -43,9 +43,9 @@ const TOPICS = {
     label: 'Mot de passe oublié',
     body: () => [
       h('ol.guide-steps',
-        step(1, 'Entre ton pseudo ou ton e-mail', 'puis touche « Décoller » comme pour te connecter.'),
+        step(1, 'Entre ton adresse e-mail', 'puis touche « Décoller » comme pour te connecter.'),
         step(2, 'Touche « Mot de passe oublié ? »', 'Un e-mail t\'est envoyé (regarde aussi dans les spams). Ouvre le lien et choisis un nouveau mot de passe.'),
-        step(3, 'Reviens te connecter', 'avec le nouveau mot de passe. Pour ta sécurité, de nouvelles clés sont créées : un membre de la classe en ligne te retransmet l\'accès aux messages.')),
+        step(3, 'Reviens te connecter', 'avec le nouveau mot de passe. Pour ta sécurité, de nouvelles clés sont créées : un délégué doit revalider ton accès à la classe (comme à ta première arrivée).')),
       tip('⚠️ Sans e-mail lié au compte, le mot de passe ne peut pas être réinitialisé : il faudra créer un nouveau compte et redemander l\'accès à ton délégué.'),
     ],
   },

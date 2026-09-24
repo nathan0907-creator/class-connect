@@ -4,6 +4,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
+import { execFileSync } from 'node:child_process';
 
 const root = path.resolve(import.meta.dirname, '..');
 const pub = path.join(root, 'public');
@@ -98,6 +100,48 @@ test('le site en ligne répond en HTTPS et ne publie pas les fichiers sensibles'
   }
   const http = await fetch(base.replace('https:', 'http:'), { redirect: 'manual' }).catch(() => null);
   if (http) assert.ok([301, 302, 307, 308].includes(http.status), `HTTP devrait rediriger vers HTTPS (${http.status})`);
+});
+
+test('chaque page a une politique de sécurité (CSP) stricte, à jour avec ses scripts intégrés', async () => {
+  const { withCsp } = await import('../scripts/csp.mjs');
+  for (const f of publicFiles.filter((x) => x.endsWith('.html'))) {
+    const s = read(f);
+    // First thing in <head> after the charset, so it covers every script of the page.
+    assert.match(s, /<head>\s*<meta charset="utf-8">\s*<meta http-equiv="Content-Security-Policy"/, rel(f));
+    const csp = s.match(/http-equiv="Content-Security-Policy" content="([^"]*)"/)[1];
+    const scriptSrc = csp.split(';').find((d) => d.trim().startsWith('script-src'));
+    assert.ok(!/'unsafe-inline'|'unsafe-eval'|\s\*(\s|$)|\shttps:(\s|$)|\sdata:|\sblob:/.test(scriptSrc), `script-src trop large : ${rel(f)}`);
+    for (const d of ["object-src 'none'", "base-uri 'self'", "form-action 'self'", "default-src 'self'"]) assert.ok(csp.includes(d), `${d} : ${rel(f)}`);
+    assert.equal(s, withCsp(s), `empreintes CSP périmées dans ${rel(f)} : lancer « node scripts/csp.mjs »`);
+  }
+});
+
+test('le site refuse de s\'afficher dans le cadre d\'un autre site (clickjacking)', () => {
+  for (const f of publicFiles.filter((x) => x.endsWith('.html'))) {
+    assert.match(read(f), /if \(self !== top\) \{ document\.documentElement\.style\.display = 'none';/, rel(f));
+  }
+});
+
+test('après la construction du site (versions ajoutées), la CSP reste valide', async () => {
+  const { withCsp } = await import('../scripts/csp.mjs');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-build-'));
+  try {
+    fs.cpSync(pub, path.join(tmp, 'public'), { recursive: true });
+    fs.cpSync(path.join(root, 'scripts'), path.join(tmp, 'scripts'), { recursive: true });
+    execFileSync(process.execPath, [path.join(tmp, 'scripts', 'cache-bust.mjs'), 'test1'], { stdio: 'pipe' });
+    for (const f of fs.readdirSync(path.join(tmp, 'public')).filter((n) => n.endsWith('.html'))) {
+      const s = fs.readFileSync(path.join(tmp, 'public', f), 'utf8');
+      assert.equal(s, withCsp(s), f);
+    }
+    assert.match(fs.readFileSync(path.join(tmp, 'public', 'cgu.html'), 'utf8'), /consent\.js\?v=test1/);
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+});
+
+test('les fichiers reçus ne sont jamais ouverts avec le type choisi par l\'expéditeur', () => {
+  for (const f of publicFiles.filter((x) => x.endsWith('.js'))) {
+    const bad = read(f).match(/new Blob\(\[[^\]]*\],\s*\{\s*type:\s*(f|file|payload\.file)\.mime\s*\}/);
+    assert.ok(!bad, `${rel(f)} : ${bad?.[0]} — passer par safeMime() (js/safe.js)`);
+  }
 });
 
 test('aucun sélecteur « $(…) » utilisé comme une liste (bug qui bloquait le démarrage)', () => {

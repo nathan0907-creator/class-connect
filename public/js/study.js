@@ -5,6 +5,7 @@ import { state, on, isDelegate, canPublish, memberName } from './state.js';
 import { encryptJSON, decryptJSON, toB64 } from './crypto.js';
 import { currentKey } from './keyring.js';
 import { uploadEncrypted, downloadDecrypted, deleteFileChunks, compressImage, MAX_FILE } from './media.js';
+import { safeMime, cleanFile } from './safe.js';
 import { generate, systemInstruction, prompts, quizSchema, examSchema, gradingSchema } from './ai.js';
 import { renderMarkdown } from './md.js';
 import { $, $$, h, icon, modal, toast, toastError, confirmDialog, fmtSize, fmtDay, busy } from './ui.js';
@@ -61,7 +62,19 @@ export function stopStudy() { unsub?.(); unsub = null; courses = []; selected.cl
 async function decryptMeta(row) {
   const key = state.classKeys.get(row.epoch);
   if (!key) return null;
-  try { return await decryptJSON(key, row.iv, row.ciphertext, courseAad(row)); } catch { return null; }
+  try { return cleanMeta(await decryptJSON(key, row.iv, row.ciphertext, courseAad(row))); } catch { return null; }
+}
+/** Course written by another member: only known fields with the right types. */
+function cleanMeta(m) {
+  if (!m || typeof m !== 'object') return null;
+  const s = (v, max) => (typeof v === 'string' ? v.slice(0, max) : '');
+  return {
+    title: s(m.title, 120) || 'Sans titre', subject: s(m.subject, 60), kind: KINDS[m.kind] ? m.kind : 'autre', text: s(m.text, 2_000_000),
+    // `mime` is safe to open on the site; `ai_mime` is only the label sent to the AI with the file.
+    files: (Array.isArray(m.files) ? m.files : []).slice(0, 20)
+      .map((f) => { const c = cleanFile(f, ['image', 'doc']); return c && { ...c, ai_mime: s(f.mime, 100) || c.mime }; })
+      .filter(Boolean),
+  };
 }
 async function decryptAll() {
   let changed = false;
@@ -171,8 +184,10 @@ async function preview(c) {
     const items = [];
     if (c.meta.text) items.push(h('pre.course-text', c.meta.text));
     for (const f of c.meta.files || []) {
-      const url = URL.createObjectURL(new Blob([await downloadDecrypted(f, key)], { type: f.mime }));
-      if (f.mime.startsWith('image/')) items.push(h('img', { src: url, alt: `${c.meta.title} — ${f.name}` }));
+      // The type comes from the uploader: only images, PDFs and plain text are opened as such.
+      const mime = safeMime(f.mime, ['image', 'doc']);
+      const url = URL.createObjectURL(new Blob([await downloadDecrypted(f, key)], { type: mime }));
+      if (mime.startsWith('image/')) items.push(h('img', { src: url, alt: `${c.meta.title} — ${f.name}` }));
       else items.push(h('a.btn.btn-ghost.btn-sm', { href: url, target: '_blank', rel: 'noopener', download: f.name }, icon('book'), h('span', `Ouvrir ${f.name}`)));
     }
     body.replaceChildren(...items);
@@ -218,7 +233,8 @@ function openUpload() {
         if (subject.value.trim().length < 2) throw new Error('Indique la matière');
         const chosen = [...files.files];
         if (!chosen.length && !text.value.trim()) throw new Error('Ajoute au moins un fichier ou du texte');
-        const bad = chosen.find((f) => !/^(application\/pdf|image\/|text\/)/.test(f.type) && !/\.(md|txt)$/i.test(f.name));
+        const bad = chosen.find((f) => (!/^(application\/pdf|image\/|text\/)/.test(f.type) && !/\.(md|txt)$/i.test(f.name))
+          || /svg|html|xml/i.test(f.type));
         if (bad) throw new Error(`Format non pris en charge : ${bad.name}. Convertis-le en PDF.`);
         const key = currentKey();
         if (!key) throw new Error('Clé de la classe pas encore reçue');
@@ -286,8 +302,8 @@ async function courseParts() {
     if (c.meta.text) parts.push({ text: c.meta.text });
     for (const f of c.meta.files || []) {
       const bytes = await downloadDecrypted(f, key);
-      if (f.mime.startsWith('text/') || /\.(md|txt)$/i.test(f.name)) parts.push({ text: new TextDecoder().decode(bytes) });
-      else parts.push({ inlineData: { mimeType: f.mime, data: toB64(bytes) } });
+      if (f.ai_mime.startsWith('text/') || /\.(md|txt)$/i.test(f.name)) parts.push({ text: new TextDecoder().decode(bytes) });
+      else parts.push({ inlineData: { mimeType: f.ai_mime, data: toB64(bytes) } });
     }
     parts.push({ text: `=== FIN DU DOCUMENT « ${c.meta.title} » ===` });
   }

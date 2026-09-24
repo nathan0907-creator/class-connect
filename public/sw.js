@@ -90,7 +90,7 @@ async function preview(d) {
     const aad = d.channel === 'messages' ? `msg|${d.cid}|${d.epoch}|${d.user_id}` : `msg|${d.cid}|${d.channel}|${d.epoch}|${d.user_id}`;
     const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromB64(d.iv), additionalData: new TextEncoder().encode(aad) }, key, fromB64(d.ciphertext));
     const p = JSON.parse(new TextDecoder().decode(plain));
-    if (p.text) return p.text.length > 180 ? p.text.slice(0, 177) + '…' : p.text;
+    if (typeof p.text === 'string' && p.text) return p.text.length > 180 ? p.text.slice(0, 177) + '…' : p.text;
     return p.t === 'audio' ? '🎤 Message vocal' : p.t === 'video' ? '🎬 Vidéo' : p.t === 'gif' ? 'GIF' : p.t === 'image' ? '🖼️ Photo' : null;
   } catch { return null; }
 }
@@ -120,6 +120,12 @@ self.addEventListener('notificationclick', (event) => {
     const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     const win = wins.find((w) => new URL(w.url).pathname.startsWith(new URL(self.registration.scope).pathname));
     if (win) return win.focus();
-    return self.clients.openWindow(event.notification.data?.url || './');
+    // Only pages of this site can be opened from a notification.
+    let url = new URL('./', self.registration.scope).href;
+    try {
+      const u = new URL(event.notification.data?.url || './', self.registration.scope);
+      if (u.origin === self.location.origin) url = u.href;
+    } catch { /* keep the home page */ }
+    return self.clients.openWindow(url);
   })());
 });

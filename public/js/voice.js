@@ -1,6 +1,7 @@
 // Voice messages: recorded in the browser, then encrypted and uploaded like photos (see chat.js / media.js).
 import { state } from './state.js';
 import { downloadDecrypted } from './media.js';
+import { safeMime } from './safe.js';
 import { h, icon, toast } from './ui.js';
 
 const MAX_SECONDS = 180;
@@ -93,7 +94,7 @@ export function voicePlayer(file, epoch) {
     box.classList.add('loading');
     try {
       const bytes = await downloadDecrypted(file, state.classKeys.get(epoch));
-      audio = new Audio(URL.createObjectURL(new Blob([bytes], { type: file.mime })));
+      audio = new Audio(URL.createObjectURL(new Blob([bytes], { type: safeMime(file.mime, ['audio']) })));
       audio.addEventListener('timeupdate', () => {
         const d = audio.duration && Number.isFinite(audio.duration) ? audio.duration : file.duration || 1;
         fill.style.width = `${Math.min(100, (audio.currentTime / d) * 100)}%`;

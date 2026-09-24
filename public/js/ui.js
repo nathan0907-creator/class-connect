@@ -1,6 +1,7 @@
 // Small DOM toolkit: element builder, toasts, modals, 3D tilt, formatting.
 import { friendly } from './fb.js';
 import { state } from './state.js';
+import { safeColor } from './safe.js';
 
 export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -57,7 +58,7 @@ export function avatar(profile, size = 36, photo = undefined) {
   const initials = name.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
   const p = state.profiles?.get(profile?.id);
   const src = photo !== undefined ? photo : p?.gif || p?.photo;
-  const style = { '--c': profile?.color || '#7c5cff', width: size + 'px', height: size + 'px', fontSize: size * 0.38 + 'px' };
+  const style = { '--c': safeColor(profile?.color), width: size + 'px', height: size + 'px', fontSize: size * 0.38 + 'px' };
   if (isSafeAvatar(src)) {
     return h('div.avatar.has-photo', { style: { ...style, backgroundImage: `url("${src}")` }, role: 'img', 'aria-label': name });
   }

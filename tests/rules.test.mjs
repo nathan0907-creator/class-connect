@@ -26,7 +26,8 @@ const USERS = {
   eve: { role: 'delegate', class_id: C2, status: 'active' },   // délégué… d'une autre classe
   newbie: { role: 'student', class_id: null, status: 'none' },
 };
-const as = (uid) => env.authenticatedContext(uid, { email: `${uid}@users.classconnect.app` }).firestore();
+const SYNTH = '@pseudo.class-connect.invalid';
+const as = (uid, email = uid + SYNTH) => env.authenticatedContext(uid, { email }).firestore();
 const anon = () => env.unauthenticatedContext().firestore();
 const c = (db, ...p) => doc(db, 'classes', ...p);
 const enc = { iv: 'I'.repeat(16), ciphertext: 'C'.repeat(40) };
@@ -57,7 +58,7 @@ beforeEach(async () => {
         username: uid, display_name: uid, color: '#7c5cff', public_key: PK, created_at: now,
         trusted: false, principal: false, invite_code: null, ...u,
       });
-      await setDoc(doc(db, 'usernames', uid), { uid, email: `${uid}@users.classconnect.app` });
+      await setDoc(doc(db, 'usernames', uid), { uid, email: uid + SYNTH });
       await setDoc(doc(db, 'private', uid), { enc_salt: 'S', enc_private_key: 'K'.repeat(40), priv_iv: 'V' });
     }
     await setDoc(c(db, C1), { name: 'Classe 1', invite_code: 'AAAA-AAAA', teacher_code: 'TTTT-TTTT', key_epoch: 1, created_by: 'dele', created_at: now });
@@ -65,6 +66,8 @@ beforeEach(async () => {
     await setDoc(doc(db, 'invites', 'AAAA-AAAA'), { class_id: C1 });
     await setDoc(doc(db, 'invites', 'TTTT-TTTT'), { class_id: C1, role: 'teacher' });
     await setDoc(doc(db, 'invites', 'BBBB-BBBB'), { class_id: C2 });
+    await setDoc(c(db, C1, 'secrets', 'codes'), { teacher_code: 'TTTT-TTTT' });
+    await setDoc(doc(db, 'invites', 'UUUU-UUUU'), { class_id: C1, role: 'teacher' });
     await setDoc(c(db, C1, 'shares', '1_alice'), { epoch: 1, user_id: 'alice', from_user_id: 'dele', from_public_key: PK, iv: 'I'.repeat(16), wrapped: 'W'.repeat(40) });
     await setDoc(c(db, C1, 'messages', 'm1'), { user_id: 'alice', epoch: 1, ...enc, pinned: false, created_at: now, reactions: { bob: '👍' } });
     await setDoc(c(db, C1, 'staff_messages', 's1'), { user_id: 'prof', epoch: 1, ...enc, pinned: false, created_at: now });
@@ -371,10 +374,53 @@ describe('NIVEAU 3 — attaques poussées', () => {
       await assertFails(deleteDoc(doc(as('alice'), 'users', 'alice')));
     });
     test('voler le pseudo d\'un autre à l\'inscription est impossible', async () => {
-      await assertFails(setDoc(doc(as('newbie'), 'usernames', 'alice'), { uid: 'newbie', email: 'newbie@users.classconnect.app' }));
+      await assertFails(setDoc(doc(as('newbie'), 'usernames', 'alice'), { uid: 'newbie', email: 'newbie' + SYNTH }));
       await assertFails(deleteDoc(doc(as('newbie'), 'usernames', 'alice')));
       // témoin : réserver un pseudo libre pour soi fonctionne
-      await assertSucceeds(setDoc(doc(as('newbie'), 'usernames', 'newbie2'), { uid: 'newbie', email: 'newbie@users.classconnect.app' }));
+      await assertSucceeds(setDoc(doc(as('nouveau'), 'usernames', 'nouveau'), { uid: 'nouveau', email: 'nouveau' + SYNTH }));
+    });
+  });
+
+  describe('comptes, confidentialité et clés', () => {
+    test('le pseudo (lisible par tous) ne peut jamais révéler une vraie adresse e-mail', async () => {
+      const reel = as('reel', 'reel@exemple.fr');
+      await assertFails(setDoc(doc(reel, 'usernames', 'reel'), { uid: 'reel', email: 'reel@exemple.fr' }));
+      // témoin : un compte avec e-mail réserve son pseudo sans l'adresse
+      await assertSucceeds(setDoc(doc(reel, 'usernames', 'reel'), { uid: 'reel' }));
+    });
+    test("adresse de pseudo : ni l'ancien domaine (il appartient à quelqu'un d'autre), ni celle d'un autre pseudo", async () => {
+      await assertFails(setDoc(doc(as('vieux', 'vieux@users.classconnect.app'), 'usernames', 'vieux'), { uid: 'vieux', email: 'vieux@users.classconnect.app' }));
+      await assertFails(setDoc(doc(as('nouveau'), 'usernames', 'autre'), { uid: 'nouveau', email: 'nouveau' + SYNTH }));
+    });
+    test('une couleur piégée (injection CSS) est refusée', async () => {
+      await assertFails(updateDoc(doc(as('alice'), 'users', 'alice'), { color: 'url(https://evil.example/pixel)' }));
+      await assertFails(updateDoc(doc(as('alice'), 'users', 'alice'), { color: '#12345' }));
+      await assertSucceeds(updateDoc(doc(as('alice'), 'users', 'alice'), { color: '#12ab5f' }));
+    });
+    test("une nouvelle clé (mot de passe réinitialisé) repasse par la validation d'un délégué", async () => {
+      const newKey = { public_key: 'Q'.repeat(88) };
+      await assertFails(updateDoc(doc(as('alice'), 'users', 'alice'), newKey));
+      await assertFails(updateDoc(doc(as('prof'), 'users', 'prof'), newKey));
+      await assertSucceeds(updateDoc(doc(as('alice'), 'users', 'alice'), { ...newKey, status: 'pending' }));
+      // le délégué garde son accès (personne d'autre ne pourrait le valider)
+      await assertSucceeds(updateDoc(doc(as('dele'), 'users', 'dele'), newKey));
+    });
+    test('en attente de revalidation, plus aucune lecture de la classe', async () => {
+      await updateDoc(doc(as('alice'), 'users', 'alice'), { public_key: 'Q'.repeat(88), status: 'pending' });
+      await assertFails(getDocs(collection(as('alice'), 'classes', C1, 'messages')));
+      await assertFails(getDocs(collection(as('alice'), 'classes', C1, 'shares')));
+    });
+    test("le code professeurs n'est lisible et modifiable que par les délégués", async () => {
+      for (const u of ['alice', 'prof', 'depu', 'pend', 'eve']) await assertFails(getDoc(c(as(u), C1, 'secrets', 'codes')));
+      await assertSucceeds(getDoc(c(as('dele'), C1, 'secrets', 'codes')));
+      // un code élève ne peut pas être enregistré comme code professeurs
+      await assertFails(setDoc(c(as('dele'), C1, 'secrets', 'codes'), { teacher_code: 'AAAA-AAAA' }));
+      await assertFails(setDoc(c(as('alice'), C1, 'secrets', 'codes'), { teacher_code: 'UUUU-UUUU' }));
+      await assertSucceeds(setDoc(c(as('dele'), C1, 'secrets', 'codes'), { teacher_code: 'UUUU-UUUU' }));
+    });
+    test('le code professeurs ne peut plus être remis dans le document de classe (lisible par tous)', async () => {
+      await assertFails(updateDoc(c(as('dele'), C1), { teacher_code: 'UUUU-UUUU' }));
+      await assertSucceeds(updateDoc(c(as('dele'), C1), { teacher_code: deleteField() }));
     });
   });
 });

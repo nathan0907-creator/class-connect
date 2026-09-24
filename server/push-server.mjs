@@ -118,6 +118,8 @@ async function notifyDM(cid, threadRef, msg) {
     .filter(([, u]) => u.class_id === cid && (u.role === 'delegate' || (t.include_principal && u.role === 'teacher' && u.principal)))
     .map(([uid]) => uid)]);
   recipients.delete(msg.user_id);
+  // `users` only holds active members: a student who left, or waits for re-approval, gets nothing.
+  if (users.get(t.student_id)?.class_id !== cid) recipients.delete(t.student_id);
   await sendTo(recipients, {
     title: `✉️ ${sender.display_name || 'Quelqu\'un'} · Message privé`,
     body: 'Nouveau message privé chiffré (Contacter les délégués)',

@@ -2,8 +2,9 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8">
-  <script>if (location.protocol === 'http:' && !/^(localhost|127\.|\[::1\])/.test(location.hostname)) location.replace('https:' + location.href.slice(5));</script>
-  <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-aa//tPmmlGyItVTvOTW4fNGcj+SsPjqqRp3IynyjVA4=' 'sha256-Z7XMt9oYuMyMkJ03FfOVtJamgWJA9/bsnWROx5HjQag=' https://www.gstatic.com/firebasejs/12.19.0/ https://cdn.jsdelivr.net/npm/three@0.170.0/ https://cdn.jsdelivr.net/npm/katex@0.18.7/ https://cdn.jsdelivr.net/npm/qrcode-generator@2.0.4/ https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/ https://apis.google.com https://www.googletagmanager.com https://*.europe-west1.firebasedatabase.app; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net/npm/katex@0.18.7/; font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net/npm/katex@0.18.7/; img-src 'self' data: blob: https:; media-src 'self' data: blob:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app wss://*.firebasedatabase.app https://api.giphy.com https://www.google.com https://www.gstatic.com https://cdn.jsdelivr.net https://fonts.googleapis.com https://fonts.gstatic.com https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com; frame-src https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/ https://class-connectv3.firebaseapp.com; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+  <script>if (location.protocol === 'http:' && !/^(localhost|127\.|\[::1\])/.test(location.hostname)) location.replace('https:' + location.href.slice(5));
+  /* Anti-clickjacking: never usable inside another site's frame. */ if (self !== top) { document.documentElement.style.display = 'none'; try { top.location.replace(location.href); } catch (e) {} }</script>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Politique de confidentialité (RGPD) — Class Connect</title>
   <meta name="description" content="Quelles données Class Connect collecte, pourquoi, combien de temps, et comment exercer tes droits RGPD.">
@@ -182,8 +183,12 @@
 
       <h2 id="securite">8. Sécurité</h2>
       <p>HTTPS obligatoire, chiffrement de bout en bout (ECDH P-256 + AES-256-GCM), règles d'accès vérifiées par le serveur et testées automatiquement,
-      protection anti-robots (App Check), limitation anti-spam, empreintes de sécurité pour vérifier les clés de tes camarades.</p>
-      <p>Conséquence du chiffrement : <b>si tu oublies ton mot de passe</b>, de nouvelles clés sont créées et un membre de ta classe doit te retransmettre l'accès aux messages.
+      protection anti-robots (App Check), limitation anti-spam, empreintes de sécurité pour vérifier les clés de tes camarades,
+      politique de sécurité du contenu (CSP) qui bloque tout code étranger, protection contre l'intégration du site dans une autre page,
+      et vérification de tout ce qu'envoient les autres membres (fichiers déguisés, liens, couleurs) avant affichage.
+      Les comptes créés avec un simple pseudo utilisent une adresse technique sur un domaine réservé, qui ne peut recevoir aucun e-mail.</p>
+      <p>Conséquence du chiffrement : <b>si tu oublies ton mot de passe</b>, de nouvelles clés sont créées ; par sécurité, un délégué doit
+      <b>revalider ton accès</b> (pour qu'une personne qui aurait piraté ta boîte mail ne reçoive pas l'historique de la classe).
       En cas de fuite de données, l'éditeur prévient la CNIL et les personnes concernées dans les délais prévus par la loi.</p>
 
       <h2 id="mineurs">9. Si tu as moins de 15 ans</h2>

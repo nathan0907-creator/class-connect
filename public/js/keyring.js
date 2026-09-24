@@ -109,8 +109,13 @@ export async function resetIdentity(uid, password) {
     const old = await getDocs(query(sub(me.class_id, 'shares'), where('user_id', '==', uid)));
     await Promise.allSettled(old.docs.map((d) => deleteDoc(d.ref)));
   }
-  await updateDoc(userRef(uid), { public_key: identity.publicKey });
+  // A new key must be approved again by a delegate before classmates re-share the class keys with it: otherwise
+  // whoever got into the e-mail box (password reset) would silently receive the whole history. Delegates keep their
+  // access (nobody else could approve them).
+  const revalidate = !!me.class_id && me.status === 'active' && me.role !== 'delegate';
+  await updateDoc(userRef(uid), revalidate ? { public_key: identity.publicKey, status: 'pending' } : { public_key: identity.publicKey });
   state.privateKey = identity.privateKey;
   state.classKeys.clear();
   await storePrivateKey(uid, identity.privateKey);
+  return revalidate;
 }

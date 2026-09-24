@@ -12,6 +12,7 @@ const c = await import('../public/js/crypto.js');
 const { h, linkify, avatar } = await import('../public/js/ui.js');
 const { renderMarkdown } = await import('../public/js/md.js');
 const { state } = await import('../public/js/state.js');
+const { safeMime, cleanFile, cleanPayload, safeColor, BINARY } = await import('../public/js/safe.js');
 
 const PAYLOADS = [
   '<img src=x onerror=alert(1)>',
@@ -78,6 +79,55 @@ describe('injection de code (XSS)', () => {
     }
     state.profiles = new Map([['u4', { gif: 'https://media2.giphy.com/media/v1.Y2lk/3o7TKSjRrfIPjeiVyM/100w.gif?cid=abc&rid=100w.gif' }]]);
     assert.ok(avatar({ id: 'u4', display_name: 'Tom' }, 40).classList.contains('has-photo'));
+  });
+});
+
+describe('messages piégés par un membre de la classe (contenu chiffré mais malveillant)', () => {
+  const FILE = { id: 'A'.repeat(20), chunks: 2, iv: 'I'.repeat(16), mime: 'image/png', name: 'photo.png', size: 1000 };
+
+  test('un fichier déguisé (SVG, HTML, XML…) ne s\'ouvre jamais comme une page du site', () => {
+    for (const mime of ['image/svg+xml', 'text/html', 'application/xhtml+xml', 'text/xml', 'application/javascript', 'IMAGE/SVG+XML', 'text/html;charset=utf-8', '', null, 42]) {
+      assert.equal(safeMime(mime), BINARY, String(mime));
+      assert.equal(safeMime(mime, ['image', 'doc']), BINARY, String(mime));
+      assert.equal(cleanPayload({ t: 'image', file: { ...FILE, mime } }).file.mime, BINARY, String(mime));
+    }
+    // témoins : les vrais médias gardent leur type
+    assert.equal(safeMime('image/jpeg'), 'image/jpeg');
+    assert.equal(safeMime('audio/webm;codecs=opus', ['audio']), 'audio/webm');
+    assert.equal(safeMime('application/pdf', ['image', 'doc']), 'application/pdf');
+    assert.equal(safeMime('video/mp4', ['audio']), BINARY);
+  });
+  test('un descripteur de fichier truqué est refusé (chemin, nombre de morceaux géant, types)', () => {
+    for (const bad of [
+      { ...FILE, id: '../../users/alice' }, { ...FILE, id: 'x/dm/y'.padEnd(20, 'z') }, { ...FILE, chunks: 1e9 },
+      { ...FILE, chunks: 0 }, { ...FILE, chunks: '3' }, { ...FILE, iv: { toString: null } }, null, 'fichier', [],
+    ]) assert.equal(cleanFile(bad, ['image']), null, JSON.stringify(bad));
+    const f = cleanFile({ ...FILE, w: 'NaN', size: -5, name: { x: 1 }, extra: '<script>' }, ['image']);
+    assert.deepEqual(f, { ...FILE, w: 0, h: 0, size: 0, duration: 0, name: 'fichier' });
+  });
+  test('champs de mauvais type → message affichable sans planter', () => {
+    for (const p of [{ t: 'text', text: { evil: true } }, { t: 'image' }, { t: 'gif', gif: { url: 'javascript:alert(1)' } },
+      { t: 'gif', gif: { url: 'https://evil.example/x.gif' } }, { t: '<img>', text: 'ok' }, { reply: { id: 42 } }, { text: 7 }]) {
+      const out = cleanPayload(p);
+      assert.equal(typeof out.text, 'string');
+      assert.ok(['text', 'gif', 'image', 'video', 'audio'].includes(out.t));
+      if (out.t === 'gif') assert.match(out.gif.url, /^https:\/\/[a-z0-9]+\.giphy\.com\//);
+      assert.equal(out.reply, undefined);
+      assert.doesNotThrow(() => h('div', linkify(out.text)));
+    }
+    for (const p of [null, 'texte', 42, [], true]) assert.equal(cleanPayload(p), null);
+    // __proto__ reçu en JSON ne pollue rien
+    const polluted = cleanPayload(JSON.parse('{"t":"text","text":"x","__proto__":{"admin":true}}'));
+    assert.equal(polluted.admin, undefined);
+    assert.equal({}.admin, undefined);
+  });
+  test('une couleur de membre piégée ne peut pas injecter de CSS', () => {
+    for (const bad of ['url(https://evil.example/pixel)', 'red;background:url(x)', 'var(--x)', '#12345', '#1234567', 42, null]) {
+      assert.equal(safeColor(bad), '#7c5cff', String(bad));
+      const el = avatar({ id: 'u9', display_name: 'X', color: bad }, 40);
+      assert.ok(!String(el.getAttribute('style')).includes('url('), String(bad));
+    }
+    assert.equal(safeColor('#00d4ff'), '#00d4ff');
   });
 });
 

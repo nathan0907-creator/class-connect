@@ -9,6 +9,7 @@ import { statusEmoji, isBirthday, birthdaysToday } from './profiles.js';
 import { db, sub, plain } from './fb.js';
 import { state, on, isDelegate, isDeputy, isTeacher, memberName, CHANNELS, channelsFor } from './state.js';
 import { encryptJSON, decryptJSON } from './crypto.js';
+import { cleanPayload, safeColor, safeMime } from './safe.js';
 import { MAX_FILE, uploadEncrypted, downloadDecrypted, deleteFileChunks, compressImage } from './media.js';
 import { currentKey } from './keyring.js';
 import { sendTyping, watchTyping } from './presence.js';
@@ -279,7 +280,7 @@ function messageEl(row) {
   h('div.msg-avatar', avatar(author, 36)),
   h('div.msg-body',
     h('div.msg-head',
-      h('b', { style: { color: author?.color } }, memberName(row.user_id)),
+      h('b', { style: { color: author && safeColor(author.color) } }, memberName(row.user_id)),
       h('span.head-extra', headExtra(row.user_id)),
       roleTag(author),
       h('time', fmtTime(row.created_at))),
@@ -360,7 +361,7 @@ function refreshAuthors() {
     if (!author) continue;
     const b = el.querySelector('.msg-head b');
     b.textContent = author.display_name;
-    b.style.color = author.color;
+    b.style.color = safeColor(author.color);
     const extra = el.querySelector('.head-extra');
     if (extra) extra.textContent = headExtra(el.dataset.user);
     el.querySelector('.msg-avatar')?.replaceChildren(avatar(author, 36));
@@ -530,7 +531,8 @@ async function decryptRow(row) {
   const key = state.classKeys.get(row.epoch);
   if (!key) { decrypted.set(row.id, null); return null; }
   try {
-    const payload = await decryptJSON(key, row.iv, row.ciphertext, aadFor(row));
+    // Written by another member: only known fields with the right types are kept.
+    const payload = cleanPayload(await decryptJSON(key, row.iv, row.ciphertext, aadFor(row)));
     decrypted.set(row.id, payload);
     return payload;
   } catch {
@@ -550,7 +552,7 @@ async function fillBubble(el, row) {
   }
   el.classList.remove('locked');
   const parts = [];
-  if (payload.t === 'gif' && payload.gif?.url && /^https:\/\/[a-z0-9]+\.giphy\.com\//.test(payload.gif.url)) {
+  if (payload.t === 'gif' && payload.gif) {
     parts.push(h('div.media.gif', { style: ratio(payload.gif) },
       h('img', { src: payload.gif.url, alt: payload.gif.title || 'GIF', loading: 'lazy' }), h('span.media-tag', 'GIF')));
   } else if (payload.t === 'audio' && payload.file) {
@@ -662,7 +664,7 @@ function mediaEl({ t, file }, epoch) {
       let url = mediaCache.get(file.id);
       if (!url) {
         const plainBytes = await downloadDecrypted(file, state.classKeys.get(epoch));
-        url = URL.createObjectURL(new Blob([plainBytes], { type: file.mime }));
+        url = URL.createObjectURL(new Blob([plainBytes], { type: safeMime(file.mime, [t]) }));
         mediaCache.set(file.id, url);
       }
       const media = t === 'video'
@@ -795,6 +797,8 @@ async function sendVoice(blob, seconds) {
 async function sendFile(original) {
   const kind = original.type.startsWith('video/') ? 'video' : original.type.startsWith('image/') ? 'image' : null;
   if (!kind) return toast('Seules les images, GIFs et vidéos sont acceptés', 'error');
+  // SVG images can contain code: refused (a photo or a screenshot works).
+  if (/svg|xml/i.test(original.type)) return toast('Les images SVG ne sont pas acceptées : envoie une photo (JPG, PNG…)', 'error');
   if (!navigator.onLine) return toast('Hors ligne : les images et vidéos s\'envoient une fois le réseau revenu', 'error');
   const key = currentKey();
   if (!key) return toast('Clé de la classe pas encore reçue', 'error');

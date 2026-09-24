@@ -24,6 +24,7 @@ import { initTheme, applyTheme } from './theme.js';
 import { applyQualityClass } from './quality.js';
 import { initDM, startDM, stopDM, bindDMComposer } from './dm.js';
 import { $, $$, h, toast, toastError, enableTilt, busy, avatar } from './ui.js';
+import { safeColor } from './safe.js';
 
 let authFlow = null;
 let meUnsub = null;
@@ -292,7 +293,8 @@ function startClass(cid) {
   }));
 
   classUnsubs.push(onSnapshot(query(collection(db, 'users'), where('class_id', '==', cid)), (snap) => {
-    state.members = new Map(snap.docs.map((d) => [d.id, plain(d)]));
+    // Colours end up in CSS: anything but "#rrggbb" is replaced (see safe.js).
+    state.members = new Map(snap.docs.map((d) => { const m = plain(d); return [d.id, { ...m, color: safeColor(m.color) }]; }));
     emit('members');
     firstMembers();
     const someoneNew = snap.docChanges().some((c) => c.type !== 'removed' && c.doc.get('status') === 'active');

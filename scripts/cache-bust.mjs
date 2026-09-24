@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { withCsp } from './csp.mjs';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 const version = (process.argv[2] || Date.now().toString(36)).replace(/[^a-z0-9]/gi, '');
@@ -14,11 +15,11 @@ function rewrite(file, transform) {
   if (after !== before) { fs.writeFileSync(file, after); changed++; }
 }
 
-// HTML pages: stylesheet, entry script and inline module imports.
+// HTML pages: stylesheet, entry script and inline module imports, then the CSP hashes of the changed inline scripts.
 for (const f of fs.readdirSync(root).filter((n) => n.endsWith('.html'))) {
-  rewrite(path.join(root, f), (s) => s
+  rewrite(path.join(root, f), (s) => withCsp(s
     .replace(/(href|src)="((?:\.\/)?(?:css|js)\/[\w.-]+\.(?:css|js))"/g, `$1="$2?v=${version}"`)
-    .replace(/from '(\.\/js\/[\w.-]+\.js)'/g, `from '$1?v=${version}'`));
+    .replace(/from '(\.\/js\/[\w.-]+\.js)'/g, `from '$1?v=${version}'`)));
 }
 
 // ES modules: static and dynamic relative imports (same version everywhere, so each module loads once).

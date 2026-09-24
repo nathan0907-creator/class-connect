@@ -1,6 +1,6 @@
-import { doc, getDocs, query, where, updateDoc, writeBatch, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, getDocs, query, where, updateDoc, writeBatch, deleteDoc, deleteField } from 'firebase/firestore';
 import { reauthenticateWithCredential, EmailAuthProvider, deleteUser } from 'firebase/auth';
-import { auth, db, sub, classRef, userRef } from './fb.js';
+import { auth, db, sub, classRef, userRef, saltEmail, isSynthetic } from './fb.js';
 import { state, on, emit, isDelegate, isTeacher, MAX_DELEGATES } from './state.js';
 import { fingerprint, deriveAuthKey, clearKeys } from './crypto.js';
 import { sharesFor, shareRefFor, rotateKey } from './keyring.js';
@@ -60,7 +60,7 @@ function exportMyData() {
     exporte_le: new Date().toISOString(),
     compte: {
       pseudo: me.username, nom_affiche: me.display_name, couleur: me.color,
-      email: email.endsWith('@users.classconnect.app') ? '(aucun e-mail lié)' : email,
+      email: isSynthetic(email) ? '(aucun e-mail lié)' : email,
       cree_le: me.created_at ? new Date(me.created_at).toISOString() : null,
       empreinte_de_securite_cle_publique: me.public_key,
     },
@@ -98,7 +98,7 @@ function deleteAccount() {
       { label: 'Supprimer définitivement', variant: 'btn-danger', onClick: async () => {
         if (!pw.value) throw new Error('Entre ton mot de passe');
         const user = auth.currentUser;
-        const key = await deriveAuthKey(user.email, pw.value);
+        const key = await deriveAuthKey(saltEmail(user.email), pw.value);
         await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, key)).catch(() => {
           throw new Error('Mot de passe incorrect');
         });
@@ -199,8 +199,21 @@ function inviteCode() {
 export { inviteCode };
 
 /** One invite code (students or teachers) with copy / (re)generate buttons. */
+// The teachers' code stays out of the class document (every member can read it): delegates keep it in secrets/codes.
+const secret = { cid: null, code: null };
+function teacherCode() {
+  if (secret.cid !== state.cls.id) {
+    const cid = state.cls.id;
+    Object.assign(secret, { cid, code: state.cls.teacher_code || null });
+    getDoc(sub(cid, 'secrets', 'codes')).then((s) => {
+      if (s.exists() && secret.cid === cid) { secret.code = s.get('teacher_code'); renderAdmin(); }
+    }).catch(() => {});
+  }
+  return secret.code;
+}
+
 function codeBlock(title, field, role, hint) {
-  const current = state.cls[field];
+  const current = role === 'teacher' ? teacherCode() : state.cls[field];
   const codeEl = h(`div.invite-code${role === 'teacher' ? '.teacher' : ''}`, current || '— — — —');
   const regenerate = async () => {
     if (current && !(await confirmDialog('Nouveau code ?', 'L\'ancien code ne fonctionnera plus.', { danger: false }))) return;
@@ -208,10 +221,15 @@ function codeBlock(title, field, role, hint) {
       const code = inviteCode();
       const batch = writeBatch(db);
       batch.set(doc(db, 'invites', code), { class_id: state.cls.id, role });
-      batch.update(classRef(state.cls.id), { [field]: code });
+      if (role === 'teacher') {
+        batch.set(sub(state.cls.id, 'secrets', 'codes'), { teacher_code: code });
+        if (state.cls.teacher_code) batch.update(classRef(state.cls.id), { teacher_code: deleteField() });
+      } else {
+        batch.update(classRef(state.cls.id), { [field]: code });
+      }
       if (current) batch.delete(doc(db, 'invites', current));
       await batch.commit();
-      state.cls[field] = code;
+      if (role === 'teacher') { secret.code = code; delete state.cls.teacher_code; } else state.cls[field] = code;
       codeEl.textContent = code;
       renderAdmin();
     } catch (err) { toastError(err); }

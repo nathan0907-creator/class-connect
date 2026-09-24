@@ -2,8 +2,9 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8">
-  <script>if (location.protocol === 'http:' && !/^(localhost|127\.|\[::1\])/.test(location.hostname)) location.replace('https:' + location.href.slice(5));</script>
-  <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-aa//tPmmlGyItVTvOTW4fNGcj+SsPjqqRp3IynyjVA4=' 'sha256-h9RdMVaGj390STVMWBRGJ0mZmNqU0mTIQrBDZGF32Bg=' 'sha256-zlnjKLbx+BIeoEKCBwptiZsbiz4bCnpTMuhDO6mYpj4=' https://www.gstatic.com/firebasejs/12.19.0/ https://cdn.jsdelivr.net/npm/three@0.170.0/ https://cdn.jsdelivr.net/npm/katex@0.18.7/ https://cdn.jsdelivr.net/npm/qrcode-generator@2.0.4/ https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/ https://apis.google.com https://www.googletagmanager.com https://*.europe-west1.firebasedatabase.app; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net/npm/katex@0.18.7/; font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net/npm/katex@0.18.7/; img-src 'self' data: blob: https:; media-src 'self' data: blob:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app wss://*.firebasedatabase.app https://api.giphy.com https://www.google.com https://www.gstatic.com https://cdn.jsdelivr.net https://fonts.googleapis.com https://fonts.gstatic.com https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com; frame-src https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/ https://class-connectv3.firebaseapp.com; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+  <script>if (location.protocol === 'http:' && !/^(localhost|127\.|\[::1\])/.test(location.hostname)) location.replace('https:' + location.href.slice(5));
+  /* Anti-clickjacking: never usable inside another site's frame. */ if (self !== top) { document.documentElement.style.display = 'none'; try { top.location.replace(location.href); } catch (e) {} }</script>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <script>/* Installed app opened in "desktop site" mode on a phone: force the phone layout. */(function(){var m=document.querySelector('meta[name=viewport]'),w=screen.width;if(navigator.maxTouchPoints>0&&w&&w<=900&&window.innerWidth>w*1.15)m.setAttribute('content','width='+w+', initial-scale=1, viewport-fit=cover');})();</script>
   <title>Class Connect — La messagerie chiffrée de ta classe</title>
@@ -134,7 +135,7 @@
             <label class="field"><span>Pseudo ou adresse e-mail</span>
               <input name="identifier" autocomplete="username" required maxlength="120" autocapitalize="off" spellcheck="false"
                      placeholder="ex. astro_lea ou lea@mail.fr" aria-describedby="id-hint"></label>
-            <p class="hint" id="id-hint"><b>Déjà inscrit ?</b> Ton pseudo ou ton e-mail. <b>Nouveau ?</b> Invente un pseudo : on crée ton compte en 2 étapes.</p>
+            <p class="hint" id="id-hint"><b>Déjà inscrit ?</b> Ton pseudo (ou ton e-mail si ton compte en a un). <b>Nouveau ?</b> Invente un pseudo : on crée ton compte en 2 étapes.</p>
             <label class="hp" aria-hidden="true">Site web <input name="website" tabindex="-1" autocomplete="off"></label>
             <button class="btn btn-primary btn-block btn-cta" type="submit"><span>Décoller</span> <i class="ico ico-rocket" aria-hidden="true"></i></button>
             <button type="button" class="link-btn guide-link" data-guide="create">❓ Besoin d'aide pour créer ou connecter ton compte ?</button>

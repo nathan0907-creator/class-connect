@@ -137,7 +137,12 @@ function openThread(sid) {
     const rows = await Promise.all(snap.docs.map(async (d) => {
       const r = plain(d);
       let text = null;
-      if (key) { try { text = (await decryptJSON(key, r.iv, r.ciphertext, aad(sid, r.user_id))).text; } catch { /* unreadable */ } }
+      if (key) {
+        try {
+          const t = (await decryptJSON(key, r.iv, r.ciphertext, aad(sid, r.user_id)))?.text;
+          if (typeof t === 'string') text = t.slice(0, 20000);
+        } catch { /* unreadable */ }
+      }
       return { ...r, text };
     }));
     renderMessages(rows);
