@@ -36,6 +36,9 @@ const MUTANTS = [
   ['boîte à idées lisible par les élèves', "match /ideas/{iid} {\n        allow read: if isDelegate(cid) || isTeacher(cid);", "match /ideas/{iid} {\n        allow read: if isActiveMember(cid);"],
   ['compteurs XP d\'un autre modifiables', "allow create, update: if isActiveMember(cid) && userId == uid()\n          && request.resource.data.keys().hasOnly(['xp'", "allow create, update: if isActiveMember(cid)\n          && request.resource.data.keys().hasOnly(['xp'"],
   ['jouer à la place de l\'adversaire', "(resource.data.kind in ['ttt', 'c4'] && resource.data.turn == uid()", "(resource.data.kind in ['ttt', 'c4']"],
+  ['déconnecter l\'appareil d\'un autre', "allow update: if signedIn() && resource.data.uid == uid() && (\n        (request.resource.data.diff", "allow update: if signedIn() && (\n        (request.resource.data.diff"],
+  ['annuler une déconnexion à distance', "hasOnly(['revoked']) && request.resource.data.revoked == true)", "hasOnly(['revoked']))"],
+  ['liste des appareils d\'un autre', "allow get: if signedIn() && id.matches('^' + uid() + '_[A-Za-z0-9_-]{16,40}$');", 'allow get: if signedIn();'],
   ['clé privée lisible par tous', "match /private/{userId} {\n      allow read: if signedIn() && userId == uid();", "match /private/{userId} {\n      allow read: if signedIn();"],
 ];
 

@@ -279,5 +279,56 @@ describe('mots de passe et clés personnelles', () => {
   });
 });
 
+describe('Vagues 7 à 9 — profil, cosmos, sécurité', () => {
+  test('profil : bannière, cadre, humeur et son du moment filtrés', async () => {
+    const { cleanLooks } = await import('../public/js/looks.js');
+    assert.deepEqual(cleanLooks({ banner: 'galaxy', frame: 'neon', mood: 'happy', song: '  Daft   Punk  ' }), { banner: 'galaxy', frame: 'neon', mood: 'happy', song: 'Daft Punk' });
+    assert.deepEqual(cleanLooks({ banner: 'url(javascript:x)', frame: '__proto__', mood: 'toString', song: 'x'.repeat(200) }), { banner: '', frame: '', mood: '', song: 'x'.repeat(80) });
+  });
+  test('cadres : réservés aux badges gagnés', async () => {
+    const { frameUnlocked } = await import('../public/js/looks.js');
+    assert.equal(frameUnlocked('personne', 'neon'), true);
+    assert.equal(frameUnlocked('personne', 'crown'), false);
+  });
+  test('le lien « son du moment » est toujours une recherche construite par l\'appli', async () => {
+    const { songLine } = await import('../public/js/looks.js');
+    const a = songLine({ song: 'javascript:alert(1)' }).querySelector('a');
+    assert.ok(a.getAttribute('href').startsWith('https://music.youtube.com/search?q='));
+    assert.equal(a.getAttribute('rel'), 'noopener noreferrer');
+  });
+  test('constellation : une étoile par membre, chacune reliée à une plus ancienne', async () => {
+    const { layoutStars, starName } = await import('../public/js/cosmos.js');
+    const members = Array.from({ length: 30 }, (_, i) => ({ id: `user${i}` }));
+    const stars = layoutStars(members);
+    assert.equal(stars.length, 30);
+    assert.equal(stars[0].link, null);
+    assert.ok(stars.slice(1).every((s, i) => stars.slice(0, i + 1).includes(s.link)));
+    assert.ok(stars.every((s) => s.x >= 40 && s.x <= 560 && s.y >= 40 && s.y <= 360));
+    assert.deepEqual(layoutStars(members).map((s) => [s.x, s.y]), stars.map((s) => [s.x, s.y]));   // même ciel sur tous les appareils
+    assert.match(starName('user1'), /^[A-ZÀ-Ö][\wÀ-ÿ]+-\d{2}$/);
+  });
+  test('système solaire : heures par matière, semaines A/B comptées à moitié', async () => {
+    const { subjectsOrbit } = await import('../public/js/cosmos.js');
+    const out = subjectsOrbit([
+      { subject: 'Maths', color: '#111111', start_at: '08:00', end_at: '10:00' },
+      { subject: 'Maths', color: '#111111', start_at: '14:00', end_at: '15:00' },
+      { subject: 'SVT', color: '#222222', start_at: '10:00', end_at: '12:00', week: 'A' },
+    ]);
+    assert.deepEqual(out.map((p) => [p.subject, p.minutes]), [['Maths', 180], ['SVT', 60]]);
+  });
+  test('thème perso : couleurs dérivées valides', async () => {
+    const { buildCustom, mix } = await import('../public/js/theme.js');
+    assert.equal(mix('#000000', '#ffffff', 0.5), '#808080');
+    const t = buildCustom('#ff0000', '#0000ff');
+    for (const col of [...t.planet, ...t.rings, ...t.mine, t.atmo, ...t.nebulae.flat()]) assert.match(col, /^#[0-9a-f]{6}$/);
+  });
+  test('nom d\'appareil : seulement le navigateur et le système', async () => {
+    const { deviceName } = await import('../public/js/security.js');
+    assert.equal(deviceName('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1'), 'Safari · iPhone (appli)');
+    assert.match(deviceName('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0 Safari/537.36'), /^Chrome · Windows/);
+    assert.match(deviceName('Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/130.0 Mobile Safari/537.36 EdgA/130 Edg/130.0'), /^Edge · Android/);
+  });
+});
+
 // Firebase (importé par ui.js) garde des connexions ouvertes : on termine proprement.
 after(() => setTimeout(() => process.exit(process.exitCode || 0), 100));

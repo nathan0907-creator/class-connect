@@ -25,6 +25,11 @@ import { applyQualityClass } from './quality.js';
 import { initDM, startDM, stopDM, bindDMComposer } from './dm.js';
 import { initLife, startLife, stopLife } from './life.js';
 import { startSettings, stopSettings } from './admin.js';
+import { initDisplay } from './display.js';
+import { initCosmos } from './cosmos.js';
+import { initSecurity, startDevice, stopDevice, forgetDevice } from './security.js';
+import { initShortcuts } from './shortcuts.js';
+import { initShare } from './share.js';
 import { $, $$, h, toast, toastError, enableTilt, busy, avatar } from './ui.js';
 import { safeColor } from './safe.js';
 
@@ -114,6 +119,7 @@ function bindUnlock() {
 }
 
 async function logout() {
+  await forgetDevice();
   stopClass();
   stopMe();
   await stopPush();
@@ -277,6 +283,14 @@ async function enterApp() {
   }
   show('app');
   syncPush();
+  startDevice();
+  // Opened from a shortcut of the installed app (site.webmanifest): go to that tab once.
+  const panel = new URLSearchParams(location.search).get('panel');
+  if (panel && document.querySelector(`.nav-item[data-panel="${CSS.escape(panel)}"]`)) {
+    showPanel(panel);
+    history.replaceState(null, '', location.pathname + location.hash);
+  }
+  emit('app-ready');
 }
 
 function startClass(cid) {
@@ -336,6 +350,7 @@ function stopClass() {
   stopDM();
   stopLife();
   stopSettings();
+  stopDevice();
   liveClassId = null;
 }
 
@@ -357,18 +372,22 @@ async function boot() {
   initInstall();
   initGuide();
   initTheme();
+  initDisplay();
+  initShortcuts();
+  initShare();
   watchNetwork();
   if (captureInvite()) {
     setTimeout(() => toast('✉️ Invitation reçue ! Connecte-toi ou crée ton compte : ta demande pour rejoindre la classe partira automatiquement.', 'info', 9000), 800);
   }
   // The 3D scene is loaded after the UI so the first paint stays fast; a stub stands in meanwhile.
-  state.space = { mode: 'auth', setMode(m) { this.mode = m; }, warpJump: () => Promise.resolve(), pulse() {} };
+  state.space = { mode: 'auth', setMode(m) { this.mode = m; }, warpJump: () => Promise.resolve(), pulse() {}, celebrate() {} };
   const startSpace = () => import('./space.js').then(({ createSpace }) => {
     const space = createSpace($('#space'));
     space.setMode(state.space.mode);
     state.space = space;
     applyTheme();
     document.body.classList.add('space-ready');
+    emit('space-ready');
   }).catch((err) => console.warn('3D indisponible', err));
   if ('requestIdleCallback' in window) requestIdleCallback(startSpace, { timeout: 1200 }); else setTimeout(startSpace, 300);
   if (!configured) return show('setup');
@@ -399,6 +418,8 @@ async function boot() {
   bindDMComposer();
   initLife();
   initNotify();
+  initCosmos();
+  initSecurity();
 
   $$('.nav-item').forEach((b) => b.addEventListener('click', () => showPanel(b.dataset.panel)));
   on('goto', showPanel);

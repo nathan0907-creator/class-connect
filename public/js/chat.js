@@ -16,6 +16,8 @@ import { sendTyping, watchTyping } from './presence.js';
 import { GIPHY_API_KEY } from './config.js';
 import { renderMath } from './md.js';
 import { bannedIn, maskBanned, isMuted, slowSeconds } from './admin.js';
+import { play } from './sounds.js';
+import { textEgg } from './cosmos.js';
 import {
   openTools, renderPoll, openSearch, openGallery, openPinnedAll, openThread, translate, transcribe, forward,
 } from './chatplus.js';
@@ -44,6 +46,8 @@ let channel = 'messages';
 let watchers = [];
 const unreadChannels = new Set();
 export const currentChannel = () => channel;
+/** Switches the chat to another channel (e.g. to send something shared from another app). */
+export function openChatChannel(ch) { if (channelsFor().includes(ch) && ch !== channel) openChannel(ch); }
 
 // The students' channel keeps the original format; other channels bind the channel name into the ciphertext.
 export const messageAad = (ch, epoch, uid) => (ch === 'messages'
@@ -158,6 +162,8 @@ export function initChat() {
   $('.composer', root).before(modeBar);
   // Ephemeral messages vanish when their time is up.
   setInterval(() => { for (const el of list.querySelectorAll('.msg')) if (el._row && isExpired(el._row)) onRemoved(el._row.id); }, 60_000);
+  // A mute ends by itself: unlock the composer once its time is over.
+  setInterval(() => { if (root.classList.contains('composer-locked') && !isMuted()) updateComposerLock(); }, 15_000);
   document.addEventListener('click', (e) => {
     if (!e.target.closest('.popover, [data-tool]')) closePopovers();
   });
@@ -307,6 +313,7 @@ function onIncoming(row) {
   if (!isFresh(row)) return;
   if (row.user_id !== state.me.id) {
     state.space.pulse();
+    if (!document.hidden) play('receive');
     if (document.hidden || !root.classList.contains('active')) setUnread(unread + 1);
     if (document.hidden) {
       // Decrypted locally: the notification never goes through a server.
@@ -986,6 +993,7 @@ async function sendText() {
   if (compose.edit) return saveEdit(text);
   const wait = slowSeconds() * 1000 - (Date.now() - lastSent);
   if (wait > 0) return toast(`Mode lent : attends encore ${Math.ceil(wait / 1000)} s`, 'error');
+  const prevSent = lastSent;
   lastSent = Date.now();
   const reply = replyTo;
   textarea.value = '';
@@ -995,8 +1003,11 @@ async function sendText() {
   try {
     await postPayload({ v: 1, t: 'text', text, ...(reply ? { reply } : {}) });
     launchRocket();
+    play('send');
+    textEgg(text);
     if (text.startsWith('💬 Question du jour')) emit('activity', 'qotd');
   } catch (err) {
+    lastSent = prevSent;
     textarea.value = text;
     if (reply) { replyTo = reply; replyBar.hidden = false; root.classList.add('replying'); }
     saveDraft();
@@ -1185,6 +1196,8 @@ function setUnread(n) {
   const badge = document.querySelector('[data-badge="chat"]');
   badge.textContent = n ? (n > 99 ? '99+' : n) : '';
   document.title = n ? `(${n}) Class Connect` : 'Class Connect';
+  // Number on the installed app's icon (home screen / taskbar).
+  try { if (n) navigator.setAppBadge?.(n)?.catch?.(() => {}); else navigator.clearAppBadge?.()?.catch?.(() => {}); } catch { /* unsupported */ }
 }
 
 const nearBottom = () => scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 140;

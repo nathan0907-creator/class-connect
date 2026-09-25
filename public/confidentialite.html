@@ -85,7 +85,7 @@
           <tr><td>Messages, photos, vidéos, messages vocaux, GIFs importés, réponses</td><td>Messagerie</td><td><span class="tag tag-e2e">🔒</span> Les membres du canal (Classe, Profs &amp; élèves ou Salle des profs)</td></tr>
           <tr><td>Messages privés « Contacter les délégués »</td><td>Écrire aux délégués (et au prof principal si tu l'invites)</td><td><span class="tag tag-e2e">🔒</span> Toi, les délégués, et le prof principal seulement si tu l'as invité</td></tr>
           <tr><td>Réactions emoji</td><td>Messagerie</td><td><span class="tag tag-clear">👁️</span> Les membres du canal (le message, lui, reste chiffré)</td></tr>
-          <tr><td>Photo ou avatar, bio, statut, anniversaire (jour et mois, <b>sans l'année</b>) — <i>facultatifs</i></td><td>Te présenter à ta classe</td><td><span class="tag tag-e2e">🔒</span> Ta classe</td></tr>
+          <tr><td>Photo ou avatar, bio, statut, humeur, bannière, cadre d'avatar, son du moment, anniversaire (jour et mois, <b>sans l'année</b>) — <i>facultatifs</i></td><td>Te présenter à ta classe</td><td><span class="tag tag-e2e">🔒</span> Ta classe</td></tr>
           <tr><td>Vrai nom <i>(facultatif)</i></td><td>Retrouver les élèves au conseil de classe</td><td><span class="tag tag-e2e">🔒</span> Toi, les professeurs et les délégués</td></tr>
           <tr><td>Résultats du conseil de classe (moyenne, appréciation, mention)</td><td>Te communiquer tes résultats</td><td><span class="tag tag-e2e">🔒</span> Toi, les professeurs et les délégués</td></tr>
           <tr><td>Emploi du temps, votes (totaux), comptes à rebours</td><td>Organisation de la classe</td><td><span class="tag tag-clear">👁️</span> Ta classe — <b>ton vote individuel reste secret</b></td></tr>
@@ -114,6 +114,9 @@
         <thead><tr><th>Donnée</th><th>Pourquoi</th><th>Qui peut la lire</th></tr></thead>
         <tbody>
           <tr><td>Présence en ligne, « … écrit »</td><td>Savoir qui est là</td><td><span class="tag tag-clear">👁️</span> Ta classe — effacé à la déconnexion</td></tr>
+          <tr><td>Liste de tes appareils connectés : type de navigateur et de système (ex. « Chrome · Windows »), date d'ajout et de dernière visite</td><td>Voir où ton compte est ouvert et déconnecter un appareil à distance</td><td><span class="tag tag-clear">👁️</span> Toi seul</td></tr>
+          <tr><td>Heures calmes, résumé du matin et fuseau horaire <i>(si tu les règles)</i></td><td>Ne pas te déranger la nuit, t'envoyer ta journée à 7 h</td><td>Le serveur de notifications de l'éditeur</td></tr>
+          <tr><td>Connexion rapide (empreinte, visage) <i>(si tu l'actives)</i></td><td>Te connecter sans retaper ton mot de passe</td><td><span class="tag tag-e2e">🔒</span> Ton mot de passe reste <b>sur ton appareil</b>, chiffré par ta clé d'accès : rien n'est envoyé</td></tr>
           <tr><td>Jeton de notification de ton appareil <i>(si tu les actives)</i></td><td>Te prévenir même appli fermée</td><td>Le serveur de notifications de l'éditeur. Il ne transmet que le message <b>chiffré</b> : ton téléphone le déchiffre lui-même</td></tr>
           <tr><td>Compteurs d'activité (XP, badges, série de jours)</td><td>Classement et badges</td><td><span class="tag tag-clear">👁️</span> Ta classe — uniquement des nombres, jamais le contenu</td></tr>
           <tr><td>Statistiques de visite <i>(si tu les acceptes)</i></td><td>Améliorer le site</td><td>Google Analytics, de façon anonymisée</td></tr>
@@ -158,6 +161,7 @@
           <tr><td>Messages éphémères</td><td><b>24 heures</b>, puis effacement</td></tr>
           <tr><td>Présence en ligne, « … écrit »</td><td>Effacés à la déconnexion</td></tr>
           <tr><td>Jeton de notification</td><td>Jusqu'à ce que tu coupes les notifications ou te déconnectes</td></tr>
+          <tr><td>Liste des appareils</td><td>Jusqu'à la déconnexion de l'appareil (ou la suppression du compte)</td></tr>
           <tr><td>Statistiques de visite</td><td>14 mois maximum</td></tr>
         </tbody>
       </table></div>
@@ -184,7 +188,9 @@
         <li>ta session de connexion (Firebase) ;</li>
         <li>tes clés de chiffrement (IndexedDB) — elles ne quittent jamais ton appareil en clair ;</li>
         <li>une copie hors ligne de ta classe, toujours chiffrée, effacée à la déconnexion ;</li>
-        <li>tes préférences : thème, performances, notifications, brouillons, choix des cookies.</li>
+        <li>tes préférences : thème, affichage (taille du texte, police, fond du chat…), performances, notifications, brouillons, choix des cookies ;</li>
+        <li>si tu l'actives, ton mot de passe chiffré par ta clé d'accès (connexion rapide), illisible sans ton empreinte, ton visage ou ton code ;</li>
+        <li>un fichier partagé depuis une autre appli, le temps de choisir où l'envoyer.</li>
       </ul>
       <p>Les cookies de statistiques (<code>_ga</code>) ne sont déposés <b>qu'après ton accord</b>, et supprimés si tu le retires.</p>
 

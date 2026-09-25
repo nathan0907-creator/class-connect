@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getFirestore, Timestamp, FieldValue } from 'firebase-admin/firestore';
 import { getMessaging } from 'firebase-admin/messaging';
+import { clockIn, inQuiet, weekLetter, digestText } from './clock.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const KEY_FILE = process.env.CC_KEY_FILE || path.join(here, 'service-account.json');
@@ -35,6 +36,7 @@ const db = getFirestore();
 const users = new Map();    // uid -> { class_id, status, role, display_name }
 const tokens = new Map();   // docId -> { uid, token }
 const classes = new Map();  // cid -> name
+const weekA = new Map();    // cid -> "YYYY-MM-DD" of a week A day (timetables alternating A/B weeks)
 const ready = { users: false, tokens: false, classes: false };
 
 function watch(name, ref, onSnap) {
@@ -53,13 +55,13 @@ watch('users', db.collection('users').where('status', '==', 'active'), (snap) =>
 watch('tokens', db.collection('push_tokens'), (snap) => {
   for (const c of snap.docChanges()) {
     if (c.type === 'removed') tokens.delete(c.doc.id);
-    else tokens.set(c.doc.id, { uid: c.doc.get('uid'), token: c.doc.get('token') });
+    else tokens.set(c.doc.id, { uid: c.doc.get('uid'), token: c.doc.get('token'), quiet: c.doc.get('quiet') || null, digest: !!c.doc.get('digest'), tz: c.doc.get('tz') || 'Europe/Paris' });
   }
 });
 watch('classes', db.collection('classes'), (snap) => {
   for (const c of snap.docChanges()) {
     if (c.type === 'removed') classes.delete(c.doc.id);
-    else classes.set(c.doc.id, c.doc.get('name'));
+    else { classes.set(c.doc.id, c.doc.get('name')); weekA.set(c.doc.id, c.doc.get('week_a') || null); }
   }
 });
 
@@ -130,7 +132,11 @@ async function notifyDM(cid, threadRef, msg) {
 }
 
 async function sendTo(recipients, data, label) {
-  const targets = [...tokens].filter(([, t]) => recipients.has(t.uid));
+  // Quiet hours: nothing is sent to that device during the range it chose.
+  await sendTokens([...tokens].filter(([, t]) => recipients.has(t.uid) && !inQuiet(t)), data, label);
+}
+
+async function sendTokens(targets, data, label) {
   if (!targets.length) return;
   const res = await getMessaging().sendEach(targets.map(([, t]) => ({
     token: t.token, data,
@@ -214,4 +220,43 @@ db.collectionGroup('reminders').where('at', '>', Timestamp.fromMillis(0)).onSnap
 }, (err) => { log('⚠ écoute des rappels interrompue :', err.message); setTimeout(() => process.exit(1), 30000); });
 
 log('🚀 Serveur de notifications Class Connect démarré. Laisse cette fenêtre ouverte.');
+// ------------------------------------------------------------ morning summary (7:00 on each device's clock)
+// Built only from what this server may read: timetable slots, countdown events and the kind of teacher alerts.
+const DIGEST_AT = 7 * 60;
+const digestSent = new Map();    // uid -> ymd
+const digestCache = new Map();   // cid|ymd -> Promise<text | null>
+
+function classDigest(cid, clock) {
+  const key = `${cid}|${clock.ymd}`;
+  if (!digestCache.has(key)) {
+    const col = (name) => db.collection(`classes/${cid}/${name}`);
+    digestCache.set(key, Promise.all([
+      col('slots').get(), col('events').where('date', '==', clock.ymd).get(), col('alerts').where('date', '==', clock.ymd).get(),
+    ]).then(([slots, events, alerts]) => digestText({
+      slots: slots.docs.map((d) => ({ id: d.id, ...d.data() })), events: events.docs.map((d) => d.data()),
+      alerts: alerts.docs.map((d) => d.data()), day: clock.day, week: weekLetter(weekA.get(cid), clock.ymd),
+    })).catch((err) => { log('⚠ résumé du matin :', err.message); return null; }));
+    if (digestCache.size > 500) digestCache.delete(digestCache.keys().next().value);
+  }
+  return digestCache.get(key);
+}
+
+async function morningDigest() {
+  const now = new Date();
+  for (const t of [...tokens.values()]) {
+    const u = users.get(t.uid);
+    if (!t.digest || !u?.class_id) continue;
+    const clock = clockIn(t.tz, now);
+    if (clock.minutes < DIGEST_AT || clock.minutes >= DIGEST_AT + 15 || digestSent.get(t.uid) === clock.ymd || inQuiet(t, now)) continue;
+    digestSent.set(t.uid, clock.ymd);
+    const body = await classDigest(u.class_id, clock);
+    if (!body) continue;
+    // Every device of this person that asked for the summary and isn't in its quiet hours.
+    const targets = [...tokens].filter(([, x]) => x.uid === t.uid && x.digest && !inQuiet(x, now));
+    await sendTokens(targets, { title: '☀️ Bonjour ! Ta journée', body, tag: 'cc-digest', url: `${SITE}?panel=timetable`, kind: 'digest' },
+      `${classes.get(u.class_id) || u.class_id} · résumé du matin`).catch((err) => log('⚠ résumé du matin :', err.message));
+  }
+}
+setInterval(() => { if (ready.tokens && ready.users && ready.classes) morningDigest(); }, 60_000);
+
 setInterval(() => log(`… toujours en marche · ${users.size} membres · ${tokens.size} appareil(s) abonné(s)`), 6 * 3600e3);

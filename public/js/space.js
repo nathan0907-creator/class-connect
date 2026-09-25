@@ -390,7 +390,7 @@ export class Space {
     const dir = new THREE.Vector3(rand(-1, 1), rand(-0.6, -0.2), 0).normalize();
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
-    g.setAttribute('color', new THREE.BufferAttribute(new Float32Array([1, 1, 1, 0.1, 0.2, 0.6]), 3));
+    g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(this.festive ? [1, 0.85, 0.4, 0.6, 0.25, 0.1] : [1, 1, 1, 0.1, 0.2, 0.6]), 3));
     const line = new THREE.Line(g, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
     line.frustumCulled = false;
     this.scene.add(line);
@@ -434,6 +434,12 @@ export class Space {
   }
 
   pulse() { this.pulseLevel = 1; }
+
+  /** Birthday in the class: a shower of golden shooting stars. */
+  celebrate(on) {
+    this.festive = !!on;
+    if (on) this.nextShooting = 0;
+  }
 
   resize() {
     this.camera.aspect = innerWidth / innerHeight;
@@ -512,7 +518,7 @@ export class Space {
     // shooting stars
     if (!this.reduced && t > this.nextShooting) {
       this.spawnShootingStar();
-      this.nextShooting = t + rand(3.5, 9);
+      this.nextShooting = t + (this.festive ? rand(0.4, 1.2) : rand(3.5, 9));
     }
     this.shooting = this.shooting.filter((sh) => {
       sh.t += dt;
@@ -554,6 +560,6 @@ export function createSpace(canvas) {
   } catch (err) {
     console.warn('WebGL indisponible', err);
     document.body.classList.add('no-webgl');
-    return { setMode() {}, setTheme() {}, setQuality() {}, warpJump: () => Promise.resolve(), pulse() {} };
+    return { setMode() {}, setTheme() {}, setQuality() {}, warpJump: () => Promise.resolve(), pulse() {}, celebrate() {} };
   }
 }

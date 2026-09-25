@@ -27,8 +27,13 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const req = event.request;
-  if (req.method !== 'GET') return;
   const url = new URL(req.url);
+  // Something shared from another app (share target of site.webmanifest): kept here, then the page asks where to send it.
+  if (req.method === 'POST' && url.origin === self.location.origin && url.searchParams.has('share-target')) {
+    event.respondWith(receiveShare(req));
+    return;
+  }
+  if (req.method !== 'GET') return;
 
   // Pages and the site's own files: network first (always up to date), cache when offline.
   if (url.origin === self.location.origin) {
@@ -60,6 +65,21 @@ self.addEventListener('fetch', (event) => {
   }
   // Everything else (Firestore, Auth, Gemini, GIPHY…) goes straight to the network.
 });
+
+async function receiveShare(req) {
+  const home = new URL('./?shared=1', self.registration.scope).href;
+  try {
+    const form = await req.formData();
+    const files = form.getAll('files').filter((f) => f && typeof f === 'object' && f.size > 0 && f.size <= 50 * 1024 * 1024).slice(0, 10);
+    const text = ['title', 'text', 'url'].map((k) => String(form.get(k) || '').trim()).filter(Boolean).join('\n').slice(0, 4000);
+    await caches.delete('cc-share');
+    const cache = await caches.open('cc-share');
+    const meta = files.map((f, i) => ({ name: String(f.name || 'fichier').slice(0, 120), type: String(f.type || ''), key: `share/file-${i}` }));
+    await Promise.all(files.map((f, i) => cache.put(meta[i].key, new Response(f))));
+    await cache.put('share/meta', new Response(JSON.stringify({ text, files: meta }), { headers: { 'content-type': 'application/json' } }));
+  } catch { /* nothing kept: the app simply opens */ }
+  return Response.redirect(home, 303);
+}
 
 // ------------------------------------------------------------ push notifications
 // The notification server only relays the encrypted message; it is decrypted here, on the device, with the
@@ -118,6 +138,8 @@ self.addEventListener('push', (event) => {
       badge: 'img/icon-192.png',
       data: { url: data.url || './' },
     });
+    // A dot on the installed app's icon until it is opened (the page sets the exact number).
+    if (data.kind !== 'digest') await self.navigator.setAppBadge?.().catch(() => {});
   })());
 });
 

@@ -10,6 +10,7 @@ import { compressImage } from './media.js';
 import { toB64 } from './crypto.js';
 import { generate, timetableSchema, TIMETABLE_SYSTEM, timetablePrompt } from './ai.js';
 import { renderCalendar } from './calendar.js';
+import { openSolarSystem } from './cosmos.js';
 
 const HOUR_PX = 64;
 const SWATCHES = ['#7c5cff', '#00d4ff', '#ff4fd8', '#ffb547', '#3dffa8', '#ff6b6b', '#5b8cff', '#c77dff'];
@@ -20,6 +21,7 @@ const SUBJECT_COLORS = [
   [/philo|ses|[ée]co/i, '#c77dff'], [/nsi|info|techno|sni/i, '#5b8cff'], [/eps|sport/i, '#3dffa8'], [/art|musi/i, '#ff4fd8'],
 ];
 export let slots = [];
+export const allSlots = () => slots;
 let alerts = [];          // decrypted "prof absent / salle changée / cours annulé"
 let unsubs = [];
 let weekOffset = 0;       // 0 = this week, 1 = next week…
@@ -151,7 +153,8 @@ function toolbar() {
       h('b', label, w && hasAB() ? h('span.week-tag', `Sem. ${w}`) : null),
       h('button.icon-btn', { type: 'button', 'aria-label': 'Semaine suivante', disabled: weekOffset >= 8, onclick: () => { weekOffset++; render(); } }, '›')) : null,
     mode === 'week' && hasAB() && isDelegate() ? h('button.btn.btn-ghost.btn-sm', { type: 'button', onclick: () => setWeekLetter(monday) },
-      w ? 'Corriger A/B' : 'Indiquer semaine A ou B') : null);
+      w ? 'Corriger A/B' : 'Indiquer semaine A ou B') : null,
+    slots.length ? h('button.btn.btn-ghost.btn-sm', { type: 'button', onclick: openSolarSystem, title: 'Les matières en planètes' }, '🪐 Système solaire') : null);
   if (mode === 'week' && hasAB() && !w) {
     bar.append(h('p.hint.small', 'Cet emploi du temps alterne semaines A et B : ', isDelegate() ? 'indique laquelle est cette semaine.' : 'le délégué doit indiquer laquelle est cette semaine.'));
   }
@@ -236,7 +239,7 @@ function render() {
     root.append(h('div.tt-empty', icon('calendar'), h('p', isDelegate()
       ? 'L\'emploi du temps est vide. Importe une photo ou un PDF de ton emploi du temps, ou ajoute les cours un par un.'
       : 'L\'emploi du temps est vide : ton délégué ne l\'a pas encore rempli.'),
-    isDelegate() ? h('button.btn.btn-primary', { type: 'button', onclick: openImport }, '📷 Importer une photo ou un PDF') : null));
+    isDelegate() ? h('button.btn.btn-primary', { type: 'button', onclick: () => openImport() }, '📷 Importer une photo ou un PDF') : null));
   }
   enableTilt(root);
 }
@@ -385,7 +388,8 @@ export function cleanImported(list) {
     .map((s) => ({ ...s, color: colorFor(s.subject, used) }));
 }
 
-function openImport() {
+/** Import from a photo or PDF; `preset` = a file shared to the app (see share.js). */
+export function openImport(preset) {
   const file = h('input', { type: 'file', accept: 'image/*,application/pdf', hidden: true });
   const camera = h('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true });
   const body = h('div.import-tt',
@@ -399,6 +403,7 @@ function openImport() {
   const go = (f) => { if (f) analyse(f, body, m).catch((err) => { toastError(err); }); };
   file.addEventListener('change', () => go(file.files[0]));
   camera.addEventListener('change', () => go(camera.files[0]));
+  if (preset) go(preset);
 }
 
 async function analyse(f, body, m) {

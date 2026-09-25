@@ -690,3 +690,43 @@ describe('NIVEAU 3 — attaques poussées', () => {
     });
   });
 });
+
+// =====================================================================================================
+describe('Vague 9 — appareils et notifications', () => {
+  const dev = (uid, extra = {}) => ({ uid, name: 'Chrome · Windows', created_at: serverTimestamp(), last_seen: serverTimestamp(), revoked: false, ...extra });
+  const ID = 'abcdefghijklmnop1234';
+  test('appareils : chacun ne voit et ne gère que les siens', async () => {
+    await assertSucceeds(setDoc(doc(as('alice'), 'devices', `alice_${ID}`), dev('alice')));
+    await assertFails(setDoc(doc(as('bob'), 'devices', `alice_${ID}X`), dev('bob')));
+    await assertFails(setDoc(doc(as('bob'), 'devices', `bob_${ID}`), dev('alice')));
+    await assertFails(setDoc(doc(as('bob'), 'devices', `bob_${ID}`), dev('bob', { revoked: true })));
+    await assertSucceeds(getDoc(doc(as('alice'), 'devices', `alice_${ID}`)));
+    await assertSucceeds(getDoc(doc(as('alice'), 'devices', `alice_${ID}zz`)));
+    await assertFails(getDoc(doc(as('bob'), 'devices', `alice_${ID}`)));
+    await assertSucceeds(getDocs(query(collection(as('alice'), 'devices'), where('uid', '==', 'alice'))));
+    await assertFails(getDocs(collection(as('bob'), 'devices')));
+    await assertFails(updateDoc(doc(as('bob'), 'devices', `alice_${ID}`), { revoked: true }));
+    await assertFails(deleteDoc(doc(as('bob'), 'devices', `alice_${ID}`)));
+  });
+  test('déconnexion à distance : définitive, et plus de « je suis encore là » ensuite', async () => {
+    const ref = doc(as('alice'), 'devices', `alice_${ID}`);
+    await assertSucceeds(setDoc(ref, dev('alice')));
+    await assertSucceeds(updateDoc(ref, { last_seen: serverTimestamp() }));
+    await assertFails(updateDoc(ref, { uid: 'bob' }));
+    await assertSucceeds(updateDoc(ref, { revoked: true }));
+    await assertFails(updateDoc(ref, { revoked: false }));
+    await assertFails(updateDoc(ref, { last_seen: serverTimestamp() }));
+    await assertSucceeds(deleteDoc(ref));
+  });
+  test('heures calmes et résumé du matin : format vérifié', async () => {
+    const tok = (extra) => ({ uid: 'alice', token: 'T'.repeat(40), updated_at: serverTimestamp(), ...extra });
+    const ref = doc(as('alice'), 'push_tokens', 'tok2');
+    await assertSucceeds(setDoc(ref, tok({ quiet: { from: 1320, to: 420 }, digest: true, tz: 'Europe/Paris' })));
+    await assertSucceeds(setDoc(ref, tok({ quiet: null, digest: false, tz: 'Europe/Paris' })));
+    await assertFails(setDoc(ref, tok({ quiet: { from: 1320, to: 2000 } })));
+    await assertFails(setDoc(ref, tok({ quiet: { from: 60, to: 60 } })));
+    await assertFails(setDoc(ref, tok({ quiet: { from: 60, to: 120, extra: 1 } })));
+    await assertFails(setDoc(ref, tok({ digest: 'oui' })));
+    await assertFails(setDoc(ref, tok({ tz: '' })));
+  });
+});

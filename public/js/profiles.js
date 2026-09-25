@@ -7,6 +7,7 @@ import { encryptJSON, decryptJSON } from './crypto.js';
 import { currentKey } from './keyring.js';
 import { h, icon, avatar, modal, toast, toastError, busy, GIF_RE } from './ui.js';
 import { GIPHY_API_KEY } from './config.js';
+import { cleanLooks, looksEditor, profileBanner, songLine, moodLine, openIdCard } from './looks.js';
 
 const BIO_MAX = 160;
 const NAME_MAX = 60;
@@ -83,6 +84,7 @@ async function decryptAll() {
         gif: GIF_RE.test(p.gif || '') ? p.gif : '',
         status: String(p.status || '').slice(0, STATUS_MAX),
         birthday: BDAY_RE.test(p.birthday || '') ? p.birthday : '',
+        ...cleanLooks(p),
       });
     }
   }
@@ -229,6 +231,7 @@ export function openProfileEditor() {
   const status = h('input', { value: current.status || '', maxLength: STATUS_MAX, placeholder: 'Ex. 📚 En révision', 'aria-label': 'Statut' });
   const presets = h('div.status-presets', STATUS_PRESETS.map((p) => h('button.status-chip', { type: 'button', onclick: () => { status.value = status.value === p ? '' : p; } }, p)));
   const bday = birthdayPicker(current.birthday || '');
+  const looks = looksEditor(current);
 
   const body = h('form.slot-form.profile-form', { onsubmit: (e) => e.preventDefault() },
     h('div.profile-photo-row', preview,
@@ -240,6 +243,7 @@ export function openProfileEditor() {
     h('label.field', h('span', 'Statut / humeur'), status), presets,
     h('label.field', h('span', 'Bio'), bio), bioCount,
     h('div.field', h('span', 'Anniversaire (sans l\'année)'), bday.el),
+    looks.el,
     h('label.field', h('span', 'Vrai nom'), real),
     h('p.hint', icon('lock'), ' Ta photo, ton statut, ta bio et ton anniversaire sont visibles par ta classe. Ton vrai nom n\'est visible que par toi, les professeurs et les délégués (pour le conseil de classe). Tout est chiffré de bout en bout.'));
   renderPreview();
@@ -255,7 +259,7 @@ export function openProfileEditor() {
         const jobs = [];
         if (name !== me.display_name) jobs.push(updateDoc(userRef(me.id), { display_name: name }));
         const birthday = bday.value();
-        jobs.push(encryptedDoc('profile', me.id, { v: 1, bio: bio.value.trim().slice(0, BIO_MAX), photo: gif ? '' : photo, gif, status: status.value.trim().slice(0, STATUS_MAX), birthday })
+        jobs.push(encryptedDoc('profile', me.id, { v: 1, bio: bio.value.trim().slice(0, BIO_MAX), photo: gif ? '' : photo, gif, status: status.value.trim().slice(0, STATUS_MAX), birthday, ...looks.value() })
           .then((d) => setDoc(sub(state.cls.id, 'profiles', me.id), d)));
         if (real.value.trim() !== realName(me.id)) jobs.push(saveRealName(me.id, real.value.trim()));
         await Promise.all(jobs);
@@ -289,16 +293,21 @@ export function showProfile(m) {
   const rn = realName(m.id);
   modal({
     title: m.display_name,
-    body: h('div.profile-view',
+    body: h('div.profile-view-wrap',
+      profileBanner(p),
+      h(`div.profile-view${p.banner ? '.has-banner' : ''}`,
       avatar(m, 112),
       h('div',
         h('b.pv-name', m.display_name),
         h('small.muted', '@' + m.username),
         rn && (isNamesStaff() || m.id === state.me.id) ? h('p.pv-real', icon('users'), ' ', rn) : null,
         p.status ? h('p.pv-status', p.status) : null,
+        moodLine(p),
+        songLine(p),
         p.birthday ? h('p.pv-bday', isBirthday(m.id) ? '🎂 C\'est son anniversaire aujourd\'hui !' : `🎂 ${fmtBirthday(p.birthday)}`) : null,
-        h('p.pv-bio', p.bio || h('span.muted', 'Pas encore de bio.')))),
+        h('p.pv-bio', p.bio || h('span.muted', 'Pas encore de bio.'))))),
     actions: [
+      { label: '🆔 Carte spatiale', onClick: () => { openIdCard(m); } },
       m.id === state.me.id ? { label: 'Modifier', variant: 'btn-primary', onClick: () => { openProfileEditor(); } } : null,
       isNamesStaff() && m.id !== state.me.id ? { label: rn ? 'Modifier le vrai nom' : 'Ajouter le vrai nom', onClick: () => { openRealNameEditor(m); } } : null,
       { label: 'Fermer' },

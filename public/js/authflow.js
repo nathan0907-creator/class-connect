@@ -11,6 +11,7 @@ import { deriveAuthKey, createIdentity, unlockIdentity, storePrivateKey } from '
 import { resetIdentity } from './keyring.js';
 import { state } from './state.js';
 import { $, $$, h, toast } from './ui.js';
+import { savedPasskey, passkeySupported, unlockPasskey, passkeyError } from './passkey.js';
 import { birthdayPicker, rememberBirthday } from './profiles.js';
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -418,6 +419,31 @@ export function initAuthFlow({ onSuccess }) {
     if (ok) loginPass.reset();
   });
 
+  // Quick login with this device's passkey (fingerprint / face / PIN), see passkey.js.
+  const quick = $('[data-quick-login]', card);
+  const showQuick = () => {
+    const p = savedPasskey();
+    quick.hidden = !p || !passkeySupported();
+    if (p) quick.textContent = `🔑 Connexion rapide · ${p.label}`;
+  };
+  showQuick();
+  quick.addEventListener('click', async () => {
+    if (card.classList.contains('locked')) return;
+    error('');
+    let creds;
+    try { creds = await unlockPasskey(); } catch (err) { return error(passkeyError(err)); }
+    ctx = { mode: 'login', authEmail: creds.authEmail, label: creds.label };
+    await land(signIn(creds.authEmail, creds.password), {
+      descending: 'Connexion rapide…', success: 'Connexion réussie', busyText: 'Connexion en cours…', step: 'id',
+      onError: (err) => {
+        if (!['auth/invalid-credential', 'auth/wrong-password', 'auth/invalid-login-credentials'].includes(err.code)) return false;
+        go('id', { back: true });
+        error('Ton mot de passe a changé : connecte-toi normalement, puis réactive la connexion rapide dans « 🔐 Sécurité ».');
+        return true;
+      },
+    });
+  });
+
   // Forgot password
   const forgotBtn = $('[data-forgot]', card);
   forgotBtn.addEventListener('click', async () => {
@@ -440,7 +466,7 @@ export function initAuthFlow({ onSuccess }) {
   });
 
   return {
-    reset() { stage.reset(); go('id'); error(''); info(''); ctx = {}; },
+    reset() { stage.reset(); go('id'); error(''); info(''); ctx = {}; showQuick(); },
     get busy() { return current === 'busy'; },
   };
 }

@@ -105,10 +105,36 @@ service cloud.firestore {
       allow read: if false;
       allow create, update: if signedIn()
         && (resource == null || resource.data.uid == uid())
-        && request.resource.data.keys().hasOnly(['uid', 'token', 'updated_at'])
+        && request.resource.data.keys().hasOnly(['uid', 'token', 'updated_at', 'quiet', 'digest', 'tz'])
         && request.resource.data.uid == uid()
         && str(request.resource.data.token, 20, 4096)
-        && request.resource.data.updated_at == request.time;
+        && request.resource.data.updated_at == request.time
+        && validQuiet(request.resource.data.get('quiet', null))
+        && request.resource.data.get('digest', false) is bool
+        && str(request.resource.data.get('tz', 'UTC'), 1, 60);
+      allow delete: if signedIn() && resource.data.uid == uid();
+    }
+    // Quiet hours: minutes since midnight (22:00 → 1320), in the device's time zone.
+    function validQuiet(q) {
+      return q == null || (q is map && q.keys().hasOnly(['from', 'to']) && q.from is int && q.to is int
+        && q.from >= 0 && q.from < 1440 && q.to >= 0 && q.to < 1440 && q.from != q.to);
+    }
+
+    // ---------------------------------------------------------------- my devices (list + remote logout), owner only
+    match /devices/{id} {
+      allow get: if signedIn() && id.matches('^' + uid() + '_[A-Za-z0-9_-]{16,40}$');
+      allow list: if signedIn() && resource.data.uid == uid();
+      allow create: if signedIn() && id.matches('^' + uid() + '_[A-Za-z0-9_-]{16,40}$')
+        && request.resource.data.keys().hasOnly(['uid', 'name', 'created_at', 'last_seen', 'revoked'])
+        && request.resource.data.uid == uid() && str(request.resource.data.name, 1, 60)
+        && request.resource.data.created_at == request.time && request.resource.data.last_seen == request.time
+        && request.resource.data.revoked == false;
+      // Keep-alive of a device that is still allowed, or logout of one of mine (never "un-logout").
+      allow update: if signedIn() && resource.data.uid == uid() && (
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['last_seen', 'name'])
+          && resource.data.revoked == false && request.resource.data.last_seen == request.time
+          && str(request.resource.data.name, 1, 60))
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['revoked']) && request.resource.data.revoked == true));
       allow delete: if signedIn() && resource.data.uid == uid();
     }
 

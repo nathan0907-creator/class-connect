@@ -59,10 +59,13 @@ export function avatar(profile, size = 36, photo = undefined) {
   const p = state.profiles?.get(profile?.id);
   const src = photo !== undefined ? photo : p?.gif || p?.photo;
   const style = { '--c': safeColor(profile?.color), width: size + 'px', height: size + 'px', fontSize: size * 0.38 + 'px' };
+  // Frame and animated mood chosen in the profile (see looks.js).
+  const deco = profile?.id ? state.avatarDeco?.(profile.id, size) : null;
+  const cls = deco?.className ? '.' + deco.className : '';
   if (isSafeAvatar(src)) {
-    return h('div.avatar.has-photo', { style: { ...style, backgroundImage: `url("${src}")` }, role: 'img', 'aria-label': name });
+    return h(`div.avatar.has-photo${cls}`, { style: { ...style, ...deco?.style, backgroundImage: `url("${src}")` }, role: 'img', 'aria-label': name }, deco?.child);
   }
-  return h('div.avatar', { style }, initials);
+  return h(`div.avatar${cls}`, { style: { ...style, ...deco?.style } }, initials, deco?.child);
 }
 
 // ---- toasts

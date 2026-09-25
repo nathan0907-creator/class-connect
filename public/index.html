@@ -138,6 +138,7 @@
             <p class="hint" id="id-hint"><b>Déjà inscrit ?</b> Ton pseudo (ou ton e-mail si ton compte en a un). <b>Nouveau ?</b> Invente un pseudo : on crée ton compte en 2 étapes.</p>
             <label class="hp" aria-hidden="true">Site web <input name="website" tabindex="-1" autocomplete="off"></label>
             <button class="btn btn-primary btn-block btn-cta" type="submit"><span>Décoller</span> <i class="ico ico-rocket" aria-hidden="true"></i></button>
+            <button type="button" class="btn btn-ghost btn-block quick-login" data-quick-login hidden></button>
             <button type="button" class="link-btn guide-link" data-guide="create">❓ Besoin d'aide pour créer ou connecter ton compte ?</button>
           </form>
 
@@ -464,6 +465,9 @@
           <div class="danger-zone">
             <button class="btn btn-ghost notify-btn" data-action="notify" hidden><i class="ico ico-bell" aria-hidden="true"></i> <span data-notify-label>Notifications</span></button>
             <button class="btn btn-ghost" data-action="theme">🎨 Thème</button>
+            <button class="btn btn-ghost" data-action="display">✨ Affichage</button>
+            <button class="btn btn-ghost" data-action="security">🔐 Sécurité</button>
+            <button class="btn btn-ghost desktop-only" data-action="shortcuts">⌨️ Raccourcis</button>
             <button class="btn btn-ghost" data-guide="login">❓ Guide</button>
             <button class="btn btn-primary" data-action="edit-profile">✏️ Personnaliser mon compte</button>
             <button class="btn btn-ghost" data-action="install">📲 Installer l'application</button>

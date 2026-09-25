@@ -1,9 +1,29 @@
 // Push notifications when the app is closed: this device's Firebase Cloud Messaging token is stored in
 // push_tokens/{sha256(token)}; the "pushOnMessage" Cloud Function notifies the class members' devices.
-import { doc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { db, firebaseApp, auth } from './fb.js';
 
 const TOKEN_DOC = 'cc-push-doc';
+const PREFS = 'cc-push-prefs';
+
+/** Quiet hours (minutes since midnight, e.g. 22:00 → 1320) and the 7 a.m. morning summary, per device. */
+export function pushPrefs() {
+  let p = {};
+  try { p = JSON.parse(localStorage.getItem(PREFS) || '{}') || {}; } catch { /* ignore */ }
+  const ok = (n) => Number.isInteger(n) && n >= 0 && n < 1440;
+  return { quiet: p.quiet && ok(p.quiet.from) && ok(p.quiet.to) && p.quiet.from !== p.quiet.to ? { from: p.quiet.from, to: p.quiet.to } : null, digest: !!p.digest };
+}
+const tz = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Paris'; } catch { return 'Europe/Paris'; } };
+const prefFields = () => ({ ...pushPrefs(), tz: tz().slice(0, 60) });
+
+/** Saves the preferences and sends them to the notification server (if notifications are on here). */
+export async function savePushPrefs(p) {
+  try { localStorage.setItem(PREFS, JSON.stringify(p)); } catch { /* ignore */ }
+  let id = null;
+  try { id = localStorage.getItem(TOKEN_DOC); } catch { /* ignore */ }
+  if (id && auth.currentUser) await updateDoc(doc(db, 'push_tokens', id), { ...prefFields(), updated_at: serverTimestamp() });
+  return !!id;
+}
 let messaging = null;
 
 async function sha256(text) {
@@ -30,7 +50,7 @@ export async function enablePush() {
   const token = await getToken(m, { serviceWorkerRegistration: reg });
   if (!token) return false;
   const id = await sha256(token);
-  await setDoc(doc(db, 'push_tokens', id), { uid: user.uid, token, updated_at: serverTimestamp() });
+  await setDoc(doc(db, 'push_tokens', id), { uid: user.uid, token, ...prefFields(), updated_at: serverTimestamp() });
   try {
     const prev = localStorage.getItem(TOKEN_DOC);
     if (prev && prev !== id) await deleteDoc(doc(db, 'push_tokens', prev)).catch(() => {});

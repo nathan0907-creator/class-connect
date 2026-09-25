@@ -142,6 +142,8 @@ function studentView() {
 
 /** Printable summary (the browser's "Save as PDF"): only this sheet is printed, decrypted on this device. */
 function printSheet(title, rows) {
+  // Some browsers (iOS) never fire afterprint: drop a sheet left over from a previous export.
+  document.querySelectorAll('.print-sheet').forEach((el) => el.remove());
   const sheet = h('section.print-sheet',
     h('h1', title),
     h('p.print-meta', `${state.cls.name} · exporté le ${new Date().toLocaleDateString('fr-FR')}`),

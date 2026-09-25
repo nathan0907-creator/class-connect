@@ -5,6 +5,7 @@ import { sub, plain } from './fb.js';
 import { state, on, emit } from './state.js';
 import { h, toast } from './ui.js';
 import { dayIndex, weekIndex, challengesOfTheWeek } from './daily.js';
+import { play } from './sounds.js';
 
 export const XP = { messages: 2, voice: 5, reactions: 1, votes: 3, qotd: 10, compliments: 10, quizzes: 15, games: 10, cards: 1, pomodoros: 20 };
 const COUNTERS = Object.keys(XP);
@@ -102,7 +103,7 @@ async function flush() {
     const b = BADGES.find((x) => x.id === id);
     toast(`${b.emoji} Nouveau badge : ${b.name} !`, 'success', 6000);
   }
-  if (levelOf(next.xp) > levelOf(n(s.xp)) && s.xp) toast(`⬆️ Niveau ${levelOf(next.xp)} atteint !`, 'success', 5000);
+  if (levelOf(next.xp) > levelOf(n(s.xp)) && s.xp) { toast(`⬆️ Niveau ${levelOf(next.xp)} atteint !`, 'success', 5000); play('level'); }
   allStats.set(state.me.id, next);
   try { await setDoc(doc(sub(state.cls.id, 'stats'), state.me.id), { ...next, updated_at: serverTimestamp() }); } catch { /* retried next time */ }
 }
