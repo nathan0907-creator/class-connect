@@ -2231,3 +2231,61 @@ kbd { display: inline-block; min-width: 22px; padding: 2px 7px; border-radius: 6
 .share-box { display: flex; flex-direction: column; gap: 10px; }
 .share-files { margin: 0; padding-left: 18px; }
 .share-text { margin: 0; padding: 8px 12px; border-left: 3px solid var(--accent); background: rgba(0, 0, 0, .25); border-radius: 0 10px 10px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* ─── Birthday party (birthday.js) ─── */
+.bday-party {
+  position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 16px; overflow: hidden;
+  background: radial-gradient(ellipse at 50% 40%, rgba(255, 79, 216, .35), rgba(3, 2, 10, .88) 70%);
+  opacity: 0; transition: opacity .5s ease; backdrop-filter: blur(6px);
+}
+.bday-party.in { opacity: 1; }
+.bday-party.out { opacity: 0; }
+.bday-confetti, .bday-balloons { position: absolute; inset: 0; pointer-events: none; }
+.bday-confetti i { position: absolute; top: -20px; border-radius: 2px; animation: confettiFall linear infinite; }
+@keyframes confettiFall {
+  0% { transform: translate(0, -20px) rotate(0); opacity: 1; }
+  100% { transform: translate(var(--drift), 110vh) rotate(var(--spin)); opacity: .9; }
+}
+.bday-balloons span { position: absolute; bottom: -90px; animation: balloonRise ease-in infinite; }
+@keyframes balloonRise {
+  0% { transform: translate(0, 0); }
+  50% { transform: translate(var(--sway), -55vh); }
+  100% { transform: translate(0, -120vh); }
+}
+.bday-card {
+  position: relative; text-align: center; max-width: 520px; width: 100%; padding: 26px 22px 20px; border-radius: 28px;
+  background: linear-gradient(160deg, rgba(40, 20, 90, .92), rgba(12, 8, 34, .95));
+  border: 1px solid rgba(255, 207, 107, .5); box-shadow: 0 0 60px -10px rgba(255, 79, 216, .7), 0 0 0 6px rgba(255, 207, 107, .08);
+  animation: bdayPop .8s var(--spring) both;
+}
+@keyframes bdayPop { from { transform: scale(.6) translateY(40px); opacity: 0; } }
+.bday-avatars { display: flex; justify-content: center; gap: 10px; }
+.bday-avatars .avatar { box-shadow: 0 0 0 3px #ffcf6b, 0 0 24px #ff4fd8; animation: bdayBob 2s ease-in-out infinite; }
+.bday-avatars .avatar:nth-child(2) { animation-delay: .3s; }
+.bday-avatars .avatar:nth-child(3) { animation-delay: .6s; }
+@keyframes bdayBob { 50% { transform: translateY(-8px) rotate(-3deg); } }
+.bday-cake { font-size: 64px; margin: 6px 0 -4px; animation: cakeWiggle 1.2s ease-in-out infinite; display: inline-block; filter: drop-shadow(0 0 16px rgba(255, 207, 107, .7)); }
+@keyframes cakeWiggle { 0%, 100% { transform: rotate(-6deg) scale(1); } 50% { transform: rotate(6deg) scale(1.08); } }
+.bday-title {
+  margin: 8px 0 6px; font: 900 clamp(22px, 5vw, 34px)/1.15 var(--font-display);
+  background: linear-gradient(90deg, #ffcf6b, #ff4fd8, #00d4ff, #3dffa8, #ffcf6b); background-size: 300% 100%;
+  -webkit-background-clip: text; background-clip: text; color: transparent; animation: bdayShine 4s linear infinite;
+}
+@keyframes bdayShine { to { background-position: 300% 0; } }
+.bday-sub { margin: 0 0 16px; color: var(--text); }
+.bday-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.bday-music.pulse { animation: bdayPulse 1.2s ease-in-out infinite; border-color: #ffcf6b; }
+@keyframes bdayPulse { 50% { box-shadow: 0 0 0 6px rgba(255, 207, 107, .25); } }
+/* The rest of the day: a few balloons drift quietly across the app. */
+body.bday-day[data-view="app"]::after {
+  content: '🎈'; position: fixed; left: 6%; bottom: -80px; font-size: 42px; z-index: 3; pointer-events: none;
+  animation: balloonRise 16s ease-in infinite; --sway: 40px; opacity: .8;
+}
+body.bday-day[data-view="app"]::before {
+  content: '🎈'; position: fixed; right: 8%; bottom: -80px; font-size: 34px; z-index: 3; pointer-events: none;
+  animation: balloonRise 21s ease-in 7s infinite; --sway: -30px; opacity: .75; filter: hue-rotate(140deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .bday-confetti, .bday-balloons { display: none; }
+  .bday-card, .bday-cake, .bday-avatars .avatar, .bday-title { animation: none; }
+}

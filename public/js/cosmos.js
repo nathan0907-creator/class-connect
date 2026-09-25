@@ -6,6 +6,7 @@ import { statsOf, levelOf } from './stats.js';
 import { showProfile, birthdaysToday } from './profiles.js';
 import { allSlots } from './timetable.js';
 import { play } from './sounds.js';
+import { checkBirthdayParty } from './birthday.js';
 
 const GREEK = ['Alpha', 'Bêta', 'Gamma', 'Delta', 'Epsilon', 'Zêta', 'Êta', 'Thêta', 'Iota', 'Kappa', 'Lambda', 'Mu',
   'Nu', 'Xi', 'Omicron', 'Pi', 'Rhô', 'Sigma', 'Tau', 'Upsilon', 'Phi', 'Khi', 'Psi', 'Oméga'];
@@ -131,16 +132,12 @@ export function openSolarSystem() {
 
 // ------------------------------------------------------------ living sky: birthdays and a lively class
 let aurora = null;
-let celebrated = '';
 function updateSky() {
   if (!state.cls) return;
   const birthdays = birthdaysToday();
   state.space?.celebrate?.(birthdays.length > 0 && !calm());
-  const key = `${new Date().toDateString()}|${birthdays.map((m) => m.id).join()}`;
-  if (birthdays.length && celebrated !== key) {
-    celebrated = key;
-    toast(`🎂 Anniversaire de ${birthdays.map((m) => m.display_name).join(', ')} : pluie d'étoiles filantes ! 🌠`, 'success', 6000);
-  }
+  // Birthday party with music, once per day on this device (see birthday.js).
+  checkBirthdayParty();
   // Aurora: at least 3 members online (or a third of the class).
   const online = state.online?.size || 0;
   const active = crew().length;
@@ -153,6 +150,7 @@ export function initCosmos() {
   on('presence', updateSky);
   on('members', updateSky);
   on('space-ready', updateSky);
+  on('app-ready', updateSky);
   initEggs();
 }
 

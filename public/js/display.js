@@ -20,7 +20,7 @@ export const WALLPAPERS = {
   dots: '🔵 Pois',
   waves: '🌊 Vagues',
 };
-const DEFAULTS = { size: 'm', font: 'inter', colorblind: false, wallpaper: 'none', blurMedia: false, sounds: false, motion: false };
+const DEFAULTS = { size: 'm', font: 'inter', colorblind: false, wallpaper: 'none', blurMedia: false, sounds: false, motion: false, bdayMusic: true };
 
 export function displayPrefs() {
   let saved = {};
@@ -101,6 +101,7 @@ export function openDisplay() {
       toggle('Mode daltonien', 'Remplace le rouge et le vert par du bleu et de l\'orange (réussi / raté, en ligne…)', 'colorblind'),
       toggle('Flouter toutes les photos', 'Les photos et vidéos du chat restent floutées jusqu\'à ce que tu les touches', 'blurMedia',
         () => toast('Appliqué aux prochains messages affichés')),
+      toggle('Musique d\'anniversaire', 'Joue « Joyeux anniversaire » quand c\'est l\'anniversaire de quelqu\'un de la classe', 'bdayMusic'),
       toggle('Sons', 'Petits bruitages spatiaux à l\'envoi et à la réception', 'sounds', (on) => on && play('pop')),
       toggle('Moins d\'animations', 'Coupe les effets qui bougent beaucoup (aurores, étoiles filantes…)', 'motion')),
   });
