@@ -185,5 +185,33 @@ db.collectionGroup('scheduled').where('send_at', '>', Timestamp.fromMillis(0)).o
   }
 }, (err) => { log('⚠ écoute des messages programmés interrompue :', err.message); setTimeout(() => process.exit(1), 30000); });
 
+
+// ------------------------------------------------------------ personal reminders ("Mes rappels")
+// Encrypted with the class key: the phone decrypts the text itself when the notification arrives.
+const reminderTimers = new Map();
+async function remind(ref) {
+  reminderTimers.delete(ref.path);
+  const snap = await ref.get();
+  if (!snap.exists) return;
+  const r = snap.data();
+  const cid = ref.parent.parent.id;
+  if (users.get(r.user_id)?.class_id === cid) {
+    await sendTo(new Set([r.user_id]), {
+      title: '⏰ Rappel', body: 'Tu avais demandé un rappel', tag: `cc-reminder-${ref.id}`, url: SITE,
+      kind: 'reminder', cid, epoch: String(r.epoch), user_id: r.user_id, iv: r.iv, ciphertext: r.ciphertext,
+    }, 'rappel');
+  }
+  await ref.delete();
+}
+db.collectionGroup('reminders').where('at', '>', Timestamp.fromMillis(0)).onSnapshot((snap) => {
+  for (const c of snap.docChanges()) {
+    clearTimeout(reminderTimers.get(c.doc.ref.path));
+    reminderTimers.delete(c.doc.ref.path);
+    if (c.type === 'removed') continue;
+    const wait = c.doc.get('at').toMillis() - Date.now();
+    if (wait < MAX_WAIT) reminderTimers.set(c.doc.ref.path, setTimeout(() => remind(c.doc.ref).catch((err) => log('⚠ rappel :', err.message)), Math.max(0, wait)));
+  }
+}, (err) => { log('⚠ écoute des rappels interrompue :', err.message); setTimeout(() => process.exit(1), 30000); });
+
 log('🚀 Serveur de notifications Class Connect démarré. Laisse cette fenêtre ouverte.');
 setInterval(() => log(`… toujours en marche · ${users.size} membres · ${tokens.size} appareil(s) abonné(s)`), 6 * 3600e3);

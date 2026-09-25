@@ -46,6 +46,17 @@ test('pas de données arbitraires : booléen / horodatage uniquement', async () 
   await assertSucceeds(set(ref(as('alice'), `typing/${CID}/messages/alice`), Date.now()));
 });
 
+test('tableau blanc : traits signés de leur auteur, jamais modifiés ni au format libre', async () => {
+  const s = { by: 'alice', e: 1, iv: 'I'.repeat(16), ct: 'C'.repeat(100), t: Date.now() };
+  await assertSucceeds(set(ref(as('alice'), `boards/${CID}/strokes/s1`), s));
+  await assertFails(set(ref(as('bob'), `boards/${CID}/strokes/s2`), s));
+  await assertFails(set(ref(as('alice'), `boards/${CID}/strokes/s1`), { ...s, ct: 'X'.repeat(100) }));
+  await assertFails(set(ref(as('alice'), `boards/${CID}/strokes/s3`), { ...s, ct: 'C'.repeat(50000) }));
+  await assertFails(set(ref(as('alice'), `boards/${CID}/strokes/s4`), { ...s, pub: 'spam' }));
+  await assertSucceeds(set(ref(as('bob'), `boards/${CID}/cleared_at`), Date.now()));
+  await assertFails(get(ref(env.unauthenticatedContext().database(), `boards/${CID}`)));
+});
+
 test('pas de classes ni de canaux inventés (remplissage de la base)', async () => {
   await assertFails(set(ref(as('alice'), 'presence/pas-une-classe/alice'), true));
   await assertFails(set(ref(as('alice'), `typing/${CID}/canal-invente/alice`), Date.now()));

@@ -17,7 +17,11 @@ service cloud.firestore {
     function classPath(cid) { return /databases/$(database)/documents/classes/$(cid); }
     function me() { return get(userPath(uid())).data; }
     function isActiveMember(cid) { return signedIn() && exists(userPath(uid())) && me().class_id == cid && me().status == 'active'; }
-    function isDelegate(cid) { return isActiveMember(cid) && me().role == 'delegate'; }
+    // A deputy may stand in for the delegate for a limited time ("passation"), with the same powers.
+    function isDelegate(cid) {
+      return isActiveMember(cid) && (me().role == 'delegate'
+        || (me().role == 'deputy' && me().get('acting_until', null) is timestamp && me().acting_until > request.time));
+    }
     function isTeacher(cid) { return isActiveMember(cid) && me().role == 'teacher'; }
     function isPrincipal(cid) { return isTeacher(cid) && me().get('principal', false) == true; }
     function isDeputy(cid) { return isActiveMember(cid) && me().role == 'deputy'; }
@@ -108,6 +112,15 @@ service cloud.firestore {
       allow delete: if signedIn() && resource.data.uid == uid();
     }
 
+    // ---------------------------------------------------------------- personal data (grade book), encrypted with my own key
+    match /private_data/{userId} {
+      allow read, delete: if signedIn() && userId == uid();
+      allow create, update: if signedIn() && userId == uid()
+        && request.resource.data.keys().hasOnly(['iv', 'ciphertext', 'updated_at'])
+        && str(request.resource.data.iv, 10, 32) && str(request.resource.data.ciphertext, 10, 300000)
+        && request.resource.data.updated_at == request.time;
+    }
+
     // ---------------------------------------------------------------- private keys (encrypted with the password)
     match /private/{userId} {
       allow read: if signedIn() && userId == uid();
@@ -120,8 +133,10 @@ service cloud.firestore {
     // ---------------------------------------------------------------- users
     function userKeys() {
       return request.resource.data.keys().hasOnly(['username', 'display_name', 'color', 'public_key', 'class_id',
-        'role', 'status', 'created_at', 'invite_code', 'trusted', 'principal']);
+        'role', 'status', 'created_at', 'invite_code', 'trusted', 'principal', 'muted_until', 'acting_until']);
     }
+    // Leaving a class (or being removed) ends any mute and any handover: nothing carries over to another class.
+    function cleared(a) { return a.get('muted_until', null) == null && a.get('acting_until', null) == null; }
     function selfUpdate(userId) {
       let b = resource.data;
       let a = request.resource.data;
@@ -143,8 +158,8 @@ service cloud.firestore {
             && !exists(classPath(a.class_id))
             && getAfter(classPath(a.class_id)).data.created_by == uid())
         // leave the class (the "trusted" flag is dropped)
-        || (onlyChanged(['class_id', 'status', 'role', 'invite_code', 'trusted', 'principal']) && a.class_id == null && a.status == 'none'
-            && a.role == 'student' && notTrusted(a) && notPrincipal(a))
+        || (onlyChanged(['class_id', 'status', 'role', 'invite_code', 'trusted', 'principal', 'muted_until', 'acting_until']) && a.class_id == null && a.status == 'none'
+            && a.role == 'student' && notTrusted(a) && notPrincipal(a) && cleared(a))
       );
     }
     function delegateUpdate(userId) {
@@ -152,8 +167,8 @@ service cloud.firestore {
       let a = request.resource.data;
       return userId != uid() && b.class_id != null && isDelegate(b.class_id) && (
         (onlyChanged(['status']) && b.status == 'pending' && a.status == 'active')
-        || (onlyChanged(['class_id', 'status', 'role', 'trusted', 'principal']) && a.class_id == null && a.status == 'none'
-            && a.role == 'student' && notTrusted(a) && notPrincipal(a))
+        || (onlyChanged(['class_id', 'status', 'role', 'trusted', 'principal', 'muted_until', 'acting_until']) && a.class_id == null && a.status == 'none'
+            && a.role == 'student' && notTrusted(a) && notPrincipal(a) && cleared(a))
         // student roles: élève / suppléant / délégué
         || (onlyChanged(['role']) && b.status == 'active' && b.role != 'teacher' && a.role in ['student', 'deputy', 'delegate'])
         // a member becomes a teacher (or a teacher goes back to student): no "trusted" / "prof principal" carried over
@@ -163,6 +178,12 @@ service cloud.firestore {
         || (onlyChanged(['principal']) && b.status == 'active' && b.role == 'teacher' && a.principal is bool)
         // mark a student as trusted (may publish courses for the AI)
         || (onlyChanged(['trusted']) && b.status == 'active' && b.role != 'teacher' && a.trusted is bool)
+        // temporary mute (a student can't write for a while, 7 days at most)
+        || (onlyChanged(['muted_until']) && b.status == 'active' && b.role != 'teacher'
+            && (a.muted_until == null || (a.muted_until is timestamp && a.muted_until < request.time + duration.value(7, 'd'))))
+        // a deputy stands in for the delegate (30 days at most)
+        || (onlyChanged(['acting_until']) && b.status == 'active' && b.role == 'deputy'
+            && (a.acting_until == null || (a.acting_until is timestamp && a.acting_until < request.time + duration.value(30, 'd'))))
       );
     }
 
@@ -206,12 +227,16 @@ service cloud.firestore {
         && me().class_id == null
         && getAfter(userPath(uid())).data.class_id == cid
         && existsAfter(/databases/$(database)/documents/invites/$(request.resource.data.invite_code));
-      allow update: if isDelegate(cid) && (
+      allow update: if (isTeacher(cid) && onlyChanged(['slow']) && request.resource.data.slow is int
+                         && request.resource.data.slow >= 0 && request.resource.data.slow <= 600)
+        || isDelegate(cid) && (
         (onlyChanged(['name']) && str(request.resource.data.name, 2, 60))
         || (onlyChanged(['invite_code']) && getAfter(/databases/$(database)/documents/invites/$(request.resource.data.invite_code)).data.class_id == cid)
         // the teachers' code moved to secrets/codes: it can only be removed from here
         || (onlyChanged(['teacher_code']) && !('teacher_code' in request.resource.data))
         || (onlyChanged(['key_epoch']) && request.resource.data.key_epoch == resource.data.key_epoch + 1)
+        // slow mode, in seconds between two messages of a student (0 = off)
+        || (onlyChanged(['slow']) && request.resource.data.slow is int && request.resource.data.slow >= 0 && request.resource.data.slow <= 600)
         // Monday of a "semaine A" (timetables alternating A / B weeks)
         || (onlyChanged(['week_a']) && request.resource.data.week_a is string
             && request.resource.data.week_a.matches('^20[0-9]{2}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$'))
@@ -245,13 +270,59 @@ service cloud.firestore {
         allow delete: if false;
       }
 
+      // "Mode lent" (slow mode) when a discussion heats up: students wait N seconds between messages.
+      function slowSecs(cid) { return isStaff(cid) || get(classPath(cid)).data.get('slow', 0) < 1 ? 1 : get(classPath(cid)).data.slow; }
+      // Muted by a delegate: can't write in the channels until then.
+      function notMuted() { return !(me().get('muted_until', null) is timestamp && me().muted_until > request.time); }
+
       // Anti-spam: one message per second per member, enforced server-side.
       match /rate/{userId} {
         allow read: if false;
         allow create, update: if isActiveMember(cid) && userId == uid()
           && request.resource.data.keys().hasOnly(['last']) && request.resource.data.last == request.time
           && (!exists(/databases/$(database)/documents/classes/$(cid)/rate/$(uid()))
-              || request.time > resource.data.last + duration.value(1, 's'));
+              || request.time > resource.data.last + duration.value(slowSecs(cid), 's'));
+      }
+
+      // Every moderation action on a message is written in the moderation log in the same batch.
+      function logged(id) {
+        return existsAfter(/databases/$(database)/documents/classes/$(cid)/modlog/$(id))
+          && getAfter(/databases/$(database)/documents/classes/$(cid)/modlog/$(id)).data.by == uid();
+      }
+
+      // Changes to an existing message. Every piece is computed once: Firestore stops a rule after 1 000 operations.
+      function messageUpdate(ch, mid) {
+        let role = me().role;
+        let active = isActiveMember(cid);
+        let can = active && ((ch == 'messages' && role != 'teacher') || (ch == 'staff_messages' && role == 'teacher')
+          || ch in ['mixed_messages', 'announcements']);
+        let mod = active && ((ch == 'messages' && role in ['delegate', 'deputy']) || (ch == 'staff_messages' && role == 'teacher')
+          || (ch in ['mixed_messages', 'announcements'] && role in ['delegate', 'deputy', 'teacher']));
+        let d = request.resource.data;
+        let r = resource.data;
+        let alive = !('deleted_at' in r);
+        let keys = d.diff(r).affectedKeys();
+        // Pin / unpin (moderators, written in the moderation log)
+        return (mod && keys.hasOnly(['pinned']) && d.pinned is bool && logged(mid + '_pin'))
+          // Deletion is "soft": the message disappears for everyone but stays (encrypted) 30 days as evidence.
+          || (can && alive && (r.user_id == uid() || (mod && logged(mid + '_del')))
+              && keys.hasOnly(['deleted_at', 'deleted_by', 'pinned'])
+              && d.deleted_at == request.time && d.deleted_by == uid() && d.pinned == false)
+          // Emoji reactions: each member only adds / changes / removes their own.
+          || (can && alive && keys.hasOnly(['reactions']) && d.reactions is map && d.reactions.size() <= 200
+              && d.reactions.diff(r.get('reactions', {})).affectedKeys().hasOnly([uid()])
+              && (!(uid() in d.reactions)
+                  || d.reactions[uid()] in ['👍', '❤️', '😂', '😮', '😢', '🔥', '🎉', '🚀',
+                       '👏', '🙏', '💯', '😍', '🤔', '😡', '😭', '🥳', '😎', '🤯', '👀', '✅', '❌', '💀', '🫡', '🤝',
+                       '💪', '⭐', '💜', '💙', '🍕', '☕', '😴', '🤡', '🙈', '🥲', '😅', '🤣', '👌', '✨', '🪐', '🌙']))
+          // Poll: each member votes for one option (and may change or take back their vote).
+          || (can && alive && r.get('kind', '') == 'poll' && keys.hasOnly(['votes']) && d.votes is map && d.votes.size() <= 200
+              && d.votes.diff(r.get('votes', {})).affectedKeys().hasOnly([uid()])
+              && (!(uid() in d.votes) || (d.votes[uid()] is int && d.votes[uid()] >= 0 && d.votes[uid()] < 10)))
+          // Editing: the author, within 15 minutes, same key (a harassing message can't be rewritten much later).
+          || (can && alive && r.user_id == uid() && keys.hasOnly(['iv', 'ciphertext', 'edited_at']) && d.edited_at == request.time
+              && request.time < r.created_at + duration.value(15, 'm')
+              && str(d.iv, 10, 32) && str(d.ciphertext, 10, 60000));
       }
 
       // Encrypted messages, one collection per channel (students / teachers / everyone / announcements).
@@ -263,40 +334,13 @@ service cloud.firestore {
           // Ephemeral message: hidden after at most 7 days (still kept encrypted 30 days more as evidence).
           && (!('expire_at' in request.resource.data) || (request.resource.data.expire_at is timestamp
               && request.resource.data.expire_at > request.time && request.resource.data.expire_at <= request.time + duration.value(7, 'd')))
-          && request.resource.data.user_id == uid()
+          && request.resource.data.user_id == uid() && notMuted()
           && request.resource.data.epoch == get(classPath(cid)).data.key_epoch
           && request.resource.data.pinned == false
           && request.resource.data.created_at == request.time
           && str(request.resource.data.iv, 10, 32) && str(request.resource.data.ciphertext, 10, 60000)
           && getAfter(/databases/$(database)/documents/classes/$(cid)/rate/$(uid())).data.last == request.time;
-        allow update: if isChannel(channel) && (
-          (moderates(cid, channel) && onlyChanged(['pinned']) && request.resource.data.pinned is bool)
-          // Deletion is "soft": the message disappears for everyone but stays (encrypted) 30 days as evidence.
-          || (canChannel(cid, channel) && (resource.data.user_id == uid() || moderates(cid, channel))
-              && !('deleted_at' in resource.data)
-              && onlyChanged(['deleted_at', 'deleted_by', 'pinned'])
-              && request.resource.data.deleted_at == request.time
-              && request.resource.data.deleted_by == uid()
-              && request.resource.data.pinned == false)
-          // Emoji reactions: each member only adds / changes / removes their own.
-          || (canChannel(cid, channel) && !('deleted_at' in resource.data) && onlyChanged(['reactions'])
-              && request.resource.data.reactions is map && request.resource.data.reactions.size() <= 200
-              && request.resource.data.reactions.diff(resource.data.get('reactions', {})).affectedKeys().hasOnly([uid()])
-              && (!(uid() in request.resource.data.reactions)
-                  || request.resource.data.reactions[uid()] in ['👍', '❤️', '😂', '😮', '😢', '🔥', '🎉', '🚀',
-                       '👏', '🙏', '💯', '😍', '🤔', '😡', '😭', '🥳', '😎', '🤯', '👀', '✅', '❌', '💀', '🫡', '🤝',
-                       '💪', '⭐', '💜', '💙', '🍕', '☕', '😴', '🤡', '🙈', '🥲', '😅', '🤣', '👌', '✨', '🪐', '🌙']))
-          // Poll: each member votes for one option (and may change or take back their vote).
-          || (canChannel(cid, channel) && !('deleted_at' in resource.data) && resource.data.get('kind', '') == 'poll'
-              && onlyChanged(['votes']) && request.resource.data.votes is map && request.resource.data.votes.size() <= 200
-              && request.resource.data.votes.diff(resource.data.get('votes', {})).affectedKeys().hasOnly([uid()])
-              && (!(uid() in request.resource.data.votes)
-                  || (request.resource.data.votes[uid()] is int && request.resource.data.votes[uid()] >= 0 && request.resource.data.votes[uid()] < 10)))
-          // Editing: the author, within 15 minutes, same key (a harassing message can't be rewritten much later).
-          || (canChannel(cid, channel) && resource.data.user_id == uid() && !('deleted_at' in resource.data)
-              && onlyChanged(['iv', 'ciphertext', 'edited_at']) && request.resource.data.edited_at == request.time
-              && request.time < resource.data.created_at + duration.value(15, 'm')
-              && str(request.resource.data.iv, 10, 32) && str(request.resource.data.ciphertext, 10, 60000)));
+        allow update: if isChannel(channel) && messageUpdate(channel, mid);
         // Permanent removal only once the 30-day retention period is over (after deletion, or after an ephemeral message expired).
         allow delete: if isChannel(channel) && canChannel(cid, channel) && (
           ('deleted_at' in resource.data && resource.data.deleted_at < request.time - duration.value(30, 'd'))
@@ -479,6 +523,301 @@ service cloud.firestore {
           && request.resource.data.send_at < request.time + duration.value(24, 'd')
           && request.resource.data.created_at == request.time;
         allow update: if false;
+      }
+
+      // ------------------------------------------------ class life (fun)
+      // Personal counters (XP, streak, badges, weekly challenges): written by the member only, seen by the class.
+      match /stats/{userId} {
+        function count(v) { return v is int && v >= 0 && v <= 10000000; }
+        allow read: if isActiveMember(cid);
+        allow create, update: if isActiveMember(cid) && userId == uid()
+          && request.resource.data.keys().hasOnly(['xp', 'streak', 'best_streak', 'last_day', 'week', 'w', 'total', 'badges', 'updated_at'])
+          && count(request.resource.data.xp) && count(request.resource.data.streak) && count(request.resource.data.best_streak)
+          && count(request.resource.data.last_day) && count(request.resource.data.week)
+          && request.resource.data.w is map && request.resource.data.w.size() <= 20
+          && request.resource.data.total is map && request.resource.data.total.size() <= 20
+          && request.resource.data.badges is list && request.resource.data.badges.size() <= 60
+          && request.resource.data.updated_at == request.time;
+        allow delete: if isActiveMember(cid) && userId == uid();
+      }
+
+      // Compliments, playlist, class journal: encrypted posts with likes.
+      match /board/{bid} {
+        allow read: if isActiveMember(cid);
+        allow create: if isActiveMember(cid)
+          && request.resource.data.keys().hasOnly(['kind', 'by', 'to', 'month', 'epoch', 'iv', 'ciphertext', 'created_at'])
+          && request.resource.data.kind in ['compliment', 'song', 'memory'] && request.resource.data.by == uid()
+          && request.resource.data.get('to', '') is string && request.resource.data.get('month', '') is string
+          && request.resource.data.created_at == request.time && sealed(request.resource.data, 300000);
+        allow update: if isActiveMember(cid) && onlyChanged(['likes']) && request.resource.data.likes is map
+          && request.resource.data.likes.diff(resource.data.get('likes', {})).affectedKeys().hasOnly([uid()])
+          && (!(uid() in request.resource.data.likes) || request.resource.data.likes[uid()] == true);
+        allow delete: if isActiveMember(cid)
+          && (resource.data.by == uid() || resource.data.get('to', '') == uid() || isStaff(cid));
+      }
+
+      // Time capsule: sealed until its opening date (only its author can read it before).
+      match /capsules/{capid} {
+        allow read: if isActiveMember(cid) && (resource.data.by == uid() || request.time >= resource.data.open_at);
+        allow create: if isActiveMember(cid)
+          && request.resource.data.keys().hasOnly(['by', 'open_at', 'epoch', 'iv', 'ciphertext', 'created_at'])
+          && request.resource.data.by == uid() && request.resource.data.created_at == request.time
+          && request.resource.data.open_at is timestamp && request.resource.data.open_at > request.time + duration.value(1, 'd')
+          && request.resource.data.open_at < request.time + duration.value(400, 'd')
+          && sealed(request.resource.data, 60000);
+        allow update: if false;
+        allow delete: if isActiveMember(cid) && (resource.data.by == uid() || isDelegate(cid));
+      }
+      // Capsules waiting to be opened: only their author and date (the content stays sealed above).
+      match /capsule_dates/{capid} {
+        allow read: if isActiveMember(cid);
+        allow create: if isActiveMember(cid) && request.resource.data.keys().hasOnly(['by', 'open_at'])
+          && request.resource.data.by == uid()
+          && request.resource.data.open_at == getAfter(/databases/$(database)/documents/classes/$(cid)/capsules/$(capid)).data.open_at
+          && getAfter(/databases/$(database)/documents/classes/$(cid)/capsules/$(capid)).data.by == uid();
+        allow update: if false;
+        allow delete: if isActiveMember(cid) && (resource.data.by == uid() || isDelegate(cid));
+      }
+
+      // Birthday card signed by the class: hidden from the birthday person until the day.
+      match /cards/{cardId} {
+        function signOnly() {
+          return onlyChanged(['signatures']) && request.resource.data.signatures is map
+            && request.resource.data.signatures.diff(resource.data.signatures).affectedKeys().hasOnly([uid()])
+            && (!(uid() in request.resource.data.signatures)
+                || (str(request.resource.data.signatures[uid()].iv, 10, 32) && str(request.resource.data.signatures[uid()].ciphertext, 10, 3000)
+                    && request.resource.data.signatures[uid()].keys().hasOnly(['iv', 'ciphertext'])));
+        }
+        allow get: if isActiveMember(cid) && (resource.data.target != uid() || request.time >= resource.data.open_at);
+        allow list: if isActiveMember(cid) && resource.data.target != uid();
+        allow create: if isActiveMember(cid) && request.resource.data.keys().hasOnly(['target', 'open_at', 'epoch', 'signatures'])
+          && request.resource.data.target != uid() && cardId == request.resource.data.target + '_' + string(request.resource.data.open_at.year())
+          && get(userPath(request.resource.data.target)).data.class_id == cid
+          && request.resource.data.open_at is timestamp && request.resource.data.open_at < request.time + duration.value(370, 'd')
+          && request.resource.data.epoch == get(classPath(cid)).data.key_epoch
+          && request.resource.data.signatures is map && request.resource.data.signatures.size() == 0;
+        allow update: if isActiveMember(cid) && resource.data.target != uid() && signOnly();
+        allow delete: if isDelegate(cid);
+      }
+
+      // End-of-year awards ("le plus drôle"…): the delegates open categories, everyone votes for one member.
+      match /awards/{aid} {
+        allow read: if isActiveMember(cid);
+        allow create: if isDelegate(cid) && request.resource.data.keys().hasOnly(['title', 'open', 'votes', 'created_at'])
+          && str(request.resource.data.title, 2, 60) && request.resource.data.open == true
+          && request.resource.data.votes is map && request.resource.data.votes.size() == 0
+          && request.resource.data.created_at == request.time;
+        allow update: if (isDelegate(cid) && onlyChanged(['open']) && request.resource.data.open is bool)
+          || (isActiveMember(cid) && resource.data.open == true && onlyChanged(['votes'])
+              && request.resource.data.votes.diff(resource.data.votes).affectedKeys().hasOnly([uid()])
+              && (!(uid() in request.resource.data.votes)
+                  || (request.resource.data.votes[uid()] is string && request.resource.data.votes[uid()] != uid()
+                      && get(userPath(request.resource.data.votes[uid()])).data.class_id == cid)));
+        allow delete: if isDelegate(cid);
+      }
+
+      // Two-player mini-games (tic-tac-toe, connect four, rock-paper-scissors). Boards aren't secret.
+      match /games/{gid} {
+        function players() { return resource.data.players; }
+        allow read: if isActiveMember(cid);
+        allow create: if isActiveMember(cid)
+          && request.resource.data.keys().hasOnly(['kind', 'players', 'turn', 'board', 'winner', 'commits', 'reveals', 'created_at', 'updated_at'])
+          && request.resource.data.kind in ['ttt', 'c4', 'rps']
+          && request.resource.data.players is list && request.resource.data.players.size() == 2
+          && request.resource.data.players[0] == uid() && request.resource.data.players[1] != uid()
+          && get(userPath(request.resource.data.players[1])).data.class_id == cid
+          && request.resource.data.winner == '' && request.resource.data.created_at == request.time
+          && request.resource.data.updated_at == request.time && str(request.resource.data.board, 0, 64);
+        allow update: if isActiveMember(cid) && uid() in players() && resource.data.winner == ''
+          && request.resource.data.updated_at == request.time
+          && (
+            // board games: the player whose turn it is plays, then it's the other one's turn
+            (resource.data.kind in ['ttt', 'c4'] && resource.data.turn == uid()
+              && onlyChanged(['board', 'turn', 'winner', 'updated_at']) && str(request.resource.data.board, 9, 64)
+              && request.resource.data.turn in players() && request.resource.data.turn != uid()
+              && request.resource.data.winner is string)
+            // rock-paper-scissors: a hidden choice first (hash), then revealed once both chose
+            || (resource.data.kind == 'rps' && onlyChanged(['commits', 'updated_at'])
+              && request.resource.data.commits.diff(resource.data.commits).affectedKeys().hasOnly([uid()])
+              && !(uid() in resource.data.commits) && str(request.resource.data.commits[uid()], 64, 64))
+            || (resource.data.kind == 'rps' && resource.data.commits.size() == 2 && onlyChanged(['reveals', 'winner', 'updated_at'])
+              && request.resource.data.reveals.diff(resource.data.reveals).affectedKeys().hasOnly([uid()])
+              && str(request.resource.data.reveals[uid()], 3, 80) && request.resource.data.winner is string)
+            // giving up
+            || (onlyChanged(['winner', 'updated_at']) && request.resource.data.winner in players() && request.resource.data.winner != uid())
+          );
+        allow delete: if isActiveMember(cid) && (uid() in resource.data.players || isStaff(cid));
+      }
+
+      // Live quiz (Kahoot-like): the host runs it, answers are timed by the server clock.
+      match /quizzes/{qid} {
+        allow read: if isActiveMember(cid);
+        allow create: if isActiveMember(cid)
+          && request.resource.data.keys().hasOnly(['host', 'title', 'epoch', 'iv', 'ciphertext', 'count', 'phase', 'index', 'started_at', 'answer', 'created_at'])
+          && request.resource.data.host == uid() && request.resource.data.phase == 'lobby' && request.resource.data.index == -1
+          && request.resource.data.count is int && request.resource.data.count >= 1 && request.resource.data.count <= 30
+          && str(request.resource.data.title, 2, 80) && request.resource.data.created_at == request.time
+          && sealed(request.resource.data, 60000);
+        allow update: if isActiveMember(cid) && resource.data.host == uid()
+          && onlyChanged(['phase', 'index', 'started_at', 'answer'])
+          && request.resource.data.phase in ['lobby', 'question', 'reveal', 'end']
+          && request.resource.data.index is int && request.resource.data.index < resource.data.count
+          && (request.resource.data.phase != 'question' || request.resource.data.started_at == request.time);
+        allow delete: if isActiveMember(cid) && (resource.data.host == uid() || isStaff(cid));
+        match /answers/{aid} {
+          function quiz() { return get(/databases/$(database)/documents/classes/$(cid)/quizzes/$(qid)).data; }
+          allow read: if isActiveMember(cid);
+          allow create: if isActiveMember(cid) && aid == uid() + '_' + string(request.resource.data.index)
+            && request.resource.data.keys().hasOnly(['uid', 'index', 'choice', 'at'])
+            && request.resource.data.uid == uid() && request.resource.data.at == request.time
+            && request.resource.data.choice is int && request.resource.data.choice >= 0 && request.resource.data.choice < 6
+            && quiz().phase == 'question' && request.resource.data.index == quiz().index
+            && request.time < quiz().started_at + duration.value(25, 's');
+          allow update, delete: if false;
+        }
+      }
+
+      // ------------------------------------------------ class organisation
+      // Who brings what, kitty tracking, lost & found, council minutes (encrypted).
+      match /org/{oid} {
+        allow read: if isActiveMember(cid);
+        allow create: if isActiveMember(cid)
+          && request.resource.data.keys().hasOnly(['kind', 'by', 'claims', 'paid', 'status', 'epoch', 'iv', 'ciphertext', 'created_at'])
+          && request.resource.data.kind in ['list', 'kitty', 'lost', 'minutes']
+          && (request.resource.data.kind != 'minutes' || isDelegate(cid) || isTeacher(cid))
+          && request.resource.data.by == uid() && request.resource.data.created_at == request.time
+          && request.resource.data.get('claims', {}) is map && request.resource.data.get('claims', {}).size() == 0
+          && request.resource.data.get('paid', {}) is map && request.resource.data.get('paid', {}).size() == 0
+          && request.resource.data.get('status', 'open') == 'open'
+          && sealed(request.resource.data, 200000);
+        allow update: if isActiveMember(cid) && (
+          // "I bring it": each member only changes their own list of items
+          (resource.data.kind == 'list' && onlyChanged(['claims'])
+            && request.resource.data.claims.diff(resource.data.claims).affectedKeys().hasOnly([uid()])
+            && request.resource.data.claims[uid()] is list && request.resource.data.claims[uid()].size() <= 20)
+          // the organiser ticks who paid
+          || (resource.data.kind == 'kitty' && resource.data.by == uid() && onlyChanged(['paid']) && request.resource.data.paid.size() <= 100)
+          // lost object found / given back
+          || (resource.data.kind == 'lost' && (resource.data.by == uid() || isStaff(cid)) && onlyChanged(['status'])
+            && request.resource.data.status == 'done'));
+        allow delete: if isActiveMember(cid) && (resource.data.by == uid() || isStaff(cid));
+      }
+
+      // Personal reminders: pushed at the chosen time by the notification server. Only their owner sees them.
+      match /reminders/{rid} {
+        allow read, delete: if signedIn() && resource.data.user_id == uid();
+        allow create: if isActiveMember(cid)
+          && request.resource.data.keys().hasOnly(['user_id', 'at', 'epoch', 'iv', 'ciphertext', 'created_at'])
+          && request.resource.data.user_id == uid() && request.resource.data.created_at == request.time
+          && request.resource.data.at is timestamp && request.resource.data.at > request.time
+          && request.resource.data.at < request.time + duration.value(24, 'd')
+          && sealed(request.resource.data, 2000);
+        allow update: if false;
+      }
+
+      // Anonymous posts: no author is stored. The anti-spam document written in the same batch limits flooding.
+      function anonymousPost(max) {
+        return isActiveMember(cid) && request.resource.data.keys().hasOnly(['epoch', 'iv', 'ciphertext', 'created_at'])
+          && request.resource.data.created_at == request.time && sealed(request.resource.data, max)
+          && getAfter(/databases/$(database)/documents/classes/$(cid)/rate/$(uid())).data.last == request.time;
+      }
+      // Idea box: read by the delegates and the teachers only.
+      match /ideas/{iid} {
+        allow read: if isDelegate(cid) || isTeacher(cid);
+        allow create: if anonymousPost(4000);
+        allow update: if false;
+        allow delete: if isDelegate(cid);
+      }
+      // Anonymous questions to the teachers; the answers are signed and visible to the class.
+      match /questions/{qid} {
+        allow read: if isActiveMember(cid);
+        allow create: if anonymousPost(4000);
+        allow update: if isTeacher(cid) && !('answer_ct' in resource.data)
+          && onlyChanged(['answer_epoch', 'answer_iv', 'answer_ct', 'answered_by'])
+          && request.resource.data.answered_by == uid()
+          && request.resource.data.answer_epoch == get(classPath(cid)).data.key_epoch
+          && str(request.resource.data.answer_iv, 10, 32) && str(request.resource.data.answer_ct, 10, 6000);
+        allow delete: if isTeacher(cid) || isDelegate(cid);
+      }
+
+      // Questionnaires (before the class council, satisfaction…): created by delegates / teachers.
+      match /surveys/{sid} {
+        allow read: if isActiveMember(cid);
+        allow create: if (isDelegate(cid) || isTeacher(cid))
+          && request.resource.data.keys().hasOnly(['by', 'anonymous', 'open', 'epoch', 'iv', 'ciphertext', 'created_at'])
+          && request.resource.data.by == uid() && request.resource.data.anonymous is bool && request.resource.data.open == true
+          && request.resource.data.created_at == request.time && sealed(request.resource.data, 20000);
+        allow update: if (resource.data.by == uid() || isDelegate(cid)) && isActiveMember(cid)
+          && onlyChanged(['open']) && request.resource.data.open is bool;
+        allow delete: if resource.data.by == uid() || isDelegate(cid);
+        match /answers/{aid} {
+          function survey() { return get(/databases/$(database)/documents/classes/$(cid)/surveys/$(sid)).data; }
+          // Results: the author of the questionnaire and the delegates (anonymous answers carry no name).
+          allow read: if survey().by == uid() || isDelegate(cid) || (!survey().anonymous && aid == uid() && isActiveMember(cid));
+          allow create: if isActiveMember(cid) && survey().open == true
+            && request.resource.data.keys().hasOnly(['epoch', 'iv', 'ciphertext', 'created_at'])
+            && request.resource.data.created_at == request.time && sealed(request.resource.data, 20000)
+            && (survey().anonymous || aid == uid());
+          allow update: if false;
+          allow delete: if survey().by == uid() || isDelegate(cid);
+        }
+      }
+
+      // ------------------------------------------------ revision
+      // Flashcard decks generated from the courses, shared with the class (encrypted).
+      match /decks/{did} {
+        allow read: if isActiveMember(cid);
+        allow create: if isActiveMember(cid)
+          && request.resource.data.keys().hasOnly(['by', 'count', 'epoch', 'iv', 'ciphertext', 'created_at'])
+          && request.resource.data.by == uid() && request.resource.data.count is int && request.resource.data.count <= 60
+          && request.resource.data.created_at == request.time && sealed(request.resource.data, 200000);
+        allow update: if false;
+        allow delete: if isActiveMember(cid) && (resource.data.by == uid() || isStaff(cid));
+      }
+      // "On révise ensemble": one shared Pomodoro timer for the class.
+      match /study_room/{rid} {
+        function validRoom(d) {
+          return d.keys().hasOnly(['by', 'focus', 'pause', 'rounds', 'start', 'people', 'updated_at'])
+            && d.by == uid() && d.focus is int && d.focus >= 5 && d.focus <= 90 && d.pause is int && d.pause >= 1 && d.pause <= 30
+            && d.rounds is int && d.rounds >= 1 && d.rounds <= 8
+            && d.start is int && d.start > request.time.toMillis() - 60000 && d.start < request.time.toMillis() + 600000
+            && d.people is map && d.people.keys().hasOnly([uid()]) && d.updated_at == request.time;
+        }
+        function ended() {
+          return resource.data.start + (resource.data.focus + resource.data.pause) * resource.data.rounds * 60000 < request.time.toMillis();
+        }
+        allow read: if isActiveMember(cid);
+        allow create: if isActiveMember(cid) && rid == 'current' && validRoom(request.resource.data);
+        allow update: if isActiveMember(cid) && (
+          (onlyChanged(['people', 'updated_at']) && request.resource.data.updated_at == request.time
+            && request.resource.data.people.diff(resource.data.people).affectedKeys().hasOnly([uid()]))
+          || (ended() && validRoom(request.resource.data)));
+        allow delete: if isActiveMember(cid) && (resource.data.by == uid() || isStaff(cid) || ended());
+      }
+
+      // ------------------------------------------------ delegates' tools
+      // Moderation log: who pinned, deleted, muted… Readable by the delegates and the teachers.
+      match /modlog/{lid} {
+        allow read: if isDelegate(cid) || isTeacher(cid);
+        allow create: if isStaff(cid)
+          && request.resource.data.keys().hasOnly(['action', 'target', 'channel', 'detail', 'by', 'at'])
+          && request.resource.data.action in ['delete', 'pin', 'unpin', 'mute', 'unmute', 'kick', 'role', 'slow', 'filter', 'welcome', 'acting']
+          && request.resource.data.by == uid() && request.resource.data.at == request.time
+          && str(request.resource.data.target, 0, 128) && str(request.resource.data.channel, 0, 40) && str(request.resource.data.detail, 0, 200);
+        // a message pinned / unpinned again rewrites its pin record (a deletion record is never rewritten)
+        allow update: if isStaff(cid) && resource.data.action in ['pin', 'unpin']
+          && request.resource.data.action in ['pin', 'unpin'] && request.resource.data.by == uid() && request.resource.data.at == request.time
+          && request.resource.data.keys().hasOnly(['action', 'target', 'channel', 'detail', 'by', 'at']);
+        allow delete: if false;
+      }
+      // Class settings: banned words (checked on the devices) and the welcome message, encrypted.
+      match /settings/{sid} {
+        allow read: if isActiveMember(cid);
+        allow create, update: if (isDelegate(cid) || isTeacher(cid)) && sid in ['filter', 'welcome']
+          && request.resource.data.keys().hasOnly(['epoch', 'iv', 'ciphertext', 'updated_by', 'updated_at'])
+          && request.resource.data.updated_by == uid() && request.resource.data.updated_at == request.time
+          && sealed(request.resource.data, 20000);
+        allow delete: if isDelegate(cid);
       }
 
       // Class stickers (small encrypted images made from members' photos).

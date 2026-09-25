@@ -126,7 +126,11 @@ function studentView() {
   if (!mine.length) {
     return h('div.empty', icon('award'), h('p', 'Aucun résultat pour l\'instant. Tes professeurs ou tes délégués les saisiront après le conseil de classe.'));
   }
-  return h('div.council-cards', mine.map((r) => r.data
+  const readable = mine.filter((r) => r.data);
+  return h('div.council-cards',
+    readable.length ? pdfButton(() => printSheet('Mes résultats du conseil de classe',
+      readable.map((r) => ({ ...r.data, name: r.data.name || state.me.display_name, period: r.row.period })))) : null,
+    mine.map((r) => r.data
     ? h('article.council-card.card',
         h('div.cc-head', h('b', PERIODS[r.row.period]), r.data.mention ? h('span.mention', mentionLabel(r.data.mention)) : null),
         h('div.cc-average', h('span', fmtAvg(r.data.average)), h('small', '/20')),
@@ -135,6 +139,24 @@ function studentView() {
     : h('article.council-card.card', h('b', PERIODS[r.row.period]), h('p.muted', icon('lock'), ' Résultat chiffré : un professeur ou un délégué doit te le retransmettre (il suffit qu\'il ouvre cet onglet).'))),
   h('p.hint', icon('lock'), ' Tes résultats sont chiffrés de bout en bout : seuls toi, tes professeurs et les délégués pouvez les lire.'));
 }
+
+/** Printable summary (the browser's "Save as PDF"): only this sheet is printed, decrypted on this device. */
+function printSheet(title, rows) {
+  const sheet = h('section.print-sheet',
+    h('h1', title),
+    h('p.print-meta', `${state.cls.name} · exporté le ${new Date().toLocaleDateString('fr-FR')}`),
+    h('table',
+      h('thead', h('tr', h('th', 'Élève'), h('th', 'Période'), h('th', 'Moyenne'), h('th', 'Mention'), h('th', 'Appréciation'))),
+      h('tbody', rows.map((r) => h('tr', h('td', r.name), h('td', PERIODS[r.period] || r.period), h('td', fmtAvg(r.average)),
+        h('td', mentionLabel(r.mention)), h('td', r.appreciation || ''))))),
+    h('p.print-meta', 'Document confidentiel — Class Connect (chiffré de bout en bout, déchiffré sur cet appareil).'));
+  document.body.append(sheet);
+  document.body.classList.add('printing');
+  const done = () => { sheet.remove(); document.body.classList.remove('printing'); window.removeEventListener('afterprint', done); };
+  window.addEventListener('afterprint', done);
+  setTimeout(() => window.print(), 50);
+}
+const pdfButton = (onclick) => h('button.btn.btn-ghost.btn-sm', { type: 'button', onclick }, '📄 Exporter en PDF');
 
 const fmtAvg = (n) => (n == null || n === '' ? '—' : Number(n).toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 2 }));
 
@@ -177,7 +199,9 @@ function teacherView() {
       h('label.field', h('span', 'Période'), periodSel),
       h('div.council-stats',
         h('span', h('b', `${done.length}/${list.length}`), ' saisis'),
-        h('span', h('b', classAvg == null ? '—' : fmtAvg(classAvg)), ' moyenne de classe'))),
+        h('span', h('b', classAvg == null ? '—' : fmtAvg(classAvg)), ' moyenne de classe')),
+      done.length ? pdfButton(() => printSheet(`Conseil de classe — ${PERIODS[period]}`,
+        done.map((m) => ({ ...recFor(m).data, name: label(m), period })))) : null),
     h('div.council-layout',
       h('aside.council-picker', searchInput, listEl),
       h('div.council-editor', editor(list.find((m) => m.id === selectedId), recFor))));

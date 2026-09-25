@@ -86,8 +86,9 @@ async function preview(d) {
   try {
     const key = await classKey(d.cid, d.epoch);
     if (!key) return null;
-    // Same additional data as js/chat.js: the students' channel keeps the original format.
-    const aad = d.channel === 'messages' ? `msg|${d.cid}|${d.epoch}|${d.user_id}` : `msg|${d.cid}|${d.channel}|${d.epoch}|${d.user_id}`;
+    // Same additional data as js/chat.js (messages) and js/vault.js (reminders).
+    const aad = d.kind === 'reminder' ? `reminder|${d.cid}|${d.epoch}|${d.user_id}`
+      : d.channel === 'messages' ? `msg|${d.cid}|${d.epoch}|${d.user_id}` : `msg|${d.cid}|${d.channel}|${d.epoch}|${d.user_id}`;
     const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromB64(d.iv), additionalData: new TextEncoder().encode(aad) }, key, fromB64(d.ciphertext));
     const p = JSON.parse(new TextDecoder().decode(plain));
     if (typeof p.text === 'string' && p.text) return p.text.length > 180 ? p.text.slice(0, 177) + '…' : p.text;

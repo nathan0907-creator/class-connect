@@ -21,6 +21,27 @@
           }
         }
       }
+    },
+    "boards": {
+      "$cid": {
+        ".read": "auth != null && $cid.matches(/^[A-Za-z0-9]{20}$/)",
+        "cleared_at": {
+          ".write": "auth != null && $cid.matches(/^[A-Za-z0-9]{20}$/)",
+          ".validate": "newData.isNumber() && newData.val() <= now + 5000"
+        },
+        "strokes": {
+          "$sid": {
+            ".write": "auth != null && !data.exists() && newData.child('by').val() === auth.uid && $cid.matches(/^[A-Za-z0-9]{20}$/)",
+            ".validate": "newData.hasChildren(['by', 'e', 'iv', 'ct', 't'])",
+            "by": { ".validate": "newData.isString()" },
+            "e": { ".validate": "newData.isNumber()" },
+            "iv": { ".validate": "newData.isString() && newData.val().length <= 32" },
+            "ct": { ".validate": "newData.isString() && newData.val().length <= 40000" },
+            "t": { ".validate": "newData.isNumber() && newData.val() <= now + 5000" },
+            "$other": { ".validate": false }
+          }
+        }
+      }
     }
   }
 }

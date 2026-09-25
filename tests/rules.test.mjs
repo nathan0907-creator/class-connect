@@ -230,7 +230,13 @@ describe('NIVEAU 3 — attaques poussées', () => {
     test('un élève ne peut pas supprimer le message d\'un autre ; un délégué oui (suppression douce)', async () => {
       const del = (uid) => ({ deleted_at: serverTimestamp(), deleted_by: uid, pinned: false });
       await assertFails(updateDoc(c(as('bob'), C1, 'messages', 'm1'), del('bob')));
-      await assertSucceeds(updateDoc(c(as('dele'), C1, 'messages', 'm1'), del('dele')));
+      // sans trace dans le journal de modération : refusé
+      await assertFails(updateDoc(c(as('dele'), C1, 'messages', 'm1'), del('dele')));
+      const db = as('dele');
+      const b = writeBatch(db);
+      b.update(c(db, C1, 'messages', 'm1'), del('dele'));
+      b.set(c(db, C1, 'modlog', 'm1_del'), { action: 'delete', target: 'alice', channel: 'messages', detail: '', by: 'dele', at: serverTimestamp() });
+      await assertSucceeds(b.commit());
     });
     test('effacer définitivement un message avant 30 jours (preuves de harcèlement) est impossible', async () => {
       await assertFails(deleteDoc(c(as('alice'), C1, 'messages', 'm1')));
@@ -507,6 +513,172 @@ describe('NIVEAU 3 — attaques poussées', () => {
     test('réactions : seulement les emojis de la liste (rien de lisible en clair)', async () => {
       await assertSucceeds(updateDoc(c(as('alice'), C1, 'messages', 'm1'), { 'reactions.alice': '🫡' }));
       await assertFails(updateDoc(c(as('alice'), C1, 'messages', 'm1'), { 'reactions.alice': 'message secret' }));
+    });
+    test('XP et badges : chacun écrit seulement ses propres compteurs', async () => {
+      const st = { xp: 10, streak: 1, best_streak: 1, last_day: 100, week: 14, w: {}, total: {}, badges: [], updated_at: serverTimestamp() };
+      await assertSucceeds(setDoc(c(as('alice'), C1, 'stats', 'alice'), st));
+      await assertFails(setDoc(c(as('alice'), C1, 'stats', 'bob'), st));
+      await assertFails(setDoc(c(as('alice'), C1, 'stats', 'alice'), { ...st, xp: -5 }));
+      await assertFails(setDoc(c(as('alice'), C1, 'stats', 'alice'), { ...st, admin: true }));
+      await assertFails(getDoc(c(as('eve'), C1, 'stats', 'alice')));
+    });
+    test('compliments & playlist : signés par leur auteur, cœurs seulement pour soi', async () => {
+      const post = { kind: 'compliment', by: 'alice', to: 'bob', epoch: 1, ...enc, created_at: serverTimestamp() };
+      await assertSucceeds(setDoc(c(as('alice'), C1, 'board', 'b1'), post));
+      await assertFails(setDoc(c(as('alice'), C1, 'board', 'b2'), { ...post, by: 'bob' }));
+      await assertFails(setDoc(c(as('alice'), C1, 'board', 'b3'), { ...post, kind: 'pub' }));
+      await assertSucceeds(updateDoc(c(as('dele'), C1, 'board', 'b1'), { 'likes.dele': true }));
+      await assertFails(updateDoc(c(as('dele'), C1, 'board', 'b1'), { 'likes.alice': true }));
+      await assertFails(deleteDoc(c(as('pend'), C1, 'board', 'b1')));
+      await assertSucceeds(deleteDoc(c(as('bob'), C1, 'board', 'b1')));   // la personne visée peut effacer
+    });
+    test('capsule temporelle : scellée jusqu\'à sa date, même pour les délégués', async () => {
+      const at = Timestamp.fromMillis(Date.now() + 30 * 864e5);
+      const alice = as('alice');
+      const b = writeBatch(alice);
+      b.set(c(alice, C1, 'capsules', 'k1'), { by: 'alice', open_at: at, epoch: 1, ...enc, created_at: serverTimestamp() });
+      b.set(c(alice, C1, 'capsule_dates', 'k1'), { by: 'alice', open_at: at });
+      await assertSucceeds(b.commit());
+      await assertSucceeds(getDoc(c(as('alice'), C1, 'capsules', 'k1')));
+      await assertFails(getDoc(c(as('dele'), C1, 'capsules', 'k1')));
+      await assertSucceeds(getDoc(c(as('dele'), C1, 'capsule_dates', 'k1')));
+      await env.withSecurityRulesDisabled((ctx) => setDoc(c(ctx.firestore(), C1, 'capsules', 'k2'), { by: 'alice', open_at: Timestamp.fromMillis(Date.now() - 1000), epoch: 1, ...enc }));
+      await assertSucceeds(getDoc(c(as('bob'), C1, 'capsules', 'k2')));
+    });
+    test('carte d\'anniversaire : cachée à la personne fêtée, chacun signe seulement pour soi', async () => {
+      const at = new Date(Date.now() + 10 * 864e5);
+      const id = `bob_${at.getUTCFullYear()}`;
+      await assertSucceeds(setDoc(c(as('alice'), C1, 'cards', id), { target: 'bob', open_at: Timestamp.fromDate(at), epoch: 1, signatures: {} }));
+      await assertSucceeds(updateDoc(c(as('alice'), C1, 'cards', id), { 'signatures.alice': { iv: 'I'.repeat(16), ciphertext: 'C'.repeat(40) } }));
+      await assertFails(updateDoc(c(as('alice'), C1, 'cards', id), { 'signatures.dele': { iv: 'I'.repeat(16), ciphertext: 'C'.repeat(40) } }));
+      await assertFails(getDoc(c(as('bob'), C1, 'cards', id)));
+      await assertFails(setDoc(c(as('bob'), C1, 'cards', `bob_${at.getUTCFullYear() + 1}`), { target: 'bob', open_at: Timestamp.fromDate(at), epoch: 1, signatures: {} }));
+    });
+    test('album de fin d\'année : un vote pour un autre membre de la classe', async () => {
+      await assertSucceeds(setDoc(c(as('dele'), C1, 'awards', 'aw'), { title: 'Le plus drôle', open: true, votes: {}, created_at: serverTimestamp() }));
+      await assertFails(setDoc(c(as('alice'), C1, 'awards', 'aw2'), { title: 'Triche', open: true, votes: {}, created_at: serverTimestamp() }));
+      await assertSucceeds(updateDoc(c(as('alice'), C1, 'awards', 'aw'), { 'votes.alice': 'bob' }));
+      await assertFails(updateDoc(c(as('alice'), C1, 'awards', 'aw'), { 'votes.alice': 'alice' }));
+      await assertFails(updateDoc(c(as('alice'), C1, 'awards', 'aw'), { 'votes.bob': 'alice' }));
+      await assertFails(updateDoc(c(as('alice'), C1, 'awards', 'aw'), { 'votes.alice': 'eve' }));
+    });
+    test('mini-jeux : seuls les deux joueurs jouent, chacun à son tour', async () => {
+      const g = { kind: 'ttt', players: ['alice', 'bob'], turn: 'alice', board: '.........', winner: '', commits: {}, reveals: {}, created_at: serverTimestamp(), updated_at: serverTimestamp() };
+      await assertSucceeds(setDoc(c(as('alice'), C1, 'games', 'g1'), g));
+      await assertFails(setDoc(c(as('alice'), C1, 'games', 'g2'), { ...g, players: ['bob', 'alice'] }));
+      await assertFails(updateDoc(c(as('bob'), C1, 'games', 'g1'), { board: 'X........', turn: 'alice', updated_at: serverTimestamp() }));
+      await assertFails(updateDoc(c(as('dele'), C1, 'games', 'g1'), { board: 'X........', turn: 'bob', updated_at: serverTimestamp() }));
+      await assertSucceeds(updateDoc(c(as('alice'), C1, 'games', 'g1'), { board: 'X........', turn: 'bob', winner: '', updated_at: serverTimestamp() }));
+      await assertFails(updateDoc(c(as('bob'), C1, 'games', 'g1'), { winner: 'bob', updated_at: serverTimestamp() }));   // on n'abandonne qu'au profit de l'autre
+    });
+    test('quiz en direct : réponse chronométrée, une seule par question, au nom de soi', async () => {
+      await env.withSecurityRulesDisabled((ctx) => setDoc(c(ctx.firestore(), C1, 'quizzes', 'q1'), { host: 'dele', title: 'Quiz', epoch: 1, ...enc, count: 3, phase: 'question', index: 0, started_at: Timestamp.now(), answer: null }));
+      const ans = (uid, extra = {}) => ({ uid, index: 0, choice: 1, at: serverTimestamp(), ...extra });
+      await assertSucceeds(setDoc(c(as('alice'), C1, 'quizzes', 'q1', 'answers', 'alice_0'), ans('alice')));
+      await assertFails(setDoc(c(as('alice'), C1, 'quizzes', 'q1', 'answers', 'alice_0'), ans('alice', { choice: 2 })));
+      await assertFails(setDoc(c(as('alice'), C1, 'quizzes', 'q1', 'answers', 'bob_0'), ans('bob')));
+      await assertFails(setDoc(c(as('bob'), C1, 'quizzes', 'q1', 'answers', 'bob_1'), ans('bob', { index: 1 })));
+      await assertFails(updateDoc(c(as('alice'), C1, 'quizzes', 'q1'), { phase: 'end' }));
+    });
+    test('boîte à idées et questions aux profs : anonymes, limitées par l\'anti-spam', async () => {
+      const anon = (db, name, id) => { const b = writeBatch(db); b.set(c(db, C1, name, id), { epoch: 1, ...enc, created_at: serverTimestamp() }); b.set(c(db, C1, 'rate', 'alice'), { last: serverTimestamp() }); return b.commit(); };
+      await assertSucceeds(anon(as('alice'), 'ideas', 'i1'));
+      await assertFails(setDoc(c(as('bob'), C1, 'ideas', 'i2'), { epoch: 1, ...enc, created_at: serverTimestamp() }));   // sans anti-spam
+      await assertFails(setDoc(c(as('bob'), C1, 'ideas', 'i3'), { epoch: 1, ...enc, created_at: serverTimestamp(), by: 'bob' }));
+      await assertFails(getDoc(c(as('bob'), C1, 'ideas', 'i1')));
+      await assertSucceeds(getDoc(c(as('dele'), C1, 'ideas', 'i1')));
+      await env.withSecurityRulesDisabled((ctx) => setDoc(c(ctx.firestore(), C1, 'questions', 'qq'), { epoch: 1, ...enc, created_at: Timestamp.now() }));
+      const reply = { answer_epoch: 1, answer_iv: 'I'.repeat(16), answer_ct: 'C'.repeat(40), answered_by: 'prof' };
+      await assertFails(updateDoc(c(as('alice'), C1, 'questions', 'qq'), { ...reply, answered_by: 'alice' }));
+      await assertSucceeds(updateDoc(c(as('prof'), C1, 'questions', 'qq'), reply));
+    });
+    test('questionnaires : réponses lues seulement par l\'auteur et les délégués', async () => {
+      await assertSucceeds(setDoc(c(as('prof'), C1, 'surveys', 'sv'), { by: 'prof', anonymous: false, open: true, epoch: 1, ...enc, created_at: serverTimestamp() }));
+      await assertFails(setDoc(c(as('alice'), C1, 'surveys', 'sv2'), { by: 'alice', anonymous: false, open: true, epoch: 1, ...enc, created_at: serverTimestamp() }));
+      await assertSucceeds(setDoc(c(as('alice'), C1, 'surveys', 'sv', 'answers', 'alice'), { epoch: 1, ...enc, created_at: serverTimestamp() }));
+      await assertFails(setDoc(c(as('alice'), C1, 'surveys', 'sv', 'answers', 'bob'), { epoch: 1, ...enc, created_at: serverTimestamp() }));
+      await assertFails(getDoc(c(as('bob'), C1, 'surveys', 'sv', 'answers', 'alice')));
+      await assertSucceeds(getDoc(c(as('prof'), C1, 'surveys', 'sv', 'answers', 'alice')));
+    });
+    test('organisation : chacun coche seulement ce qu\'il apporte, seul l\'organisateur coche qui a payé', async () => {
+      await assertSucceeds(setDoc(c(as('alice'), C1, 'org', 'l1'), { kind: 'list', by: 'alice', claims: {}, epoch: 1, ...enc, created_at: serverTimestamp() }));
+      await assertSucceeds(updateDoc(c(as('bob'), C1, 'org', 'l1'), { 'claims.bob': [0, 2] }));
+      await assertFails(updateDoc(c(as('bob'), C1, 'org', 'l1'), { 'claims.alice': [1] }));
+      await assertSucceeds(setDoc(c(as('alice'), C1, 'org', 'k1'), { kind: 'kitty', by: 'alice', paid: {}, epoch: 1, ...enc, created_at: serverTimestamp() }));
+      await assertFails(updateDoc(c(as('bob'), C1, 'org', 'k1'), { 'paid.bob': true }));
+      await assertSucceeds(updateDoc(c(as('alice'), C1, 'org', 'k1'), { 'paid.bob': true }));
+      await assertFails(setDoc(c(as('alice'), C1, 'org', 'm1'), { kind: 'minutes', by: 'alice', epoch: 1, ...enc, created_at: serverTimestamp() }));
+    });
+    test('carnet de notes : lisible seulement par son propriétaire', async () => {
+      await assertSucceeds(setDoc(doc(as('alice'), 'private_data', 'alice'), { ...enc, updated_at: serverTimestamp() }));
+      await assertFails(getDoc(doc(as('dele'), 'private_data', 'alice')));
+      await assertFails(setDoc(doc(as('bob'), 'private_data', 'alice'), { ...enc, updated_at: serverTimestamp() }));
+    });
+    test('flashcards partagées : signées par leur auteur', async () => {
+      await assertSucceeds(setDoc(c(as('alice'), C1, 'decks', 'd1'), { by: 'alice', count: 20, epoch: 1, ...enc, created_at: serverTimestamp() }));
+      await assertFails(setDoc(c(as('alice'), C1, 'decks', 'd2'), { by: 'bob', count: 20, epoch: 1, ...enc, created_at: serverTimestamp() }));
+      await assertFails(deleteDoc(c(as('bob'), C1, 'decks', 'd1')));
+    });
+    test('« on révise ensemble » : chacun rejoint pour soi, une session en cours ne peut pas être volée', async () => {
+      const room = (uid) => ({ by: uid, focus: 25, pause: 5, rounds: 4, start: Date.now(), people: { [uid]: true }, updated_at: serverTimestamp() });
+      await assertSucceeds(setDoc(c(as('alice'), C1, 'study_room', 'current'), room('alice')));
+      await assertSucceeds(updateDoc(c(as('bob'), C1, 'study_room', 'current'), { 'people.bob': true, updated_at: serverTimestamp() }));
+      await assertFails(updateDoc(c(as('bob'), C1, 'study_room', 'current'), { 'people.alice': deleteField(), updated_at: serverTimestamp() }));
+      await assertFails(setDoc(c(as('bob'), C1, 'study_room', 'current'), room('bob')));
+      await assertFails(setDoc(c(as('bob'), C1, 'study_room', 'autre'), room('bob')));
+    });
+    test('sourdine : un élève réduit au silence ne peut plus écrire (7 jours max, jamais un prof)', async () => {
+      await assertFails(updateDoc(doc(as('alice'), 'users', 'bob'), { muted_until: Timestamp.fromMillis(Date.now() + 3600e3) }));
+      await assertFails(updateDoc(doc(as('dele'), 'users', 'bob'), { muted_until: Timestamp.fromMillis(Date.now() + 30 * 864e5) }));
+      await assertFails(updateDoc(doc(as('dele'), 'users', 'prof'), { muted_until: Timestamp.fromMillis(Date.now() + 3600e3) }));
+      await assertSucceeds(updateDoc(doc(as('dele'), 'users', 'bob'), { muted_until: Timestamp.fromMillis(Date.now() + 3600e3) }));
+      await assertFails(postMessage(as('bob'), 'bob'));
+      await assertFails(updateDoc(doc(as('bob'), 'users', 'bob'), { muted_until: null }));
+      await assertSucceeds(postMessage(as('alice'), 'alice'));
+    });
+    test('un élève envoie plusieurs messages de suite (au rythme normal)', async () => {
+      await env.withSecurityRulesDisabled((ctx) => setDoc(c(ctx.firestore(), C1, 'rate', 'alice'), { last: Timestamp.fromMillis(Date.now() - 5000) }));
+      await assertSucceeds(postMessage(as('alice'), 'alice'));
+      await assertSucceeds(postMessage(as('prof'), 'prof', 'mixed_messages'));
+      await assertFails(postMessage(as('alice'), 'alice'));   // moins d'une seconde après
+    });
+    test('mode lent : les élèves attendent entre deux messages, pas l\'équipe', async () => {
+      await assertFails(updateDoc(c(as('alice'), C1), { slow: 30 }));
+      await assertSucceeds(updateDoc(c(as('prof'), C1), { slow: 30 }));
+      await env.withSecurityRulesDisabled(async (ctx) => {
+        for (const u of ['alice', 'dele']) await setDoc(c(ctx.firestore(), C1, 'rate', u), { last: Timestamp.fromMillis(Date.now() - 5000) });
+      });
+      await assertFails(postMessage(as('alice'), 'alice'));
+      await assertSucceeds(postMessage(as('dele'), 'dele'));
+    });
+    test('passation : un suppléant a les pouvoirs du délégué seulement pendant la période donnée', async () => {
+      await assertFails(updateDoc(doc(as('depu'), 'users', 'pend'), { status: 'active' }));
+      await assertFails(updateDoc(doc(as('alice'), 'users', 'depu'), { acting_until: Timestamp.fromMillis(Date.now() + 864e5) }));
+      await assertFails(updateDoc(doc(as('dele'), 'users', 'bob'), { acting_until: Timestamp.fromMillis(Date.now() + 864e5) }));
+      await assertSucceeds(updateDoc(doc(as('dele'), 'users', 'depu'), { acting_until: Timestamp.fromMillis(Date.now() + 864e5) }));
+      await assertSucceeds(updateDoc(doc(as('depu'), 'users', 'pend'), { status: 'active' }));
+      await assertFails(updateDoc(doc(as('depu'), 'users', 'depu'), { acting_until: Timestamp.fromMillis(Date.now() + 20 * 864e5) }));
+    });
+    test('journal de modération : écrit par l\'équipe à son nom, lu par délégués et profs', async () => {
+      const log = (by) => ({ action: 'mute', target: 'bob', channel: '', detail: '1 h', by, at: serverTimestamp() });
+      await assertSucceeds(setDoc(c(as('dele'), C1, 'modlog', 'l1'), log('dele')));
+      await assertFails(setDoc(c(as('dele'), C1, 'modlog', 'l2'), log('prof')));
+      await assertFails(setDoc(c(as('alice'), C1, 'modlog', 'l3'), log('alice')));
+      await assertFails(getDoc(c(as('alice'), C1, 'modlog', 'l1')));
+      await assertFails(updateDoc(c(as('dele'), C1, 'modlog', 'l1'), { detail: 'rien' }));
+      await assertSucceeds(getDoc(c(as('prof'), C1, 'modlog', 'l1')));
+    });
+    test('mots interdits et message d\'accueil : réglés par les délégués / profs', async () => {
+      const set = (by) => ({ epoch: 1, ...enc, updated_by: by, updated_at: serverTimestamp() });
+      await assertSucceeds(setDoc(c(as('dele'), C1, 'settings', 'filter'), set('dele')));
+      await assertFails(setDoc(c(as('alice'), C1, 'settings', 'filter'), set('alice')));
+      await assertFails(setDoc(c(as('dele'), C1, 'settings', 'autre'), set('dele')));
+      await assertSucceeds(getDoc(c(as('alice'), C1, 'settings', 'filter')));
+    });
+    test('rappels : privés', async () => {
+      await assertSucceeds(setDoc(c(as('alice'), C1, 'reminders', 'r1'), { user_id: 'alice', at: Timestamp.fromMillis(Date.now() + 3600e3), epoch: 1, ...enc, created_at: serverTimestamp() }));
+      await assertFails(getDoc(c(as('dele'), C1, 'reminders', 'r1')));
+      await assertFails(setDoc(c(as('alice'), C1, 'reminders', 'r2'), { user_id: 'bob', at: Timestamp.fromMillis(Date.now() + 3600e3), epoch: 1, ...enc, created_at: serverTimestamp() }));
     });
     test('semaines A / B : cours marqués A ou B, et seul un délégué fixe la semaine A', async () => {
       await assertSucceeds(setDoc(c(as('dele'), C1, 'slots', 'sa'), { ...slot, week: 'A' }));

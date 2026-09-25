@@ -6,6 +6,7 @@ import { fingerprint, deriveAuthKey, clearKeys } from './crypto.js';
 import { sharesFor, shareRefFor, rotateKey } from './keyring.js';
 import { reportsCard, openReportsCount } from './moderation.js';
 import { showInvite, shareInvite } from './invite.js';
+import { adminCards, muteButton, actingButton, log } from './admin.js';
 import { realName, sortName, showProfile, openProfileEditor, openRealNameEditor, eraseProfileOps, statusOf, isBirthday } from './profiles.js';
 import { $, $$, h, icon, avatar, modal, toast, toastError, confirmDialog, enableTilt, busy } from './ui.js';
 
@@ -41,7 +42,7 @@ export async function leave() {
       mine.docs.forEach((d) => batch.delete(d.ref));
       eraseProfileOps(batch, state.cls.id, state.me.id);
     }
-    batch.update(userRef(state.me.id), { class_id: null, status: 'none', role: 'student', trusted: false, principal: false });
+    batch.update(userRef(state.me.id), { class_id: null, status: 'none', role: 'student', trusted: false, principal: false, muted_until: null, acting_until: null });
     await batch.commit();
     emit('reroute');
   } catch (err) { toastError(err); }
@@ -109,7 +110,7 @@ function deleteAccount() {
             mine.docs.forEach((d) => batch.delete(d.ref));
             eraseProfileOps(batch, state.cls.id, state.me.id);
           }
-          batch.update(userRef(state.me.id), { class_id: null, status: 'none', role: 'student', trusted: false, principal: false });
+          batch.update(userRef(state.me.id), { class_id: null, status: 'none', role: 'student', trusted: false, principal: false, muted_until: null, acting_until: null });
           await batch.commit();
         }
         const batch = writeBatch(db);
@@ -298,6 +299,8 @@ function renderAdmin() {
                 m.trusted ? 'Retirer confiance' : 'Confiance')
               : null,
           ],
+      m.role !== 'teacher' ? muteButton(m) : null,
+      actingButton(m),
       h('button.btn.btn-sm.btn-danger', { onclick: () => removeMember(m, true) }, 'Exclure'))))
       : h('p.muted', 'Personne d\'autre pour l\'instant.'));
 
@@ -321,7 +324,7 @@ function renderAdmin() {
       finally { busy(e.currentTarget, false); }
     } }, 'Renouveler la clé'));
 
-  root.replaceChildren(invite, pendingCard, reportsCard(), crew, settings, security);
+  root.replaceChildren(invite, pendingCard, reportsCard(), crew, ...adminCards(), settings, security);
   enableTilt(root);
 }
 
@@ -348,9 +351,10 @@ async function removeMember(m, wasActive) {
       theirs.docs.forEach((d) => batch.delete(d.ref));
       eraseProfileOps(batch, state.cls.id, m.id);
     }
-    batch.update(userRef(m.id), { class_id: null, status: 'none', role: 'student', trusted: false, principal: false });
+    batch.update(userRef(m.id), { class_id: null, status: 'none', role: 'student', trusted: false, principal: false, muted_until: null, acting_until: null });
     await batch.commit();
     if (wasActive) {
+      log('kick', m.id);
       await rotateKey();
       toast(`${m.display_name} a été exclu, clé renouvelée 🔐`, 'success');
     }
@@ -379,6 +383,7 @@ function roleSelect(m, delegates) {
     try {
       // Becoming a teacher drops the student-only "trusted" flag (required by the security rules).
       await updateDoc(userRef(m.id), role === 'teacher' ? { role, trusted: false, principal: false } : { role });
+      log('role', m.id, role);
       toast(`${m.display_name} est maintenant ${label.toLowerCase()}`, 'success');
     } catch (err) { select.value = m.role; toastError(err); }
   });

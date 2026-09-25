@@ -34,7 +34,8 @@ export function cleanFile(f, kinds) {
   };
 }
 
-const KINDS = ['text', 'gif', 'image', 'video', 'audio', 'alert', 'poll', 'sticker'];
+const KINDS = ['text', 'gif', 'image', 'video', 'audio', 'alert', 'poll', 'sticker', 'game', 'quiz'];
+const DOC_ID = /^[A-Za-z0-9]{20}$/;
 const STICKER = /^data:image\/(webp|png|jpeg);base64,[A-Za-z0-9+/=]+$/;
 const DATE = /^20\d\d-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 const str = (v, max) => (typeof v === 'string' ? v.slice(0, max) : '');
@@ -43,7 +44,14 @@ const str = (v, max) => (typeof v === 'string' ? v.slice(0, max) : '');
 export function cleanPayload(p) {
   if (!p || typeof p !== 'object' || Array.isArray(p)) return null;
   const out = { v: 1, t: KINDS.includes(p.t) ? p.t : 'text', text: isStr(p.text, 20000) ? p.text : '' };
-  if (out.t === 'poll') {
+  if (out.t === 'game') {
+    // Mini-game or live quiz invitation: only a document id and a known game.
+    const g = p.game || {};
+    if (DOC_ID.test(g.gid) && ['ttt', 'c4', 'rps'].includes(g.kind)) out.game = { gid: g.gid, kind: g.kind }; else out.t = 'text';
+  } else if (out.t === 'quiz') {
+    const q = p.quiz || {};
+    if (DOC_ID.test(q.qid) && isStr(q.title, 80)) out.quiz = { qid: q.qid, title: q.title }; else out.t = 'text';
+  } else if (out.t === 'poll') {
     const q = p.poll && typeof p.poll === 'object' ? p.poll : {};
     const options = Array.isArray(q.options) ? q.options.filter((o) => isStr(o, 100) && o.trim()).slice(0, 6) : [];
     if (isStr(q.q, 200) && q.q.trim() && options.length >= 2) out.poll = { q: q.q, options, wyr: q.wyr === true };

@@ -7,10 +7,9 @@ import { currentKey } from './keyring.js';
 const aad = (kind, epoch, by) => `${kind}|${state.cls.id}|${epoch}|${by || ''}`;
 
 /** { epoch, iv, ciphertext } of a new item. `by` = author written in the document ('' for anonymous items). */
-export async function seal(kind, data, by = state.me.id) {
-  const key = currentKey();
+export async function seal(kind, data, by = state.me.id, epoch = state.cls.key_epoch) {
+  const key = epoch === state.cls.key_epoch ? currentKey() : state.classKeys.get(epoch);
   if (!key) throw new Error('Clé de la classe pas encore reçue. Attends qu\'un membre en ligne te la transmette.');
-  const epoch = state.cls.key_epoch;
   const { iv, ciphertext } = await encryptJSON(key, data, aad(kind, epoch, by));
   return { epoch, iv, ciphertext };
 }

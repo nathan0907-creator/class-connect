@@ -1,16 +1,18 @@
 // "Révisions IA": encrypted course library + revision tools (sheet, quiz, graded test, questions).
 import { onSnapshot, query, orderBy, doc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { sub, plain } from './fb.js';
-import { state, on, isDelegate, canPublish, memberName } from './state.js';
+import { state, on, emit, isDelegate, canPublish, memberName } from './state.js';
 import { encryptJSON, decryptJSON, toB64 } from './crypto.js';
 import { currentKey } from './keyring.js';
 import { uploadEncrypted, downloadDecrypted, deleteFileChunks, compressImage, MAX_FILE } from './media.js';
 import { safeMime, cleanFile } from './safe.js';
 import { generate, systemInstruction, prompts, quizSchema, examSchema, gradingSchema } from './ai.js';
 import { renderMarkdown } from './md.js';
+import { makeFlashcards, study as studyDeck, openDecks, makeMindMap, renderMindMap, explainPhoto, openPlanning, openStudyRoom, openWhiteboard, openGrades, speak } from './revise.js';
+import { startLiveQuiz } from './games.js';
 import { $, $$, h, icon, modal, toast, toastError, confirmDialog, fmtSize, fmtDay, busy } from './ui.js';
 
-const KINDS = { cours: 'Cours', methode: 'Méthodes du cahier', exercices: 'Exercices corrigés', autre: 'Autre' };
+const KINDS = { cours: 'Cours', methode: 'Méthodes du cahier', exercices: 'Exercices corrigés', annales: 'Annales / sujets d\'examen', autre: 'Autre' };
 const SUBJECTS = ['Mathématiques', 'Français', 'Histoire-Géographie', 'Physique-Chimie', 'SVT', 'Anglais', 'Espagnol', 'Allemand',
   'Philosophie', 'SES', 'NSI', 'EMC', 'Technologie', 'Arts', 'EPS'];
 const ACCEPT = 'application/pdf,image/*,text/plain,text/markdown,.md,.txt';
@@ -37,6 +39,10 @@ export function initStudy() {
     renderOptions();
   }));
   on('keys', decryptAll);
+  root.addEventListener('click', (e) => {
+    const extra = e.target.closest('[data-study-extra]')?.dataset.studyExtra;
+    ({ decks: openDecks, planning: openPlanning, room: openStudyRoom, board: openWhiteboard, grades: openGrades })[extra]?.();
+  });
   on('me', renderLibrary);
   renderOptions();
 }
@@ -274,6 +280,9 @@ function renderOptions() {
     sheet: [focus, go('Générer la fiche')],
     quiz: [h('div.row', count([5, 10, 15], 10), level), focus, go('Générer le quiz')],
     exam: [h('div.row', count([3, 5, 8], 5), level), focus, go('Générer l\'évaluation')],
+    flash: [h('div.row', h('select.study-count', [10, 20, 30].map((v) => h('option', { value: v, selected: v === 20 }, `${v} cartes`)))), focus, go('Créer les flashcards')],
+    mind: [focus, go('Créer la carte mentale')],
+    photo: [h('label.field', h('span', 'Photo de l\'exercice'), h('input.study-photo', { type: 'file', accept: 'image/*' })), go('Expliquer pas à pas')],
     ask: [],
   };
   box.replaceChildren(...layouts[tool]);
@@ -283,6 +292,9 @@ function renderOptions() {
     sheet: 'Une fiche claire avec définitions, méthodes du cahier, exemples et auto-test.',
     quiz: 'Un QCM interactif corrigé instantanément, avec explications tirées de vos cours.',
     exam: 'Une évaluation notée sur 20 : réponds, rends ta copie, l\'IA corrige avec la méthode du cahier.',
+    flash: 'Des cartes recto / verso à réviser en répétition espacée : chaque carte revient au bon moment. Le paquet est partagé avec la classe.',
+    mind: 'Le cours en carte mentale : le titre au centre, les grandes idées autour.',
+    photo: 'Prends ton exercice en photo : l\'IA t\'explique chaque étape avec les méthodes de vos cours (coche les cours de la matière).',
   }[tool])));
 }
 
@@ -327,7 +339,7 @@ async function run(btn) {
   out.replaceChildren(thinking('Lecture de vos cours…'));
   try {
     checkCooldown();
-    const docs = await courseParts();
+    const docs = tool === 'photo' ? await courseParts().catch(() => []) : await courseParts();
     out.replaceChildren(thinking(tool === 'sheet' ? 'Rédaction de la fiche…' : 'Préparation des questions…'));
     const system = systemInstruction(state.cls.name);
     if (tool === 'sheet') {
@@ -336,6 +348,16 @@ async function run(btn) {
     } else if (tool === 'quiz') {
       const quiz = await generate([...docs, { text: prompts.quiz(opts) }], { system, schema: quizSchema });
       showQuiz(out, quiz);
+    } else if (tool === 'flash') {
+      const deck = await makeFlashcards(docs, system, opts.count, opts.focus);
+      out.replaceChildren(h('div.study-actions', h('h3', `🃏 ${deck.title}`), h('span', `${deck.cards.length} cartes`)),
+        h('p', 'Paquet enregistré pour toute la classe.'), h('button.btn.btn-primary', { type: 'button', onclick: () => studyDeck(deck) }, 'Commencer la révision'), disclaimer());
+    } else if (tool === 'mind') {
+      const map = await makeMindMap(docs, system, opts.focus);
+      out.replaceChildren(h('div.study-actions', h('h3', '🧠 Carte mentale'), h('button.btn.btn-ghost.btn-sm', { onclick: () => printSheet(out.querySelector('.mindmap')) }, 'Imprimer')), renderMindMap(map), disclaimer());
+    } else if (tool === 'photo') {
+      const md = await explainPhoto($('.study-photo', root)?.files[0], docs, system);
+      showSheet(out, md);
     } else if (tool === 'exam') {
       const exam = await generate([...docs, { text: prompts.exam(opts) }], { system, schema: examSchema });
       showExam(out, exam, docs);
@@ -365,7 +387,8 @@ function showSheet(out, md) {
         try { await navigator.clipboard.writeText(md); toast('Fiche copiée', 'success'); } catch { toast('Copie impossible', 'error'); }
       } }, 'Copier'),
       h('button.btn.btn-ghost.btn-sm', { onclick: () => download('fiche-revision.md', md) }, 'Télécharger'),
-      h('button.btn.btn-ghost.btn-sm', { onclick: () => printSheet(sheet) }, 'Imprimer')),
+      h('button.btn.btn-ghost.btn-sm', { onclick: () => printSheet(sheet) }, 'Imprimer'),
+      h('button.btn.btn-ghost.btn-sm', { onclick: () => speak(md) }, '🔊 Écouter')),
     sheet, disclaimer());
 }
 
@@ -399,6 +422,7 @@ function showQuiz(out, quiz) {
       feedback.replaceChildren(h('b', good ? '✔ Bonne réponse !' : '✘ Raté.'), ' ', renderMarkdown(q.explanation), q.source ? h('small.quiz-source', `Source : ${q.source}`) : '');
       scoreEl.textContent = `${score} / ${questions.length}`;
       if (answered === questions.length) {
+        emit('activity', 'quizzes');
         scoreEl.classList.add('final');
         toast(`Quiz terminé : ${score}/${questions.length} ${score / questions.length >= 0.8 ? '🚀' : score / questions.length >= 0.5 ? '👍' : '📚'}`, 'success');
       }
@@ -406,7 +430,9 @@ function showQuiz(out, quiz) {
     const card = h('div.quiz-card.card', h('div.quiz-num', `Question ${i + 1}`), renderMarkdown(q.question), h('div.quiz-choices', buttons), feedback);
     return card;
   });
-  out.replaceChildren(h('div.study-actions', h('h3', quiz.title || 'Quiz'), scoreEl), ...cards, disclaimer());
+  const duel = h('button.btn.btn-ghost.btn-sm', { type: 'button', onclick: () => startLiveQuiz(quiz.title || 'Quiz de révision',
+    questions.map((q) => ({ question: String(q.question), choices: q.choices.map(String), answer: q.answer_index }))).catch(toastError) }, '⚔️ Défier la classe en direct');
+  out.replaceChildren(h('div.study-actions', h('h3', quiz.title || 'Quiz'), scoreEl, duel), ...cards, disclaimer());
 }
 
 function showExam(out, exam, docs) {

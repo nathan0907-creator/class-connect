@@ -15,9 +15,11 @@ import { currentKey } from './keyring.js';
 import { sendTyping, watchTyping } from './presence.js';
 import { GIPHY_API_KEY } from './config.js';
 import { renderMath } from './md.js';
+import { bannedIn, maskBanned, isMuted, slowSeconds } from './admin.js';
 import {
   openTools, renderPoll, openSearch, openGallery, openPinnedAll, openThread, translate, transcribe, forward,
 } from './chatplus.js';
+import { gameCard, quizCard, GAMES } from './games.js';
 import { $, h, icon, avatar, toast, toastError, fmtTime, fmtDay, fmtSize, linkify, confirmDialog } from './ui.js';
 
 const PAGE = 50;
@@ -64,6 +66,8 @@ export function payloadPreview(p) {
   if (p.t === 'alert') return `${ALERTS[p.alert.kind]} · ${p.alert.subject} · ${fmtDate(p.alert.date)}`;
   if (p.t === 'poll') return `${p.poll.wyr ? '🤔' : '📊'} ${p.poll.q}`;
   if (p.t === 'sticker') return '🏷️ Sticker';
+  if (p.t === 'game') return `🎮 Défi : ${GAMES[p.game.kind]}`;
+  if (p.t === 'quiz') return `⚡ Quiz en direct : ${p.quiz.title}`;
   return p.text || (p.t === 'audio' ? '🎤 Message vocal' : p.t === 'video' ? '🎬 Vidéo' : p.t === 'gif' ? 'GIF' : '🖼️ Image');
 }
 
@@ -187,6 +191,12 @@ export function initChat() {
 
   on('typing', ({ id, channel: ch }) => { if (ch === channel) showTyping(id); });
   on('keys', redecryptFailed);
+  on('me', updateComposerLock);
+  // New banned-word list: re-mask the plain text messages already shown (media are left alone, no re-download).
+  on('settings', () => list.querySelectorAll('.msg').forEach((el) => {
+    const p = el._row && decrypted.get(el._row.id);
+    if (p?.t === 'text') fillBubble(el, el._row);
+  }));
   on('members', refreshAuthors);
   on('profiles', () => { refreshAuthors(); renderBirthdays(); });
   on('panel', (name) => { if (name === 'chat') { setUnread(0); scrollToBottom(); } });
@@ -219,6 +229,20 @@ export function startChat(requested) {
 
 function stopWatchers() { watchers.forEach((u) => u()); watchers = []; }
 
+/** Announcements: only delegates and teachers write (anyone can still report an absent teacher from the timetable).
+ *  A muted member can read but not write until the end of their mute. */
+function updateComposerLock() {
+  if (!channel) return;
+  const muted = isMuted();
+  const locked = muted || (channel === 'announcements' && !canAnnounce());
+  root.classList.toggle('composer-locked', locked);
+  textarea.disabled = locked;
+  textarea.placeholder = muted ? `🔇 Tu es en sourdine jusqu'à ${fmtTime(state.me.muted_until)}`
+    : locked ? "Seuls les délégués et les profs publient ici · signale un prof absent depuis l'emploi du temps"
+    : `Message chiffré — ${CHANNELS[channel].label}…`;
+}
+let lastSent = 0;
+
 function openChannel(ch) {
   stopChat();
   channel = ch;
@@ -226,12 +250,7 @@ function openChannel(ch) {
   renderChannelTabs();
   $('[data-channel-title]').textContent = CHANNELS[ch].title;
   $('[data-channel-hint]').textContent = CHANNELS[ch].hint;
-  // Announcements: only delegates and teachers write (anyone can still report an absent teacher from the timetable).
-  const locked = ch === 'announcements' && !canAnnounce();
-  root.classList.toggle('composer-locked', locked);
-  textarea.disabled = locked;
-  textarea.placeholder = locked ? "Seuls les délégués et les profs publient ici · signale un prof absent depuis l'emploi du temps"
-    : `Message chiffré — ${CHANNELS[ch].label}…`;
+  updateComposerLock();
   typingTimers.forEach((t) => clearTimeout(t));
   typingTimers.clear();
   renderTyping();
@@ -514,7 +533,7 @@ function messageActions(row) {
   if (p?.t === 'audio') out.push({ icon: 'mic', label: 'Transcrire (IA)', run: () => transcribe(row, el()), sheetOnly: true });
   if (moderates(row.channel)) {
     out.push({ icon: 'pin', label: row.pinned ? 'Désépingler' : 'Épingler', title: 'Épingler / désépingler',
-      run: () => updateDoc(doc(messagesCol(), row.id), { pinned: !row.pinned }).catch(toastError) });
+      run: () => moderate(row, 'pin', { pinned: !row.pinned }).catch(toastError) });
   }
   if (row.user_id !== state.me.id) {
     out.push({ icon: 'flag', label: 'Signaler', title: 'Signaler ce message', run: () => openReport(row) });
@@ -523,12 +542,25 @@ function messageActions(row) {
     out.push({ icon: 'trash', label: 'Supprimer', danger: true, run: async () => {
       if (!(await confirmDialog('Supprimer le message ?', 'Il disparaîtra pour tout le canal. Par sécurité (harcèlement), il reste conservé chiffré 30 jours et peut être joint à un signalement.'))) return;
       try {
-        await updateDoc(doc(messagesCol(), row.id), { deleted_at: serverTimestamp(), deleted_by: state.me.id, pinned: false });
+        const change = { deleted_at: serverTimestamp(), deleted_by: state.me.id, pinned: false };
+        if (row.user_id === state.me.id) await updateDoc(doc(messagesCol(), row.id), change);
+        else await moderate(row, 'delete', change);
         onRemoved(row.id);
       } catch (err) { toastError(err); }
     } });
   }
   return out;
+}
+
+/** A moderator's change to someone's message, written in the moderation log in the same batch (required by the rules). */
+function moderate(row, action, change) {
+  const batch = writeBatch(db);
+  batch.update(doc(sub(state.cls.id, row.channel), row.id), change);
+  const kind = action === 'delete' ? 'delete' : change.pinned ? 'pin' : 'unpin';
+  batch.set(doc(sub(state.cls.id, 'modlog'), `${row.id}_${action === 'delete' ? 'del' : 'pin'}`), {
+    action: kind, target: row.user_id, channel: row.channel, detail: '', by: state.me.id, at: serverTimestamp(),
+  });
+  return batch.commit();
 }
 
 function actionButtons(row) {
@@ -702,6 +734,10 @@ async function fillBubble(el, row) {
       h('b', ALERTS[a.kind]), h('span', `${a.subject} · ${fmtDate(a.date)}`),
       a.kind === 'room' && a.room ? h('span', `Nouvelle salle : ${a.room}`) : null,
       a.note ? h('small', a.note) : null));
+  } else if (payload.t === 'game') {
+    parts.push(gameCard(payload.game));
+  } else if (payload.t === 'quiz') {
+    parts.push(quizCard(payload.quiz));
   } else if (payload.t === 'poll') {
     parts.push(renderPoll(row, payload));
   } else if (payload.t === 'sticker') {
@@ -715,7 +751,7 @@ async function fillBubble(el, row) {
     parts.push(mediaEl(payload, row.epoch));
   }
   if (payload.text) {
-    const text = h('div.text', linkify(payload.text));
+    const text = h('div.text', linkify(maskBanned(payload.text)));
     parts.push(text);
     // Formulas written as $…$ are drawn by KaTeX (text only, never HTML).
     if (payload.text.includes('$')) renderMath(text);
@@ -944,7 +980,13 @@ export const sendFile = (file) => sendFileImpl(file);
 async function sendText() {
   const text = textarea.value.trim();
   if (!text) return;
+  if (isMuted()) return toast(`🔇 Tu es en sourdine jusqu'à ${fmtTime(state.me.muted_until)}`, 'error');
+  const bad = bannedIn(text);
+  if (bad) return toast(`Ce message contient un mot interdit par les délégués : « ${bad} »`, 'error');
   if (compose.edit) return saveEdit(text);
+  const wait = slowSeconds() * 1000 - (Date.now() - lastSent);
+  if (wait > 0) return toast(`Mode lent : attends encore ${Math.ceil(wait / 1000)} s`, 'error');
+  lastSent = Date.now();
   const reply = replyTo;
   textarea.value = '';
   textarea.style.height = 'auto';
@@ -953,6 +995,7 @@ async function sendText() {
   try {
     await postPayload({ v: 1, t: 'text', text, ...(reply ? { reply } : {}) });
     launchRocket();
+    if (text.startsWith('💬 Question du jour')) emit('activity', 'qotd');
   } catch (err) {
     textarea.value = text;
     if (reply) { replyTo = reply; replyBar.hidden = false; root.classList.add('replying'); }

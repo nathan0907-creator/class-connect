@@ -279,6 +279,7 @@
           <button class="nav-item" data-panel="timetable"><i class="ico ico-calendar" aria-hidden="true"></i><span data-short="EDT">Emploi du temps</span></button>
           <button class="nav-item student-only" data-panel="votes"><i class="ico ico-vote" aria-hidden="true"></i><span>Votes</span><b class="badge" data-badge="votes" aria-label="votes en attente"></b></button>
           <button class="nav-item" data-panel="council"><i class="ico ico-award" aria-hidden="true"></i><span data-short="Conseil">Conseil de classe</span></button>
+          <button class="nav-item" data-panel="life"><i class="ico ico-star" aria-hidden="true"></i><span data-short="Vie">Vie de classe</span></button>
           <button class="nav-item" data-panel="study"><i class="ico ico-sparkles" aria-hidden="true"></i><span data-short="Réviser">Révisions IA</span></button>
           <button class="nav-item dm-nav" data-panel="dm"><i class="ico ico-mail" aria-hidden="true"></i><span data-dm-label>Privé</span><b class="badge" data-badge="dm" aria-label="messages privés non lus"></b></button>
           <button class="nav-item" data-panel="members"><i class="ico ico-users" aria-hidden="true"></i><span>Équipage</span><b class="badge" data-badge="members" aria-label="signalements à traiter"></b></button>
@@ -389,6 +390,13 @@
             </div>
             <button class="btn btn-primary can-publish-only" data-action="new-course"><span data-new-course-label>Ajouter un cours</span></button>
           </header>
+          <div class="study-extras">
+            <button type="button" class="btn btn-ghost btn-sm" data-study-extra="decks">🃏 Mes flashcards</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-study-extra="planning">📅 Planning de révision</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-study-extra="room">🍅 On révise ensemble</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-study-extra="board">🧑‍🏫 Tableau blanc</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-study-extra="grades">📒 Mes notes</button>
+          </div>
           <div class="subject-chips" role="tablist" aria-label="Matières"></div>
           <div class="study-layout">
             <aside class="course-lib" aria-label="Cours de la matière">
@@ -403,12 +411,25 @@
                 <button class="active" data-study-tool="sheet" role="tab">Fiche</button>
                 <button data-study-tool="quiz" role="tab">Quiz</button>
                 <button data-study-tool="exam" role="tab">Évaluation</button>
+                <button data-study-tool="flash" role="tab">Flashcards</button>
+                <button data-study-tool="mind" role="tab">Carte mentale</button>
+                <button data-study-tool="photo" role="tab">Exercice photo</button>
                 <button data-study-tool="ask" role="tab">Question</button>
               </div>
               <div class="study-options"></div>
               <div class="study-output" aria-live="polite"></div>
             </div>
           </div>
+        </section>
+
+        <section class="panel" id="panel-life" aria-labelledby="life-title">
+          <header class="panel-head">
+            <div>
+              <h2 id="life-title">Vie de classe</h2>
+              <p class="muted">Jeux, souvenirs et organisation : tout ce qui est écrit ici reste chiffré de bout en bout.</p>
+            </div>
+          </header>
+          <div class="life-body"></div>
         </section>
 
         <section class="panel" id="panel-dm" aria-labelledby="dm-title">

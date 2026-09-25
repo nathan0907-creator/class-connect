@@ -23,6 +23,8 @@ import { initEvents, startEvents, stopEvents } from './events.js';
 import { initTheme, applyTheme } from './theme.js';
 import { applyQualityClass } from './quality.js';
 import { initDM, startDM, stopDM, bindDMComposer } from './dm.js';
+import { initLife, startLife, stopLife } from './life.js';
+import { startSettings, stopSettings } from './admin.js';
 import { $, $$, h, toast, toastError, enableTilt, busy, avatar } from './ui.js';
 import { safeColor } from './safe.js';
 
@@ -314,6 +316,8 @@ function startClass(cid) {
   startStudy();
   startCouncil();
   startPresence(cid);
+  startLife();
+  startSettings();
   return membersReady;
 }
 
@@ -330,6 +334,8 @@ function stopClass() {
   stopCouncil();
   stopProfiles();
   stopDM();
+  stopLife();
+  stopSettings();
   liveClassId = null;
 }
 
@@ -391,6 +397,7 @@ async function boot() {
   initEvents();
   initDM();
   bindDMComposer();
+  initLife();
   initNotify();
 
   $$('.nav-item').forEach((b) => b.addEventListener('click', () => showPanel(b.dataset.panel)));

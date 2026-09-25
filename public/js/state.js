@@ -12,7 +12,12 @@ export const state = {
 
 const bus = new EventTarget();
 export const emit = (type, detail) => bus.dispatchEvent(new CustomEvent(type, { detail }));
-export const on = (type, fn) => bus.addEventListener(type, (e) => fn(e.detail));
+/** Listens to an app event; returns the function that stops listening. */
+export const on = (type, fn) => {
+  const listener = (e) => fn(e.detail);
+  bus.addEventListener(type, listener);
+  return () => bus.removeEventListener(type, listener);
+};
 
 export const isDelegate = () => state.me?.role === 'delegate' && state.me?.status === 'active';
 export const isTeacher = () => state.me?.role === 'teacher' && state.me?.status === 'active';

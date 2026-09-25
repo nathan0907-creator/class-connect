@@ -81,6 +81,12 @@ async function pairKey(myPrivate, theirPublicB64, info) {
   );
 }
 
+/**
+ * Personal key (only I can derive it: my private key with my own public key). Used for private data such as my
+ * grade book; a new identity (password reset) gives a new key, so that data can't be read anymore.
+ */
+export const personalKey = (myPrivate, myPublicB64, purpose) => pairKey(myPrivate, myPublicB64, `personal|${purpose}`);
+
 export const generateClassKey = () => subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
 
 export async function wrapClassKey(classKey, myPrivate, recipientPublicB64, { classId, epoch, userId }) {
