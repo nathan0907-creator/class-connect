@@ -20,7 +20,7 @@ Object.assign(globalThis, {
 
 test('aucune réponse en clair dans les fichiers publiés', { skip }, async () => {
   const { CHAPTERS } = await import(pathToFileURL(storyFile).href);
-  const published = ['public/js/arg-data.js', 'public/js/arg.js', 'public/index.html'].map((f) => fs.readFileSync(path.join(root, f), 'utf8').toLowerCase()).join('\n');
+  const published = ['public/js/arg-data.js', 'public/js/arg.js', 'public/index.html', 'public/js/relais-data.js', 'public/js/relais.js'].map((f) => fs.readFileSync(path.join(root, f), 'utf8').toLowerCase()).join('\n');
   // The last answer is an everyday word on purpose (« nous », « la classe »…): not a leak.
   for (const c of CHAPTERS.slice(0, -1)) for (const a of c.answers) if (a.length >= 5) assert.ok(!published.includes(a), `réponse visible : ${a}`);
   // Nor any clue beyond the first one.
@@ -48,10 +48,29 @@ test('l\'histoire se résout du début à la fin, et seulement dans l\'ordre', {
     assert.equal(arg.solved(n), true);
   }
   assert.equal(arg.argDone(), true);
-  // The last hook data (fragment 9) could only be read with fragment 8's key: it is there now.
-  assert.equal(arg.schoolMonth(new Date(2027, 5, 10)), 9);
-  assert.equal(arg.schoolMonth(new Date(2026, 8, 1)), 0);
-  assert.equal(arg.schoolMonth(new Date(2027, 6, 14)), 9);
-  assert.equal(arg.reachable(2, new Date(2026, 8, 30)), false);
-  assert.equal(arg.reachable(2, new Date(2026, 9, 1)), true);
+});
+
+test('le relais ne s\'ouvre qu\'avec le code de la vidéo', { skip }, async () => {
+  const { webcrypto: wc } = await import('node:crypto');
+  const { CHAPTERS } = await import(pathToFileURL(storyFile).href);
+  const config = await import(pathToFileURL(path.join(root, 'arg', 'config.mjs')).href);
+  const DATA = (await import('../public/js/relais-data.js')).default;
+  const published = fs.readFileSync(path.join(root, 'public/js/relais-data.js'), 'utf8') + fs.readFileSync(path.join(root, 'public', config.RELAY_PAGE), 'utf8');
+  assert.ok(!published.includes(config.MC_ADDRESS), 'adresse du serveur visible');
+  const { norm } = await import('../public/js/arg.js');
+  const enc = new TextEncoder();
+  const open = async (key, box, aad) => JSON.parse(new TextDecoder().decode(await wc.subtle.decrypt({ name: 'AES-GCM', iv: Buffer.from(box.iv, 'base64'), additionalData: enc.encode(aad) }, key, Buffer.from(box.ct, 'base64'))));
+  const tryCode = async (code) => {
+    for (const w of DATA.wraps) {
+      try {
+        const base = await wc.subtle.importKey('raw', enc.encode(norm(code)), 'PBKDF2', false, ['deriveKey']);
+        const k = await wc.subtle.deriveKey({ name: 'PBKDF2', hash: 'SHA-256', salt: Buffer.from(w.salt, 'base64'), iterations: DATA.iterations }, base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+        const key = await wc.subtle.importKey('raw', Buffer.from(await open(k, w, 'wrap|relais'), 'base64'), 'AES-GCM', false, ['decrypt']);
+        return await open(key, DATA.box, 'relais');
+      } catch { /* next */ }
+    }
+    return null;
+  };
+  assert.equal(await tryCode('mauvais'), null);
+  assert.equal((await tryCode(CHAPTERS[3].answers[0].toUpperCase())).address, config.MC_ADDRESS);
 });

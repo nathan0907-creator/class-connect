@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-aa//tPmmlGyItVTvOTW4fNGcj+SsPjqqRp3IynyjVA4=' https://www.gstatic.com/firebasejs/12.19.0/ https://cdn.jsdelivr.net/npm/three@0.170.0/ https://cdn.jsdelivr.net/npm/katex@0.18.7/ https://cdn.jsdelivr.net/npm/qrcode-generator@2.0.4/ https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/ https://apis.google.com https://www.googletagmanager.com https://*.europe-west1.firebasedatabase.app; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net/npm/katex@0.18.7/; font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net/npm/katex@0.18.7/; img-src 'self' data: blob: https:; media-src 'self' data: blob:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app wss://*.firebasedatabase.app https://api.giphy.com https://www.google.com https://www.gstatic.com https://cdn.jsdelivr.net https://fonts.googleapis.com https://fonts.gstatic.com https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com; frame-src https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/ https://class-connectv3.firebaseapp.com; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+  <script>if (location.protocol === 'http:' && !/^(localhost|127\.|\[::1\])/.test(location.hostname)) location.replace('https:' + location.href.slice(5));
+  /* Anti-clickjacking: never usable inside another site's frame. */ if (self !== top) { document.documentElement.style.display = 'none'; try { top.location.replace(location.href); } catch (e) {} }</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <title>relais</title>
+  <style>
+    :root { color-scheme: dark; }
+    html, body { margin: 0; min-height: 100%; background: #010604; }
+    body { display: grid; place-items: center; min-height: 100dvh; padding: 16px; box-sizing: border-box; color: #3dffa8;
+      font: 15px/1.6 'Courier New', monospace; text-shadow: 0 0 6px rgba(61, 255, 168, .55);
+      background-image: repeating-linear-gradient(0deg, rgba(255, 255, 255, .03) 0 1px, transparent 1px 3px); }
+    main { width: min(560px, 100%); border: 1px solid #1f6b4a; border-radius: 10px; padding: 18px 20px; background: #020a06; box-shadow: 0 0 40px -8px rgba(61, 255, 168, .45); }
+    pre { margin: 0 0 12px; white-space: pre-wrap; font: inherit; }
+    form { display: flex; gap: 8px; border-top: 1px dashed #1f6b4a; padding-top: 12px; }
+    input { flex: 1; min-width: 0; background: transparent; border: 0; outline: none; color: inherit; font: inherit; caret-color: #3dffa8; text-shadow: inherit; }
+    .dim { opacity: .7; }
+    .addr { display: inline-block; margin: 6px 0; padding: 4px 10px; border: 1px solid #3dffa8; border-radius: 6px; user-select: all; }
+  </style>
+  <script type="module" src="js/relais.js"></script>
+</head>
+<body>
+  <main>
+    <pre>RELAIS 1420 > liaison établie avec ÉCHO-7.
+RELAIS 1420 > code d'accès requis.</pre>
+    <div data-out></div>
+    <form data-form autocomplete="off"><span>&gt;</span><input name="code" aria-label="Code d'accès" maxlength="60" spellcheck="false" autofocus></form>
+  </main>
+</body>
+</html>

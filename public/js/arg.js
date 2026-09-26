@@ -8,7 +8,6 @@ const STORE = 'cc-vega';
 const enc = new TextEncoder();
 const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 export const norm = (s) => String(s).normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]/g, '');
-const MONTHS = ['septembre', 'octobre', 'novembre', 'décembre', 'janvier', 'février', 'mars', 'avril', 'mai', 'juin'];
 const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches || document.body.classList.contains('calm');
 
 // ------------------------------------------------------------ memory (this device only)
@@ -22,9 +21,6 @@ const save = () => { try { localStorage.setItem(STORE, JSON.stringify(mem)); } c
 const chapter = (n) => DATA.chapters[n - 1];
 export const solved = (n) => typeof mem.keys[n] === 'string';
 export const argDone = () => solved(DATA.chapters.length);
-/** School month now: 0 = September … 9 = June; July and August open everything. */
-export function schoolMonth(d = new Date()) { const i = (d.getMonth() + 4) % 12; return i > 9 ? 9 : i; }
-export const reachable = (n, d = new Date()) => !!chapter(n) && schoolMonth(d) >= chapter(n).month;
 const current = () => DATA.chapters.find((c) => !solved(c.n))?.n || null;
 
 async function keyOf(n) {
@@ -73,8 +69,8 @@ export async function tryAnswer(n, answer) {
   return false;
 }
 
-/** Hook data of fragment n, only once it is reachable (date) and its clue is readable. */
-export const hookOf = (n) => (reachable(n) && hooks.has(n) ? hooks.get(n) : null);
+/** Hook data of fragment n, once its clue is readable. */
+export const hookOf = (n) => hooks.get(n) || null;
 
 // ------------------------------------------------------------ the terminal
 let term = null;
@@ -121,15 +117,13 @@ async function render(screen) {
   }
   const n = current();
   if (!n) { screen.append(h('pre.vega-line.vega-ok', 'VEGA > ÉCHO-7 est rentrée. Merci, équipage. 🛸')); return; }
-  if (!reachable(n)) {
-    const month = MONTHS[chapter(n).month];
-    screen.append(h('pre.vega-line.vega-dim', `VEGA > fragment ${n} hors de portée.\nVEGA > prochain signal attendu en ${month}. Reviens écouter.`));
-    return;
-  }
   const c = clues.get(n);
   const box = h('pre.vega-line');
   screen.append(h('p.vega-title', `◉ Fragment ${n}/${total} · ${c.title}`), box);
   await typeInto(box, c.clue);
+  // A link in the clue (the transmission): only YouTube addresses become a button.
+  const link = c.clue.match(/https:\/\/(?:www\.)?(?:youtube\.com|youtu\.be)\/[^\s]+/)?.[0];
+  if (link) screen.append(h('a.vega-btn', { href: link, target: '_blank', rel: 'noopener noreferrer' }, '📺 Ouvrir la transmission'));
   if (n === 2 && hookOf(2)) {
     screen.append(h('button.vega-btn', { type: 'button', onclick: () => playTransmission(hookOf(2).notes, screen) }, '📡 Capter la transmission'));
   }
@@ -152,7 +146,7 @@ async function render(screen) {
   input.focus();
 }
 
-/** A short message from VEGA (clues hidden in the site). */
+/** A short message from VEGA. */
 export function transmission(text, title = 'Transmission') {
   const box = h('pre');
   const el = h('div.vega-toast', { role: 'status' }, h('b', `📡 ${title}`), box,
@@ -188,7 +182,7 @@ function playTransmission(notes, screen) {
   screen.querySelector('.vega-btn')?.after(bars);
 }
 
-/** Fragment 1 (and 7): the star that belongs to nobody, in the class constellation. */
+/** Fragment 1: the star that belongs to nobody, in the class constellation. */
 export function argStar(svg) {
   const g = svg('g', { class: 'vega-star', tabindex: 0, role: 'button', 'aria-label': 'Étoile inconnue' },
     svg('circle', { cx: 566, cy: 34, r: 9, fill: 'transparent' }),
@@ -213,54 +207,9 @@ export function argStar(svg) {
     };
     setTimeout(step, 600);
   }
-  const act = () => { if (hookOf(7) && solved(6) && !solved(7)) vegaCard(hookOf(7).card); else openTerminal(); };
-  g.addEventListener('click', act);
-  g.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); act(); } });
+  g.addEventListener('click', openTerminal);
+  g.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTerminal(); } });
   return g;
-}
-
-function vegaCard(card) {
-  const el = h('div.vega-term', { role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Carte d\'identité' },
-    h('div.id-card.vega-card', { style: { '--b1': '#000000', '--b2': '#0b6b4f', '--b3': '#3dffa8' } },
-      h('div.id-top', h('b', '🛰️ CLASS CONNECT'), h('small', 'Carte d\'identité spatiale')),
-      h('div.id-body',
-        h('div.avatar.vega-avatar', { style: { width: '92px', height: '92px', fontSize: '40px' } }, '◉'),
-        h('div.id-fields',
-          h('b.id-name', card.name),
-          h('small', card.role),
-          h('dl', h('dt', 'Étoile'), h('dd', `⭐ ${card.star}`), h('dt', 'En service depuis'), h('dd', card.since), h('dt', 'Équipage'), h('dd', card.crew)))),
-      h('div.id-foot', h('code', card.id), h('button.vega-btn', { type: 'button', onclick: () => { el.remove(); openTerminal(); } }, 'Ouvrir le terminal'))));
-  el.addEventListener('click', (e) => { if (e.target === el) el.remove(); });
-  document.body.append(el);
-}
-
-/** Fragment 4: a mark on the solstice in the class calendar. */
-export function argMark(ymd) {
-  const hook = hookOf(4);
-  if (!hook || !solved(3) || ymd.slice(5) !== hook.date) return null;
-  return h('span.arg-mark', { title: '✦', onclick: (e) => { e.stopPropagation(); transmission(hook.text, 'Solstice'); } }, '✦');
-}
-
-/** Fragment 5: a planet too many around the subjects. */
-export const argPhantom = () => (solved(4) ? hookOf(5) : null);
-
-/** Fragment 6: a keyboard shortcut that echoes a word backwards. */
-export const argShortcut = () => (solved(5) ? hookOf(6) : null);
-export function argEcho() {
-  const hook = argShortcut();
-  if (!hook) return false;
-  const el = h('div.vega-echo', { 'aria-hidden': 'true' }, hook.word);
-  document.body.append(el);
-  setTimeout(() => el.remove(), 5200);
-  return true;
-}
-
-/** Fragment 8: the station painted with the right colours. */
-export function argTheme(a, b) {
-  const hook = solved(7) ? hookOf(8) : null;
-  if (!hook || a.toLowerCase() !== hook.a || b.toLowerCase() !== hook.b) return;
-  state.space?.warpJump?.();
-  transmission(`…${hook.word.split('').join(' · ')}…`, '1420 MHz');
 }
 
 // ------------------------------------------------------------ ways in (none of them is written anywhere)
@@ -277,17 +226,6 @@ export function initArg() {
   const byHash = () => { if (location.hash === '#1420') { history.replaceState(null, '', location.pathname + location.search); openTerminal(); } };
   window.addEventListener('hashchange', byHash);
   byHash();
-  // 3. Fragment 9: the mascot talks if you insist.
-  let clicks = 0;
-  let timer;
-  document.addEventListener('click', (e) => {
-    if (!e.target.closest?.('.mascot-body')) return;
-    const hook = solved(8) ? hookOf(9) : null;
-    if (!hook) return;
-    clearTimeout(timer);
-    timer = setTimeout(() => { clicks = 0; }, 2500);
-    if (++clicks >= hook.clicks) { clicks = 0; transmission(hook.riddle, 'Astro'); }
-  });
-  // 4. For the curious who open the console.
+  // 3. For the curious who open the console.
   console.log('%c📡 VEGA ▸ …signal faible… 1420 MHz…', 'color:#3dffa8;font:600 13px monospace');
 }

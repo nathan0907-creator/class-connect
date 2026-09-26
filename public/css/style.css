@@ -2314,13 +2314,7 @@ body.bday-day[data-view="app"]::before {
 .vega-toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 96; width: min(480px, calc(100% - 32px)); padding: 12px 36px 12px 14px; border-radius: 10px; border: 1px solid #1f6b4a; background: #020a06; color: #3dffa8; font: 14px/1.5 monospace; box-shadow: 0 0 30px -6px rgba(61, 255, 168, .5); animation: vegaIn .4s ease; }
 .vega-toast pre { margin: 6px 0 0; white-space: pre-wrap; font: inherit; }
 .vega-toast button { position: absolute; top: 6px; right: 10px; background: none; border: 0; color: #3dffa8; font-size: 18px; cursor: pointer; }
-.vega-echo { position: fixed; top: 42%; left: 0; z-index: 96; pointer-events: none; font: 900 clamp(40px, 10vw, 110px) var(--font-display); color: rgba(61, 255, 168, .75); letter-spacing: .3em; transform: scaleX(-1); text-shadow: 0 0 30px #3dffa8; white-space: nowrap; animation: vegaEcho 5s linear forwards; }
-@keyframes vegaEcho { from { left: 100%; opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } to { left: -120%; opacity: 0; } }
 .constellation .vega-star { cursor: pointer; outline: none; }
 .constellation .vega-core { fill: #9aa3b8; opacity: .35; transition: opacity .08s; }
 .constellation .vega-core.on { opacity: 1; fill: #e8fff6; filter: drop-shadow(0 0 3px #3dffa8); }
 .constellation .vega-star:hover .vega-core, .constellation .vega-star:focus-visible .vega-core { opacity: .8; }
-.arg-mark { margin-left: 4px; font-size: 10px; color: #3dffa8; opacity: .55; cursor: pointer; text-shadow: 0 0 4px #3dffa8; }
-.solar .phantom circle { fill: #6b7280; opacity: .5; }
-.vega-card { width: min(520px, 100%); }
-.vega-avatar { display: grid; place-items: center; background: radial-gradient(circle, #0b6b4f, #000); color: #3dffa8; box-shadow: 0 0 0 2px #3dffa8, 0 0 20px #3dffa8; }

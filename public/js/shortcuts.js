@@ -2,7 +2,6 @@
 import { emit } from './state.js';
 import { $, $$, h, modal } from './ui.js';
 import { openDisplay } from './display.js';
-import { argShortcut, argEcho } from './arg.js';
 
 const SHORTCUTS = [
   ['?', 'Afficher cette aide'],
@@ -26,7 +25,7 @@ function goChat() {
 export function openShortcuts() {
   modal({
     title: '⌨️ Raccourcis clavier',
-    body: h('dl.shortcut-list', [...SHORTCUTS, ...(argShortcut() ? [[`Alt + ${argShortcut().key}`, '◉ Écho']] : [])].map(([k, v]) => [h('dt', k.split(' ').map((p) => (p === '+' || p === '…' || p === ':' ? ` ${p} ` : h('kbd', p)))), h('dd', v)])),
+    body: h('dl.shortcut-list', SHORTCUTS.map(([k, v]) => [h('dt', k.split(' ').map((p) => (p === '+' || p === '…' || p === ':' ? ` ${p} ` : h('kbd', p)))), h('dd', v)])),
   });
 }
 
@@ -49,7 +48,6 @@ export function initShortcuts() {
         return;
       }
       if (e.code === 'KeyA') { e.preventDefault(); openDisplay(); }
-      else if (argShortcut() && e.code === `Key${argShortcut().key}` && argEcho()) e.preventDefault();
       return;
     }
     if (typing(e.target) || modalOpen() || e.ctrlKey || e.metaKey) return;

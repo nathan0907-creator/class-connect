@@ -4,7 +4,6 @@ import { h, modal } from './ui.js';
 import { allEvents, KINDS, openEventForm, canEditEvents } from './events.js';
 import { ALERTS, fmtDate } from './chat.js';
 import { ymd, alertsOn, slotsOn } from './timetable.js';
-import { argMark } from './arg.js';
 
 const MONTH_FMT = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' });
 let shown = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
@@ -37,7 +36,7 @@ export function renderCalendar() {
     cells.push(h(`button.cal-day${d.getMonth() !== first.getMonth() ? '.out' : ''}${key === today ? '.today' : ''}${items.length ? '.busy' : ''}`, {
       type: 'button', onclick: () => openDay(d), 'aria-label': `${fmtDate(key)} : ${items.length ? items.map((x) => x.text).join(', ') : 'rien de prévu'}`,
     },
-    h('span.cal-num', d.getDate(), argMark(key)),
+    h('span.cal-num', d.getDate()),
     h('span.cal-items', items.slice(0, 3).map((x) => h(`span.cal-item.k-${x.kind}`, `${x.emoji} ${x.text}`))),
     items.length > 3 ? h('small.cal-more', `+${items.length - 3}`) : null));
   }
