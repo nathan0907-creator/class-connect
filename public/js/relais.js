@@ -28,6 +28,48 @@ async function unlock(code) {
 
 const line = (text, cls = '') => Object.assign(document.createElement('pre'), { textContent: text, className: cls });
 
+/** « (comment rejoindre ?) » : how to add an unofficial server, device by device. */
+function tutorial(secret) {
+  const el = (tag, text) => Object.assign(document.createElement(tag), { textContent: text });
+  const b = secret.bedrock;
+  const steps = [
+    ['💻 Ordinateur — Minecraft Java (Windows, Mac, Linux)', [
+      'Lance Minecraft Java Edition, puis « Multijoueur ».',
+      '« Ajouter un serveur » → nom : Station ÉCHO → adresse du serveur : ' + secret.address,
+      '« Terminé », puis double-clic sur Station ÉCHO.',
+      'Version trop récente ou trop ancienne ? Aucun souci, le serveur accepte les autres versions.',
+    ]],
+    ...(b ? [
+      ['📱 Téléphone, tablette ou PC Windows — Minecraft Bedrock', [
+        '« Jouer » → onglet « Serveurs ».',
+        'Tout en bas de la liste : « Ajouter un serveur ».',
+        `Nom : Station ÉCHO · Adresse : ${b.host} · Port : ${b.port}`,
+        '« Enregistrer », puis touche le serveur pour le rejoindre.',
+      ]],
+      ['🎮 Xbox, PlayStation ou Switch', [
+        'Les consoles n\'affichent que les serveurs officiels : il faut une petite astuce.',
+        'Le plus simple : installe l\'appli gratuite « BedrockTogether » sur un téléphone connecté au même Wi-Fi que la console.',
+        `Dans l'appli : adresse ${b.host}, port ${b.port}, puis « Run ».`,
+        'Sur la console : Minecraft → « Jouer » → onglet « Amis » → la partie apparaît dans « Parties en réseau local ». Rejoins-la (l\'appli doit rester ouverte).',
+        'Autre méthode (sans téléphone) : l\'outil « BedrockConnect », qui passe par un changement de DNS dans les réglages réseau de la console. Demande à un adulte, et remets le DNS automatique après.',
+      ]],
+    ] : []),
+    ['❓ Ça ne marche pas ?', [
+      'Vérifie l\'adresse lettre par lettre (sans espace).',
+      'Sur Bedrock, le port est obligatoire.',
+      'Le serveur tourne sur un vieux PC : s\'il ne répond pas, réessaie un peu plus tard.',
+    ]],
+  ];
+  const box = Object.assign(document.createElement('details'), { className: 'tuto' });
+  box.append(el('summary', '(comment rejoindre ? tuto par appareil)'));
+  for (const [title, list] of steps) {
+    const ol = document.createElement('ol');
+    for (const s of list) ol.append(el('li', s));
+    box.append(el('h3', title), ol);
+  }
+  return box;
+}
+
 $('[data-form]').addEventListener('submit', async (e) => {
   e.preventDefault();
   const form = e.currentTarget;
@@ -54,6 +96,7 @@ $('[data-form]').addEventListener('submit', async (e) => {
       Object.assign(document.createElement('span'), { className: 'addr', textContent: `${secret.bedrock.host}` }),
       line(`port : ${secret.bedrock.port}\nJouer → Serveurs → Ajouter un serveur → adresse + port.`),
     ] : []),
+    tutorial(secret),
     line('\nÀ bord : mode aventure. Regarde, lis, ne casse rien.\nApproche-toi des personnages (ou clic droit) : ils t\'aident.\nChaque salle garde un mot pour VEGA.\nN\'oublie pas de donner à VEGA le code de la transmission.'),
   );
   form.remove();
