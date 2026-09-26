@@ -124,6 +124,11 @@ async function render(screen) {
   // A link in the clue (the transmission): only YouTube addresses become a button.
   const link = c.clue.match(/https:\/\/(?:www\.)?(?:youtube\.com|youtu\.be)\/[^\s]+/)?.[0];
   if (link) screen.append(h('a.vega-btn', { href: link, target: '_blank', rel: 'noopener noreferrer' }, '📺 Ouvrir la transmission'));
+  // Fragment 1: the recorded signal and a Morse table, so anyone can decode it.
+  if (n === 1 && hookOf(1)) {
+    const signal = hookOf(1).morse.split(' ').map((l) => l.replace(/-/g, '—').replace(/\./g, '·').split('').join(' ')).join('   /   ');
+    screen.append(h('pre.vega-line.vega-signal', `Signal capté :  ${signal}`), morseTable());
+  }
   if (n === 2 && hookOf(2)) {
     screen.append(h('button.vega-btn', { type: 'button', onclick: () => playTransmission(hookOf(2).notes, screen) }, '📡 Capter la transmission'));
   }
@@ -144,6 +149,14 @@ async function render(screen) {
   } }, h('span', '>'), input);
   screen.append(form, out);
   input.focus();
+}
+
+const MORSE = {
+  A: '.-', B: '-...', C: '-.-.', D: '-..', E: '.', F: '..-.', G: '--.', H: '....', I: '..', J: '.---', K: '-.-', L: '.-..', M: '--',
+  N: '-.', O: '---', P: '.--.', Q: '--.-', R: '.-.', S: '...', T: '-', U: '..-', V: '...-', W: '.--', X: '-..-', Y: '-.--', Z: '--..',
+};
+function morseTable() {
+  return h('div.vega-morse', Object.entries(MORSE).map(([l, code]) => h('span', h('b', l), ` ${code.replace(/-/g, '—').replace(/\./g, '·')}`)));
 }
 
 /** A short message from VEGA. */
@@ -185,8 +198,8 @@ function playTransmission(notes, screen) {
 /** Fragment 1: the star that belongs to nobody, in the class constellation. */
 export function argStar(svg) {
   const g = svg('g', { class: 'vega-star', tabindex: 0, role: 'button', 'aria-label': 'Étoile inconnue' },
-    svg('circle', { cx: 566, cy: 34, r: 9, fill: 'transparent' }),
-    svg('circle', { cx: 566, cy: 34, r: 1.6, class: 'vega-core' }));
+    svg('circle', { cx: 560, cy: 40, r: 16, fill: 'transparent' }),
+    svg('circle', { cx: 560, cy: 40, r: 3.4, class: 'vega-core' }));
   const core = g.lastChild;
   const hook = hookOf(1);
   if (hook && !solved(1) && !reduced()) {
@@ -203,7 +216,7 @@ export function argStar(svg) {
       const [units, on] = seq[i % seq.length];
       core.classList.toggle('on', on);
       i++;
-      setTimeout(step, units * 260);
+      setTimeout(step, units * 380);
     };
     setTimeout(step, 600);
   }
