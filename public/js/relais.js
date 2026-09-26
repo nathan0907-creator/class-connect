@@ -48,7 +48,13 @@ $('[data-form]').addEventListener('submit', async (e) => {
   out.replaceChildren(
     line('RELAIS 1420 > accès accordé.\nRELAIS 1420 > coordonnées de la station ÉCHO :'),
     addr,
-    line(`\nMinecraft Java · version ${secret.version} (ou plus récente)\nMultijoueur → Ajouter un serveur → colle l'adresse.\n\nÀ bord : mode aventure. Regarde, lis, ne casse rien.\nChaque salle garde un mot pour VEGA.\nN'oublie pas de donner à VEGA le code de la transmission.`),
+    line(`\nMinecraft Java · version ${secret.version} (ou plus récente)\nMultijoueur → Ajouter un serveur → colle l'adresse.`),
+    ...(secret.bedrock ? [
+      line('\nMinecraft Bedrock (téléphone, tablette, Windows, console) :'),
+      Object.assign(document.createElement('span'), { className: 'addr', textContent: `${secret.bedrock.host}` }),
+      line(`port : ${secret.bedrock.port}\nJouer → Serveurs → Ajouter un serveur → adresse + port.`),
+    ] : []),
+    line('\nÀ bord : mode aventure. Regarde, lis, ne casse rien.\nApproche-toi des personnages (ou clic droit) : ils t\'aident.\nChaque salle garde un mot pour VEGA.\nN\'oublie pas de donner à VEGA le code de la transmission.'),
   );
   form.remove();
 });
