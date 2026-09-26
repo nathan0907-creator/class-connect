@@ -30,6 +30,7 @@ import { initCosmos } from './cosmos.js';
 import { initSecurity, startDevice, stopDevice, forgetDevice } from './security.js';
 import { initShortcuts } from './shortcuts.js';
 import { initShare } from './share.js';
+import { initArg } from './arg.js';
 import { $, $$, h, toast, toastError, enableTilt, busy, avatar } from './ui.js';
 import { safeColor } from './safe.js';
 
@@ -420,6 +421,7 @@ async function boot() {
   initNotify();
   initCosmos();
   initSecurity();
+  initArg();
 
   $$('.nav-item').forEach((b) => b.addEventListener('click', () => showPanel(b.dataset.panel)));
   on('goto', showPanel);

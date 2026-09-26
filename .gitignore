@@ -3,3 +3,4 @@ node_modules/
 Thumbs.db
 server/service-account.json
 server/*.json.key
+arg/

@@ -2,6 +2,7 @@
 // The choice is kept on this device only.
 import { state } from './state.js';
 import { $$, h, modal, toast } from './ui.js';
+import { argTheme } from './arg.js';
 import { QUALITY, savedQuality, saveQuality, chosenQuality, autoQuality, applyQualityClass } from './quality.js';
 
 const KEY = 'cc-theme';
@@ -114,6 +115,7 @@ function openThemePicker() {
     persoTimer = setTimeout(() => {
       try { localStorage.setItem(CUSTOM_KEY, JSON.stringify({ a: colA.value, b: colB.value })); localStorage.setItem(KEY, 'perso'); } catch { /* ignore */ }
       applyTheme('perso');
+      argTheme(colA.value, colB.value);
       grid.querySelectorAll('.theme-card').forEach((c) => { c.classList.remove('active'); c.setAttribute('aria-pressed', 'false'); });
       perso.classList.add('active');
     }, 250);

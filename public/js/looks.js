@@ -4,6 +4,7 @@ import { state } from './state.js';
 import { h, modal, toast, avatar } from './ui.js';
 import { statsOf, badgeList, levelOf } from './stats.js';
 import { starName, constellationName } from './cosmos.js';
+import { argDone } from './arg.js';
 
 /** Banners: colour stops, used both in CSS and when drawing the ID card. */
 export const BANNERS = {
@@ -31,8 +32,10 @@ export const FRAMES = {
   planet: { label: 'Astronaute', badge: 'xp1000', colors: ['#6c4cff', '#29d3ff'], emoji: '🪐' },
   star: { label: 'Légende du chat', badge: 'legend', colors: ['#fff1a0', '#ffcf6b'], emoji: '🌟' },
   crown: { label: 'Commandant', badge: 'xp10000', colors: ['#ffe07a', '#b8860b'], emoji: '👑' },
+  echo: { label: 'Écho', secret: true, colors: ['#3dffa8', '#00d4ff'], emoji: '🛸' },
 };
-export const frameUnlocked = (uid, key) => Object.hasOwn(FRAMES, key) && (!FRAMES[key].badge || (statsOf(uid).badges || []).includes(FRAMES[key].badge));
+// Secret frames can't be checked for others (the story is solved on each device): shown if chosen.
+export const frameUnlocked = (uid, key) => Object.hasOwn(FRAMES, key) && (FRAMES[key].secret ? uid !== state.me?.id || argDone() : !FRAMES[key].badge || (statsOf(uid).badges || []).includes(FRAMES[key].badge));
 
 /** Animated moods: an emoji and its animation. */
 export const MOODS = {
@@ -79,7 +82,7 @@ export function looksEditor(current = {}) {
     type: 'button', 'data-v': k, style: { background: bannerCss(k) }, onclick: () => pick(banners, 'banner-pick', 'banner', k),
   }, label)));
 
-  const frames = h('div.frame-grid', Object.entries(FRAMES).map(([k, f]) => {
+  const frames = h('div.frame-grid', Object.entries(FRAMES).filter(([, f]) => !f.secret || argDone()).map(([k, f]) => {
     const ok = frameUnlocked(me.id, k);
     return h(`button.frame-pick${chosen.frame === k ? '.active' : ''}${ok ? '' : '.locked'}`, {
       type: 'button', 'data-v': k, disabled: !ok,

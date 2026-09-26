@@ -7,6 +7,7 @@ import { showProfile, birthdaysToday } from './profiles.js';
 import { allSlots } from './timetable.js';
 import { play } from './sounds.js';
 import { checkBirthdayParty } from './birthday.js';
+import { argStar, argPhantom } from './arg.js';
 
 const GREEK = ['Alpha', 'Bêta', 'Gamma', 'Delta', 'Epsilon', 'Zêta', 'Êta', 'Thêta', 'Iota', 'Kappa', 'Lambda', 'Mu',
   'Nu', 'Xi', 'Omicron', 'Pi', 'Rhô', 'Sigma', 'Tau', 'Upsilon', 'Phi', 'Khi', 'Psi', 'Oméga'];
@@ -57,6 +58,7 @@ export function openConstellation() {
   const members = crew();
   const stars = layoutStars(members);
   const labels = h('input', { type: 'checkbox', checked: true });
+  const unknown = argStar(svg);
   const sky = svg('svg', { viewBox: '0 0 600 400', class: 'constellation', role: 'img', 'aria-label': `${constellationName()} : ${members.length} étoiles` },
     svg('defs', {}, svg('radialGradient', { id: 'cc-glow' }, svg('stop', { offset: '0%', 'stop-color': '#fff', 'stop-opacity': '1' }), svg('stop', { offset: '100%', 'stop-color': '#fff', 'stop-opacity': '0' }))),
     // faint background stars
@@ -74,7 +76,8 @@ export function openConstellation() {
       g.addEventListener('click', open);
       g.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
       return g;
-    }));
+    }),
+    unknown);
   labels.addEventListener('change', () => sky.classList.toggle('no-labels', !labels.checked));
   modal({
     title: `🌌 ${constellationName()}`,
@@ -101,6 +104,16 @@ export function subjectsOrbit(slots) {
   return [...bySubject.values()].sort((a, b) => b.minutes - a.minutes);
 }
 
+/** Far out, very faint… (see arg.js) */
+function phantom(c) {
+  const x = argPhantom();
+  if (!x) return null;
+  return svg('g', { class: 'planet-spin phantom', style: 'animation-duration:140s;transform:rotate(200deg)' },
+    svg('circle', { cx: c + 486, cy: c, r: 5 }),
+    Array.from({ length: x.moons }, (_, i) => svg('circle', { cx: c + 486 + Math.cos(i / x.moons * 6.283) * 11, cy: c + Math.sin(i / x.moons * 6.283) * 11, r: 1.2 })),
+    svg('title', {}, `${x.name} · ${x.moons} lunes`));
+}
+
 export function openSolarSystem() {
   const planets = subjectsOrbit(allSlots());
   if (!planets.length) return toast('Ajoute d\'abord l\'emploi du temps 📅', 'info');
@@ -118,7 +131,8 @@ export function openSolarSystem() {
         svg('g', { class: 'planet-spin', style: `animation-duration:${14 + i * 7}s;transform:rotate(${start}deg)` },
           svg('circle', { cx: c + orbit, cy: c, r, fill: p.color, class: 'planet' }),
           svg('title', {}, `${p.subject} · ${(p.minutes / 60).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} h par semaine`)));
-    }));
+    }),
+    phantom(c));
   modal({
     title: '🪐 Le système solaire des matières',
     wide: true,
