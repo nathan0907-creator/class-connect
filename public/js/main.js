@@ -31,6 +31,7 @@ import { initSecurity, startDevice, stopDevice, forgetDevice } from './security.
 import { initShortcuts } from './shortcuts.js';
 import { initShare } from './share.js';
 import { initArg } from './arg.js';
+import { initVegaIntro } from './vega-intro.js';
 import { $, $$, h, toast, toastError, enableTilt, busy, avatar } from './ui.js';
 import { safeColor } from './safe.js';
 
@@ -422,6 +423,7 @@ async function boot() {
   initCosmos();
   initSecurity();
   initArg();
+  initVegaIntro();
 
   $$('.nav-item').forEach((b) => b.addEventListener('click', () => showPanel(b.dataset.panel)));
   on('goto', showPanel);
