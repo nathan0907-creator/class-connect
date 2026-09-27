@@ -330,5 +330,15 @@ describe('Vagues 7 à 9 — profil, cosmos, sécurité', () => {
   });
 });
 
+test('chemins Firestore : sous-collections (messages privés, réponses aux quiz et sondages)', async () => {
+  const { sub } = await import('../public/js/fb.js');
+  assert.equal(sub('c1', 'threads').type, 'collection');
+  assert.equal(sub('c1', 'threads', 'eleve').type, 'document');
+  assert.equal(sub('c1', 'threads', 'eleve', 'dm').type, 'collection');
+  assert.equal(sub('c1', 'threads', 'eleve', 'dm').path, 'classes/c1/threads/eleve/dm');
+  assert.equal(sub('c1', 'quizzes', 'q', 'answers').type, 'collection');
+  assert.equal(sub('c1', 'surveys', 's', 'answers', 'u').type, 'document');
+});
+
 // Firebase (importé par ui.js) garde des connexions ouvertes : on termine proprement.
 after(() => setTimeout(() => process.exit(process.exitCode || 0), 100));

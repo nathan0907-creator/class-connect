@@ -65,7 +65,11 @@ export const otherSynth = (email) => (email.endsWith('@' + OLD_SYNTH_DOMAIN)
 // ---- paths
 export const userRef = (uid) => doc(db, 'users', uid);
 export const classRef = (cid) => doc(db, 'classes', cid);
-export const sub = (cid, name, ...ids) => (ids.length ? doc(db, 'classes', cid, name, ...ids) : collection(db, 'classes', cid, name));
+/** Path inside a class: an odd number of segments is a collection (…/threads/sid/dm), an even one a document. */
+export const sub = (cid, name, ...ids) => {
+  const parts = ['classes', cid, name, ...ids];
+  return parts.length % 2 ? collection(db, ...parts) : doc(db, ...parts);
+};
 
 /** Firestore snapshot → plain object with `id` and timestamps as milliseconds. */
 export function plain(snap) {

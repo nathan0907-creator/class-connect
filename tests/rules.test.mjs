@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
 import {
-  doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc, collection, collectionGroup, query, where,
+  doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc, collection, collectionGroup, query, where, orderBy,
   writeBatch, serverTimestamp, Timestamp, deleteField, Bytes,
 } from 'firebase/firestore';
 
@@ -728,5 +728,22 @@ describe('Vague 9 — appareils et notifications', () => {
     await assertFails(setDoc(ref, tok({ quiet: { from: 60, to: 120, extra: 1 } })));
     await assertFails(setDoc(ref, tok({ digest: 'oui' })));
     await assertFails(setDoc(ref, tok({ tz: '' })));
+  });
+});
+
+describe('Messages privés — parcours complet d\'un élève', () => {
+  test('un élève ouvre sa conversation, écrit, puis le délégué répond', async () => {
+    const db = as('bob');
+    const k = { from_public_key: PK, to_public_key: PK, iv: 'I'.repeat(16), wrapped: 'W'.repeat(60) };
+    await deleteDoc(c(env.unauthenticatedContext().firestore(), C1, 'threads', 'bob')).catch(() => {});
+    await env.withSecurityRulesDisabled(async (ctx) => { await deleteDoc(doc(ctx.firestore(), 'classes', C1, 'threads', 'bob')); });
+    await assertSucceeds(getDoc(c(db, C1, 'threads', 'bob')));
+    await assertSucceeds(setDoc(c(db, C1, 'threads', 'bob'), { student_id: 'bob', include_principal: false, keys: { bob: k, dele: k }, last_at: serverTimestamp(), last_by: 'bob', updated_at: serverTimestamp() }));
+    await assertSucceeds(getDoc(c(db, C1, 'threads', 'bob')));
+    await assertSucceeds(getDocs(query(collection(db, 'classes', C1, 'threads', 'bob', 'dm'), orderBy('created_at'))));
+    await assertSucceeds(addDoc(collection(db, 'classes', C1, 'threads', 'bob', 'dm'), { user_id: 'bob', ...enc, created_at: serverTimestamp() }));
+    await assertSucceeds(updateDoc(c(db, C1, 'threads', 'bob'), { last_at: serverTimestamp(), last_by: 'bob', updated_at: serverTimestamp() }));
+    await assertSucceeds(addDoc(collection(as('dele'), 'classes', C1, 'threads', 'bob', 'dm'), { user_id: 'dele', ...enc, created_at: serverTimestamp() }));
+    await assertSucceeds(updateDoc(c(as('dele'), C1, 'threads', 'bob'), { last_at: serverTimestamp(), last_by: 'dele', updated_at: serverTimestamp() }));
   });
 });
