@@ -1,0 +1,33 @@
+# Notifications, messages programmés, rappels et résumé du matin, sans PC allumé : un court passage toutes les 5 minutes.
+# Gratuit (dépôt public). Demande le secret FIREBASE_SERVICE_ACCOUNT (Settings > Secrets and variables > Actions).
+name: Notifications
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: notifier
+  cancel-in-progress: false
+
+jobs:
+  passage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci --omit=dev
+        working-directory: server
+      - run: node cron.mjs
+        working-directory: server
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}

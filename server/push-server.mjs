@@ -220,6 +220,10 @@ db.collectionGroup('reminders').where('at', '>', Timestamp.fromMillis(0)).onSnap
 }, (err) => { log('⚠ écoute des rappels interrompue :', err.message); setTimeout(() => process.exit(1), 30000); });
 
 log('🚀 Serveur de notifications Class Connect démarré. Laisse cette fenêtre ouverte.');
+// "I'm alive", every minute: while this server runs, the GitHub passage (cron.mjs) leaves the work to it.
+const heartbeat = () => db.doc('server_state/push').set({ at: FieldValue.serverTimestamp() }).catch(() => {});
+heartbeat();
+setInterval(heartbeat, 60_000);
 // ------------------------------------------------------------ morning summary (7:00 on each device's clock)
 // Built only from what this server may read: timetable slots, countdown events and the kind of teacher alerts.
 const DIGEST_AT = 7 * 60;
