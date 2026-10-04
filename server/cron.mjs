@@ -2,8 +2,8 @@
 // toutes les 5 minutes (.github/workflows/notifier.yml), gratuitement. Il fait le travail de push-server.mjs :
 // notifications des nouveaux messages, messages programmés, rappels et résumé du matin.
 // Comme lui, il ne peut PAS lire les messages (chiffrés de bout en bout) : il les relaie tels quels.
-// Clé du compte de service : variable d'environnement FIREBASE_SERVICE_ACCOUNT (secret GitHub), jamais dans le dépôt.
-import { initializeApp, cert } from 'firebase-admin/app';
+// Accès à Firebase : sans clé, GitHub est reconnu directement par Google (fédération d'identité).
+import { initializeApp, cert, applicationDefault } from 'firebase-admin/app';
 import { getFirestore, Timestamp, FieldValue } from 'firebase-admin/firestore';
 import { getMessaging } from 'firebase-admin/messaging';
 import { clockIn, inQuiet, weekLetter, digestText } from './clock.mjs';
@@ -18,11 +18,11 @@ const CHANNELS = {
 const DEAD_TOKEN = new Set(['messaging/registration-token-not-registered', 'messaging/invalid-registration-token', 'messaging/invalid-argument']);
 const log = (...a) => console.log('·', ...a);
 
-if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
-  console.log('Secret FIREBASE_SERVICE_ACCOUNT absent : rien à faire (voir server/LISEZMOI.md).');
-  process.exit(0);
-}
-initializeApp({ credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)) });
+// On GitHub: no key at all, Google recognises the repository itself (workload identity federation, see notifier.yml).
+// Elsewhere: a key in FIREBASE_SERVICE_ACCOUNT still works.
+if (process.env.FIREBASE_SERVICE_ACCOUNT) initializeApp({ credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)) });
+else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) initializeApp({ credential: applicationDefault(), projectId: 'class-connectv3' });
+else { console.log('Aucun accès Firebase configuré : rien à faire.'); process.exit(0); }
 const db = getFirestore();
 
 const now = Timestamp.now();

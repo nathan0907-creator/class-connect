@@ -1,5 +1,5 @@
 # Notifications, messages programmés, rappels et résumé du matin, sans PC allumé : un court passage toutes les 5 minutes.
-# Gratuit (dépôt public). Demande le secret FIREBASE_SERVICE_ACCOUNT (Settings > Secrets and variables > Actions).
+# Gratuit (dépôt public). Aucune clé secrète : Google reconnaît ce dépôt (fédération d'identité, branche main uniquement).
 name: Notifications
 
 on:
@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 concurrency:
   group: notifier
@@ -25,9 +26,11 @@ jobs:
           node-version: 20
           cache: npm
           cache-dependency-path: server/package-lock.json
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/595535956311/locations/global/workloadIdentityPools/github/providers/class-connect
+          service_account: firebase-adminsdk-fbsvc@class-connectv3.iam.gserviceaccount.com
       - run: npm ci --omit=dev
         working-directory: server
       - run: node cron.mjs
         working-directory: server
-        env:
-          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
