@@ -1,15 +1,18 @@
-# Notifications, messages programmés, rappels et résumé du matin, sans PC allumé : un court passage toutes les 5 minutes.
+# Notifications, messages programmés, rappels et résumé du matin, sans PC allumé.
 # Gratuit (dépôt public). Aucune clé secrète : Google reconnaît ce dépôt (fédération d'identité, branche main uniquement).
+# Le planning de GitHub est trop irrégulier (parfois un passage toutes les 3 heures) : chaque passage relance donc
+# lui-même le suivant, environ 5 minutes plus tard. Le planning ne sert plus qu'à redémarrer la chaîne si elle casse.
 name: Notifications
 
 on:
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: '*/15 * * * *'
   workflow_dispatch:
 
 permissions:
   contents: read
   id-token: write
+  actions: write
 
 concurrency:
   group: notifier
@@ -18,7 +21,7 @@ concurrency:
 jobs:
   passage:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 9
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -34,3 +37,12 @@ jobs:
         working-directory: server
       - run: node cron.mjs
         working-directory: server
+      - name: Relancer le passage suivant (une seule chaîne à la fois)
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sleep 240
+          others=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow notifier.yml --json databaseId,status \
+            -q "[.[] | select((.status == \"queued\" or .status == \"in_progress\" or .status == \"pending\" or .status == \"waiting\") and .databaseId != $GITHUB_RUN_ID)] | length")
+          if [ "$others" = "0" ]; then gh workflow run notifier.yml --repo "$GITHUB_REPOSITORY" --ref main; else echo "Un autre passage attend déjà : pas de relance."; fi
