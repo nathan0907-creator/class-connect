@@ -4,6 +4,7 @@
 import { on } from './state.js';
 import { h } from './ui.js';
 import { openTerminal, argDone } from './arg.js';
+import { welcomeVideoDone } from './welcome-video.js';
 
 const SEEN = 'cc-vega-intro';
 const GREEN = '#3dffa8';
@@ -392,7 +393,8 @@ function placeIcon() {
 export function initVegaIntro() {
   on('app-ready', () => {
     if (argDone()) return;
-    if (!seen()) setTimeout(() => { if (document.body.dataset.view === 'app') playIntro(); }, 3500);
+    // Never on top of the welcome video: VEGA waits until it is closed.
+    if (!seen()) welcomeVideoDone().then(() => setTimeout(() => { if (document.body.dataset.view === 'app') playIntro(); }, 3500));
     else placeIcon();
   });
   on('vega', () => { if (argDone()) document.querySelector('.vega-note-icon')?.remove(); });
