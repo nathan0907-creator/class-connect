@@ -77,9 +77,10 @@ export function toast(message, type = 'info', ms = 3800) {
 export const toastError = (err) => { console.warn(err); toast(friendly(err), 'error'); };
 
 // ---- modals
-export function modal({ title, body, actions = [], wide = false, onClose }) {
+export function modal({ title, body, actions = [], wide = false, onClose, canClose }) {
   const root = $('.modal-root');
   const close = () => {
+    if (canClose && !canClose()) return;
     card.classList.add('out');
     backdrop.classList.add('out');
     document.removeEventListener('keydown', onKey);

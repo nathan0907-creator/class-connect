@@ -32,6 +32,7 @@ import { initShortcuts } from './shortcuts.js';
 import { initShare } from './share.js';
 import { initArg } from './arg.js';
 import { initVegaIntro } from './vega-intro.js';
+import { initWelcomeVideo } from './welcome-video.js';
 import { initSupport } from './support.js';
 import { $, $$, h, toast, toastError, enableTilt, busy, avatar } from './ui.js';
 import { safeColor } from './safe.js';
@@ -401,6 +402,8 @@ async function boot() {
     $('#view-setup .setup-steps').replaceWith(h('p', 'Le chiffrement de bout en bout nécessite HTTPS. Ouvre le site via son adresse https://.'));
     return;
   }
+
+  initWelcomeVideo();
 
   authFlow = initAuthFlow({
     onSuccess: async () => {

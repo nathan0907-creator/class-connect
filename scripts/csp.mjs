@@ -38,7 +38,7 @@ export function policy(html) {
     "img-src 'self' data: blob: https:",
     "media-src 'self' data: blob:",
     `connect-src 'self' ${CONNECT.join(' ')}`,
-    'frame-src https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/ https://class-connectv3.firebaseapp.com',
+    'frame-src https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/ https://class-connectv3.firebaseapp.com https://www.youtube-nocookie.com',   // + welcome video
     "worker-src 'self'",
     "manifest-src 'self'",
     "object-src 'none'",
