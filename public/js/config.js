@@ -30,3 +30,7 @@ export const AI_FALLBACK_MODEL = 'gemini-3.5-flash-lite';
 // Optionnel : clé API GIPHY (developers.giphy.com) pour la recherche de GIFs.
 // Sans clé, on peut toujours envoyer des GIFs depuis son appareil.
 export const GIPHY_API_KEY = 'gItZUnu59yAAE3N0jfkL2c5Kfl5AXfAn';
+
+// Optionnel : lien de don (Ko-fi, Liberapay, PayPal.me, Buy Me a Coffee, HelloAsso ou Tipeee).
+// Vide = les boutons « Soutenir le projet » restent cachés.
+export const SUPPORT_URL = '';
