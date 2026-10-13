@@ -300,7 +300,17 @@ export function initAuthFlow({ onSuccess }) {
       $$('[data-only="email"]', pass).forEach((el) => { el.hidden = !!ctx.email; });
       $('[data-back]', pass).textContent = ctx.username ? '← Changer de pseudo' : '← Changer d\'adresse';
     }
-    await Promise.all([cargo(input), stage.launch(ctx.mode === 'login' ? 'Décollage !' : 'Nouveau pilote : décollage !')]);
+    card.classList.add('launching');
+    try {
+      await Promise.all([cargo(input), stage.launch(ctx.mode === 'login' ? 'Décollage !' : 'Nouveau pilote : décollage !')]);
+    } catch (err) {
+      stage.reset();
+      input.classList.remove('vanish');
+      lock(false);
+      return error(friendly(err));
+    } finally {
+      card.classList.remove('launching');
+    }
     input.classList.remove('vanish');
     lock(false);
     go(target);
