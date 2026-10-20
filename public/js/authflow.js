@@ -16,6 +16,8 @@ import { birthdayPicker, rememberBirthday } from './profiles.js';
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+/** End of an animation, or its expected duration if the browser froze it (battery saver, hidden tab…): never waits forever. */
+const settled = (anim, ms) => Promise.race([anim.finished.catch(() => {}), wait((reduced ? 1 : ms) + 400)]);
 const USERNAME_RE = /^[A-Za-z0-9_.-]{3,24}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const COLORS = ['#7c5cff', '#00d4ff', '#ff4fd8', '#ffb547', '#3dffa8', '#ff6b6b', '#5b8cff', '#c77dff'];
@@ -40,8 +42,9 @@ export class Stage {
     if (text) this.caption.classList.add('show');
   }
   move(el, from, to, duration, easing) {
-    return el.animate([{ transform: `translateY(${from}px)` }, { transform: `translateY(${to}px)` }],
-      { duration: reduced ? 1 : duration, easing, fill: 'forwards' }).finished.catch(() => {});
+    const anim = el.animate([{ transform: `translateY(${from}px)` }, { transform: `translateY(${to}px)` }],
+      { duration: reduced ? 1 : duration, easing, fill: 'forwards' });
+    return settled(anim, duration);
   }
   reset() {
     for (const el of [this.rocket, this.earth, this.mars]) el.getAnimations().forEach((a) => a.cancel());
@@ -266,11 +269,12 @@ export function initAuthFlow({ onSuccess }) {
     const dx = to.left + to.width / 2 - (from.left + 12) - 30;
     const dy = to.top + to.height * 0.4 - (from.top + from.height / 2);
     input.classList.add('vanish');
-    return tag.animate([
+    const anim = tag.animate([
       { transform: 'translate(0,0) scale(1)', opacity: 1, filter: 'blur(0)' },
       { transform: `translate(${dx * 0.6}px, ${dy * 0.5 - 30}px) scale(.8)`, opacity: 1, offset: 0.55 },
       { transform: `translate(${dx}px, ${dy}px) scale(.1)`, opacity: 0, filter: 'blur(2px)' },
-    ], { duration: 800, easing: 'cubic-bezier(.4,0,.2,1)' }).finished.then(() => tag.remove());
+    ], { duration: 800, easing: 'cubic-bezier(.4,0,.2,1)' });
+    return settled(anim, 800).then(() => tag.remove());
   }
 
   const botLike = (form) => form.elements.website?.value || Date.now() - shownAt < 800;

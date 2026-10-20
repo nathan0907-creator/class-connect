@@ -1,0 +1,5 @@
+{
+  "maintenance": true,
+  "title": "🛠️ Réparation en cours",
+  "message": "Un bug pouvait bloquer Class Connect sur un chargement sans fin au moment de la connexion. Il est corrigé. Si l'appli reste bloquée, appuie sur « Réparer l'appli » ci-dessous : tes messages et tes clés ne sont pas touchés."
+}
