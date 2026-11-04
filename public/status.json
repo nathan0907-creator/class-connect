@@ -1,5 +1,10 @@
 {
-  "maintenance": true,
-  "title": "🛠️ Réparation en cours",
-  "message": "Un bug pouvait bloquer Class Connect sur un chargement sans fin au moment de la connexion. Il est corrigé. Si l'appli reste bloquée, appuie sur « Réparer l'appli » ci-dessous : tes messages et tes clés ne sont pas touchés."
+  "maintenance": false,
+  "title": "Maintenance en cours",
+  "message": "",
+  "notice": {
+    "id": "fix-chargement-2026-11",
+    "title": "✅ Problème résolu",
+    "message": "Le bug qui pouvait bloquer Class Connect sur un chargement sans fin à la connexion est réparé.\nMerci pour votre patience ! Si quelque chose ne marche toujours pas, préviens ton délégué."
+  }
 }
