@@ -34,3 +34,6 @@ export const GIPHY_API_KEY = 'gItZUnu59yAAE3N0jfkL2c5Kfl5AXfAn';
 // Optionnel : lien de don (Ko-fi, Liberapay, PayPal.me, Buy Me a Coffee, HelloAsso ou Tipeee).
 // Vide = les boutons « Soutenir le projet » restent cachés.
 export const SUPPORT_URL = '';
+
+// Créateur de Class Connect : seul ce compte lit la boîte « Écrire au créateur » (identifiant public, pas un secret).
+export const OWNER_UID = 'yZ7di0tFmwgM8iov6IXwSaIv8Sq1';

@@ -8,6 +8,7 @@ import { state, emit, memberName, channelsFor } from './state.js';
 import { h, modal, toast, toastError, confirmDialog } from './ui.js';
 import { seal, unseal, txt } from './vault.js';
 import { generate, quizSchema } from './ai.js';
+import { postTo } from './chat.js';
 
 const col = (name) => sub(state.cls.id, name);
 export const GAMES = { ttt: '⭕ Morpion', c4: '🔴 Puissance 4', rps: '✊ Pierre-feuille-ciseaux' };
@@ -18,7 +19,6 @@ const others = () => [...state.members.values()].filter((m) => m.status === 'act
 
 /** Invitations are posted in the class channel (the staff room for teachers). */
 async function invite(payload) {
-  const { postTo } = await import('./chat.js');
   await postTo(channelsFor()[0], payload).catch(() => {});
 }
 

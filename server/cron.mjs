@@ -96,6 +96,16 @@ for (const [channel, ch] of Object.entries(CHANNELS)) {
   }
 }
 
+// ------------------------------------------------------------ « Écrire au créateur » : tell the creator a message is waiting
+{
+  const fresh = await inWindow(db.collection('feedback'), 'created_at').get();
+  const owner = (await db.doc('public/owner').get()).get('uid');
+  if (fresh.size && owner) {
+    await sendTo(new Set([owner]), { title: '📨 Nouveau message pour toi', body: fresh.size > 1 ? `${fresh.size} nouveaux messages dans ta boîte` : 'Quelqu\'un t\'a écrit (chiffré, toi seul peux le lire)', tag: 'cc-feedback', url: SITE }, 'boîte du créateur')
+      .catch((err) => log('⚠ envoi :', err.message));
+  }
+}
+
 // ------------------------------------------------------------ scheduled messages whose time has come
 for (const d of (await db.collectionGroup('scheduled').where('send_at', '<=', now).get()).docs) {
   const m = d.data();

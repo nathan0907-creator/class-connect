@@ -747,3 +747,29 @@ describe('Messages privés — parcours complet d\'un élève', () => {
     await assertSucceeds(updateDoc(c(as('dele'), C1, 'threads', 'bob'), { last_at: serverTimestamp(), last_by: 'dele', updated_at: serverTimestamp() }));
   });
 });
+
+describe('Écrire au créateur', () => {
+  const OWNER = 'yZ7di0tFmwgM8iov6IXwSaIv8Sq1';
+  const msg = (from) => ({ from, created_at: serverTimestamp(), ...enc, wrap: { iv: 'I'.repeat(16), wrapped: 'W'.repeat(60), from_public_key: PK, to_public_key: PK } });
+  const sendAs = (uid, from = uid) => {
+    const db = as(uid);
+    const b = writeBatch(db);
+    b.set(doc(db, 'feedback_rate', uid), { last: serverTimestamp() });
+    b.set(doc(collection(db, 'feedback')), msg(from));
+    return b.commit();
+  };
+  test('n\'importe quel membre écrit, seul le créateur lit', async () => {
+    await assertSucceeds(sendAs('bob'));
+    await assertFails(sendAs('bob'));                       // une minute d'attente
+    await assertFails(sendAs('alice', 'bob'));               // au nom d'un autre
+    await assertFails(getDocs(collection(as('dele'), 'feedback')));
+    await assertFails(getDocs(collection(as('bob'), 'feedback')));
+    await assertSucceeds(getDocs(collection(as(OWNER), 'feedback')));
+    await assertFails(addDoc(collection(as('alice'), 'feedback'), msg('alice')));   // sans le compteur anti-spam
+  });
+  test('seul le créateur publie sa clé publique', async () => {
+    await assertFails(setDoc(doc(as('dele'), 'public', 'owner'), { uid: 'dele', public_key: PK, updated_at: serverTimestamp() }));
+    await assertSucceeds(setDoc(doc(as(OWNER), 'public', 'owner'), { uid: OWNER, public_key: PK, updated_at: serverTimestamp() }));
+    await assertSucceeds(getDoc(doc(as('bob'), 'public', 'owner')));
+  });
+});

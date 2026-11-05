@@ -24,6 +24,13 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Regrouper et compresser (un seul fichier JavaScript, CSS minifié)
+        run: |
+          npm install --no-save --no-audit --no-fund esbuild@0.25.12
+          node scripts/optimize.mjs
       - name: Versionner les fichiers (évite les anciens fichiers en cache)
         run: node scripts/cache-bust.mjs "${GITHUB_SHA::8}"
       - uses: actions/configure-pages@v5

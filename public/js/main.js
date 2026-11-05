@@ -35,6 +35,7 @@ import { initVegaIntro } from './vega-intro.js';
 import { initWelcomeVideo } from './welcome-video.js';
 import { initSupport } from './support.js';
 import { initNotice } from './notice.js';
+import { initFeedback } from './feedback.js';
 import { $, $$, h, toast, toastError, enableTilt, busy, avatar } from './ui.js';
 import { safeColor } from './safe.js';
 
@@ -382,6 +383,7 @@ async function boot() {
   initShare();
   initSupport();
   initNotice();
+  initFeedback();
   watchNetwork();
   if (captureInvite()) {
     setTimeout(() => toast('✉️ Invitation reçue ! Connecte-toi ou crée ton compte : ta demande pour rejoindre la classe partira automatiquement.', 'info', 9000), 800);

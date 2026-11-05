@@ -120,6 +120,31 @@ service cloud.firestore {
         && q.from >= 0 && q.from < 1440 && q.to >= 0 && q.to < 1440 && q.from != q.to);
     }
 
+    // ---------------------------------------------------------------- « Écrire au créateur » (end-to-end encrypted for the creator)
+    function isOwner() { return signedIn() && uid() == 'yZ7di0tFmwgM8iov6IXwSaIv8Sq1'; }
+    match /public/owner {
+      allow read: if signedIn();
+      allow write: if isOwner() && request.resource.data.keys().hasOnly(['uid', 'public_key', 'updated_at'])
+        && request.resource.data.uid == uid() && str(request.resource.data.public_key, 50, 400) && request.resource.data.updated_at == request.time;
+    }
+    // One message per minute and per person.
+    match /feedback_rate/{userId} {
+      allow read: if false;
+      allow create, update: if signedIn() && userId == uid() && request.resource.data.keys().hasOnly(['last'])
+        && request.resource.data.last == request.time
+        && (resource == null || request.time > resource.data.last + duration.value(60, 's'));
+    }
+    match /feedback/{id} {
+      allow read, delete: if isOwner();
+      allow update: if false;
+      allow create: if signedIn() && request.resource.data.keys().hasOnly(['from', 'created_at', 'iv', 'ciphertext', 'wrap'])
+        && request.resource.data.from == uid() && request.resource.data.created_at == request.time
+        && str(request.resource.data.iv, 10, 32) && str(request.resource.data.ciphertext, 10, 12000)
+        && request.resource.data.wrap is map && request.resource.data.wrap.keys().hasOnly(['iv', 'wrapped', 'from_public_key', 'to_public_key'])
+        && str(request.resource.data.wrap.wrapped, 10, 400) && str(request.resource.data.wrap.from_public_key, 50, 400)
+        && getAfter(/databases/$(database)/documents/feedback_rate/$(uid())).data.last == request.time;
+    }
+
     // ---------------------------------------------------------------- my devices (list + remote logout), owner only
     match /devices/{id} {
       allow get: if signedIn() && id.matches('^' + uid() + '_[A-Za-z0-9_-]{16,40}$');
