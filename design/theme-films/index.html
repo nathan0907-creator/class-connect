@@ -1,0 +1,365 @@
+<!doctype html>
+<html
+  lang="fr"
+  data-composition-variables='[
+    {"id":"theme","type":"enum","label":"Thème","default":"galaxie","options":[
+      {"value":"galaxie","label":"Galaxie"},{"value":"abysses","label":"Abysses"},{"value":"sakura","label":"Sakura"},
+      {"value":"neon","label":"Néon City"},{"value":"arcade","label":"Rétro Arcade"}]}
+  ]'
+>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+    <style>
+      @font-face { font-family: "Press Start 2P"; src: url("assets/fonts/press-start-2p.woff2") format("woff2"); font-weight: 400; }
+      /* Démo des thèmes candidats de Class Connect : un décor vivant + l'appli dans ses couleurs. Boucle parfaite de 8 s. */
+      :root {
+        --ground: #06041a; --ink: #eceaff; --muted: #a9a3d6; --accent: #7c5cff; --accent2: #00d4ff;
+        --panel: rgba(18, 13, 48, 0.72); --panel-solid: #120d30; --line: rgba(160, 140, 255, 0.22);
+        --bubble: rgba(255, 255, 255, 0.08); --mine-ink: #ffffff;
+        --font-display: "Outfit"; --font-body: "Outfit"; --radius: 26px; --bubble-radius: 22px;
+        --title-size: 132px; --title-weight: 800; --title-spacing: -0.03em; --glow: 0 0 0 transparent;
+      }
+      [data-theme="abysses"] {
+        --ground: #00121f; --ink: #dcfaff; --muted: #8ec9d6; --accent: #00bec8; --accent2: #78ffdc;
+        --panel: rgba(2, 34, 56, 0.66); --panel-solid: #04263f; --line: rgba(120, 255, 230, 0.2);
+        --bubble: rgba(160, 240, 255, 0.09); --mine-ink: #00232e;
+        --font-display: "Nunito"; --font-body: "Nunito"; --radius: 34px; --bubble-radius: 26px; --title-weight: 900;
+      }
+      [data-theme="sakura"] {
+        --ground: #2d1440; --ink: #fff5fa; --muted: #f3c6d6; --accent: #ff78aa; --accent2: #ffc878;
+        --panel: rgba(66, 26, 66, 0.62); --panel-solid: #45204a; --line: rgba(255, 200, 220, 0.24);
+        --bubble: rgba(255, 235, 245, 0.1); --mine-ink: #3a0f26;
+        --font-display: "Playfair Display"; --font-body: "Lato"; --radius: 28px; --bubble-radius: 24px;
+        --title-size: 140px; --title-weight: 700; --title-spacing: -0.01em;
+      }
+      [data-theme="neon"] {
+        --ground: #08001a; --ink: #f2f0ff; --muted: #b9a8e6; --accent: #ff28a0; --accent2: #00f0ff;
+        --panel: rgba(16, 4, 32, 0.74); --panel-solid: #12052a; --line: rgba(0, 240, 255, 0.45);
+        --bubble: rgba(0, 240, 255, 0.08); --mine-ink: #ffffff;
+        --font-display: "Oswald"; --font-body: "Roboto"; --radius: 10px; --bubble-radius: 8px;
+        --title-size: 150px; --title-weight: 700; --title-spacing: 0.02em;
+        --glow: 0 0 18px rgba(255, 40, 160, 0.85), 0 0 46px rgba(255, 40, 160, 0.45);
+      }
+      [data-theme="arcade"] {
+        --ground: #14103c; --ink: #ffffff; --muted: #b8b2ff; --accent: #ffd600; --accent2: #50ff78;
+        --panel: #1e1850; --panel-solid: #1e1850; --line: #5a50c8;
+        --bubble: #2c2470; --mine-ink: #14103c;
+        --font-display: "Press Start 2P"; --font-body: "Space Mono"; --radius: 0px; --bubble-radius: 0px;
+        --title-size: 74px; --title-weight: 400; --title-spacing: 0;
+      }
+      /* Literal families so the compiler embeds each face (it does not follow var()). */
+      .f-outfit { font-family: "Outfit"; } .f-nunito { font-family: "Nunito"; } .f-playfair { font-family: "Playfair Display"; }
+      .f-lato { font-family: "Lato"; } .f-oswald { font-family: "Oswald"; } .f-roboto { font-family: "Roboto"; } .f-mono { font-family: "Space Mono"; }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--ground); }
+      #root { position: absolute; inset: 0; overflow: hidden; color: var(--ink); font-family: var(--font-body); }
+      #world { position: absolute; inset: 0; width: 1920px; height: 1080px; }
+
+      /* ---------- title block (left) */
+      #intro { position: absolute; left: 120px; top: 0; bottom: 0; width: 560px; display: flex; flex-direction: column; justify-content: center; gap: 26px; }
+      #kicker { font: 700 26px/1 var(--font-body); letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent2); }
+      #name { font-family: var(--font-display); font-size: var(--title-size); font-weight: var(--title-weight); letter-spacing: var(--title-spacing); line-height: 1; text-shadow: var(--glow); }
+      [data-theme="arcade"] #name { line-height: 1.25; text-shadow: 6px 6px 0 #ff3c8c; }
+      #tagline { font: 400 34px/1.35 var(--font-body); color: var(--muted); max-width: 520px; }
+      #vote { align-self: flex-start; margin-top: 8px; display: flex; align-items: center; gap: 14px; padding: 16px 26px; border-radius: 999px; background: var(--accent); color: var(--mine-ink); font: 800 28px/1 var(--font-body); }
+      [data-theme="arcade"] #vote, [data-theme="neon"] #vote { border-radius: var(--radius); }
+      [data-theme="arcade"] #vote { box-shadow: 6px 6px 0 #ff3c8c; font-weight: 700; }
+      [data-theme="neon"] #vote { box-shadow: 0 0 24px rgba(255, 40, 160, 0.8); }
+      #vote svg { width: 30px; height: 30px; }
+
+      /* ---------- app window (right) */
+      #app { position: absolute; left: 740px; top: 120px; width: 1060px; height: 840px; display: flex; flex-direction: column; border-radius: var(--radius); background: var(--panel); border: 2px solid var(--line); overflow: hidden; backdrop-filter: blur(14px); box-shadow: 0 40px 120px rgba(0, 0, 0, 0.45); }
+      [data-theme="neon"] #app { box-shadow: 0 0 0 1px rgba(0, 240, 255, 0.35), 0 0 40px rgba(0, 240, 255, 0.35), 0 40px 120px rgba(0, 0, 0, 0.6); }
+      [data-theme="arcade"] #app { border: 6px solid var(--line); box-shadow: 14px 14px 0 #0a0826; backdrop-filter: none; }
+      #bar { height: 64px; flex: none; display: flex; align-items: center; gap: 12px; padding: 0 26px; border-bottom: 2px solid var(--line); }
+      #bar i { width: 16px; height: 16px; border-radius: 50%; background: var(--line); }
+      [data-theme="arcade"] #bar i { border-radius: 0; }
+      #bar b { margin-left: 14px; font: 700 24px/1 var(--font-body); color: var(--muted); }
+      #body { flex: 1; display: flex; min-height: 0; }
+      #side { width: 290px; flex: none; padding: 28px 22px; border-right: 2px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
+      #side .logo { display: flex; align-items: center; gap: 14px; font: 800 30px/1 var(--font-display); margin-bottom: 22px; }
+      [data-theme="arcade"] #side .logo { font-size: 18px; line-height: 1.3; }
+      #side .logo span { width: 46px; height: 46px; flex: none; border-radius: 14px; background: linear-gradient(135deg, var(--accent), var(--accent2)); }
+      [data-theme="arcade"] #side .logo span { border-radius: 0; }
+      .chan { padding: 14px 16px; border-radius: 14px; font: 600 27px/1 var(--font-body); color: var(--muted); }
+      .chan.on { background: var(--bubble); color: var(--ink); box-shadow: inset 4px 0 0 var(--accent); }
+      [data-theme="arcade"] .chan { border-radius: 0; }
+      #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+      #head { height: 84px; flex: none; display: flex; align-items: center; gap: 16px; padding: 0 34px; border-bottom: 2px solid var(--line); font: 800 32px/1 var(--font-body); }
+      #head small { font: 500 24px/1 var(--font-body); color: var(--muted); }
+      #msgs { flex: 1; position: relative; padding: 26px 34px; display: flex; flex-direction: column; gap: 22px; }
+      .msg { display: flex; gap: 16px; align-items: flex-start; }
+      .msg .av { width: 58px; height: 58px; flex: none; border-radius: 50%; display: grid; place-items: center; font: 800 26px/1 var(--font-body); color: #fff; }
+      [data-theme="arcade"] .msg .av { border-radius: 0; }
+      .msg .who { font: 800 23px/1 var(--font-body); color: var(--accent2); margin: 2px 0 10px; }
+      .msg .who small { font-weight: 500; color: var(--muted); margin-left: 10px; }
+      .msg .txt { display: inline-block; padding: 16px 22px; border-radius: 6px var(--bubble-radius) var(--bubble-radius) var(--bubble-radius); background: var(--bubble); font: 500 29px/1.3 var(--font-body); position: relative; }
+      [data-theme="arcade"] .msg .txt { border: 3px solid var(--line); }
+      [data-theme="neon"] .msg .txt { border: 1.5px solid rgba(0, 240, 255, 0.45); }
+      .msg.mine { flex-direction: row-reverse; text-align: right; }
+      .msg.mine .txt { background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 60%, var(--accent2))); color: var(--mine-ink); border-radius: var(--bubble-radius) 6px var(--bubble-radius) var(--bubble-radius); font-weight: 700; }
+      [data-theme="neon"] .msg.mine .txt { box-shadow: 0 0 22px rgba(255, 40, 160, 0.6); border: none; }
+      [data-theme="arcade"] .msg.mine .txt { background: var(--accent); border-color: #fff; }
+      #react { position: absolute; right: -18px; bottom: -22px; display: flex; align-items: center; gap: 8px; padding: 7px 14px; border-radius: 999px; background: var(--panel-solid); border: 2px solid var(--accent); font: 800 22px/1 var(--font-body); color: var(--ink); }
+      [data-theme="arcade"] #react { border-radius: 0; }
+      #react svg { width: 22px; height: 22px; fill: var(--accent); }
+      #typing { position: absolute; left: 34px; bottom: 8px; font: 500 22px/1 var(--font-body); color: var(--muted); display: flex; align-items: center; gap: 10px; }
+      #typing i { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+      #compose { height: 96px; flex: none; margin: 0 26px 26px; padding: 0 14px 0 28px; display: flex; align-items: center; gap: 16px; border-radius: calc(var(--radius) * 0.7); background: var(--bubble); border: 2px solid var(--line); }
+      #field { flex: 1; position: relative; height: 40px; font: 500 28px/40px var(--font-body); }
+      #field .ph, #field .typed { position: absolute; left: 0; top: 0; white-space: nowrap; }
+      #field .ph { color: var(--muted); opacity: 0.7; }
+      #field .typed { overflow: hidden; }
+      #send { width: 66px; height: 66px; flex: none; border-radius: 50%; display: grid; place-items: center; background: var(--accent); }
+      [data-theme="arcade"] #send, [data-theme="neon"] #send { border-radius: var(--radius); }
+      #send svg { width: 30px; height: 30px; fill: var(--mine-ink); }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="8" data-width="1920" data-height="1080">
+  <div id="fonts" aria-hidden="true" style="position:absolute;opacity:0;pointer-events:none" data-layout-ignore><span class="f-outfit">a<b>a</b></span><span class="f-nunito">a<b>a</b></span><span class="f-playfair">a<b>a</b></span><span class="f-lato">a<b>a</b></span><span class="f-oswald">a<b>a</b></span><span class="f-roboto">a<b>a</b></span><span class="f-mono">a<b>a</b></span></div>
+      <canvas id="world" width="1920" height="1080" data-layout-ignore></canvas>
+
+      <div id="intro">
+        <div id="kicker">Thème candidat</div>
+        <h1 id="name">Galaxie</h1>
+        <p id="tagline">Planète à anneaux, nébuleuses et étoiles.</p>
+        <div id="vote"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>Vote dans Vie de classe</div>
+      </div>
+
+      <div id="app">
+        <div id="bar"><i></i><i></i><i></i><b>Class Connect</b></div>
+        <div id="body">
+          <div id="side">
+            <div class="logo"><span></span>Class Connect</div>
+            <div class="chan on"># général</div>
+            <div class="chan"># devoirs</div>
+            <div class="chan"># sorties</div>
+            <div class="chan"># musique</div>
+          </div>
+          <div id="main">
+            <div id="head"># général <small>28 membres</small></div>
+            <div id="msgs" data-layout-allow-overlap>
+              <div class="msg" id="m1"><div class="av" style="background:#c2386a">L</div><div><div class="who">Léa<small>18:02</small></div><div class="txt">Quelqu'un a fini l'exo 4 de maths ?</div></div></div>
+              <div class="msg" id="m2"><div class="av" style="background:#1d6fb8">H</div><div><div class="who">Hugo<small>18:03</small></div><div class="txt">Oui ! Je t'envoie ma méthode
+                <div id="react"><svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.6-9.2C.9 8.4 3 4.5 6.8 4.5c2.1 0 3.6 1.2 5.2 3 1.6-1.8 3.1-3 5.2-3 3.8 0 5.9 3.9 4.4 7.3C19.5 16.4 12 21 12 21z"/></svg>3</div></div></div></div>
+              <div class="msg mine" id="m3"><div class="av" style="background:#6446e0">N</div><div><div class="who">Toi<small>18:04</small></div><div class="txt">On révise ensemble ce soir ?</div></div></div>
+              <div class="msg" id="m4"><div class="av" style="background:#16805a">I</div><div><div class="who">Inès<small>18:04</small></div><div class="txt">Grave ! 18h dans le salon vocal</div></div></div>
+              <div id="typing"><i></i><i></i><i></i>Hugo écrit…</div>
+            </div>
+            <div id="compose">
+              <div id="field"><span class="ph">Écris un message…</span><span class="typed">On révise ensemble ce soir ?</span></div>
+              <div id="send"><svg viewBox="0 0 24 24"><path d="M3 20.5l18-8.5L3 3.5v6.6l12 1.9-12 1.9z"/></svg></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // ---------------------------------------------------------------- theme
+      const THEMES = {
+        galaxie: { name: "Galaxie", tag: "Planète à anneaux, nébuleuses et étoiles filantes." },
+        abysses: { name: "Abysses", tag: "Au fond de l'océan : bulles, méduses et rayons de lumière." },
+        sakura: { name: "Sakura", tag: "Crépuscule japonais, montagnes et pétales qui tombent." },
+        neon: { name: "Néon City", tag: "Une ville cyberpunk sous la pluie, néons rose et cyan." },
+        arcade: { name: "Rétro Arcade", tag: "Pixel art 8-bit et couleurs de borne d'arcade." },
+      };
+      const vars = (window.__hyperframes && window.__hyperframes.getVariables && window.__hyperframes.getVariables()) || {};
+      const THEME = THEMES[vars.theme] ? vars.theme : "galaxie";
+      document.getElementById("root").dataset.theme = THEME;
+      document.getElementById("name").textContent = THEMES[THEME].name;
+      document.getElementById("tagline").textContent = THEMES[THEME].tag;
+
+      // ---------------------------------------------------------------- world (canvas, a pure function of t, period 8 s)
+      const W = 1920, H = 1080, P = 8, TAU = Math.PI * 2, w = TAU / P;
+      const cv = document.getElementById("world");
+      const g = cv.getContext("2d");
+      function rng(seed) { return () => { seed |= 0; seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+      const R = rng(42);
+      const mod = (a, n) => ((a % n) + n) % n;
+      const loopY = (y0, cycles, span, t) => mod(y0 + (cycles * span * t) / P, span);
+      function radial(x, y, r, stops) { const gr = g.createRadialGradient(x, y, 0, x, y, r); stops.forEach(([o, c]) => gr.addColorStop(o, c)); return gr; }
+      function hash(n) { let x = Math.sin(n * 127.1) * 43758.5453; return x - Math.floor(x); }
+
+      const S = {
+        stars: Array.from({ length: 340 }, () => ({ x: R() * W, y: R() * H, r: 0.6 + R() * 2.2, p: R() * TAU, k: 1 + Math.floor(R() * 3) })),
+        bubbles: Array.from({ length: 70 }, () => ({ x: R() * W, y: R() * (H + 80), r: 4 + R() * 16, k: 1 + Math.floor(R() * 2), p: R() * TAU })),
+        snow: Array.from({ length: 160 }, () => ({ x: R() * W, y: R() * H, r: 0.8 + R() * 2, p: R() * TAU })),
+        petals: Array.from({ length: 90 }, () => ({ x: R() * W, y: R() * (H + 80), s: 0.6 + R() * 1.1, k: 1 + Math.floor(R() * 2), p: R() * TAU, sp: (R() < 0.5 ? -1 : 1) * (1 + Math.floor(R() * 2)) })),
+        rain: Array.from({ length: 320 }, () => ({ x: R() * (W + 300), y: R() * H, l: 18 + R() * 40, k: 6 + Math.floor(R() * 4), a: 0.15 + R() * 0.35 })),
+        city: Array.from({ length: 2 }, (_, layer) => { const b = []; let x = -40; while (x < W + 40) { const bw = 70 + R() * (layer ? 150 : 110); b.push({ x, w: bw, h: (layer ? 260 : 380) + R() * (layer ? 420 : 380), win: R() }); x += bw + (layer ? 14 : 6); } return b; }),
+      };
+
+      const draw = {
+        galaxie(t) {
+          g.fillStyle = radial(W * 0.62, H * 0.45, 1300, [[0, "#1d1150"], [0.55, "#0b0726"], [1, "#04030f"]]); g.fillRect(0, 0, W, H);
+          // nebulae
+          [[0.22, 0.25, 620, "124,92,255", 0], [0.8, 0.2, 560, "0,212,255", 2], [0.55, 0.85, 700, "255,80,190", 4]].forEach(([x, y, r, c, ph]) => {
+            const cx = W * x + Math.cos(w * t + ph) * 30, cy = H * y + Math.sin(w * t + ph) * 22;
+            g.fillStyle = radial(cx, cy, r, [[0, `rgba(${c},0.32)`], [0.5, `rgba(${c},0.12)`], [1, `rgba(${c},0)`]]); g.fillRect(0, 0, W, H);
+          });
+          for (const s of S.stars) {
+            const a = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(w * t * s.k + s.p));
+            g.fillStyle = `rgba(255,255,255,${a})`; g.beginPath(); g.arc(s.x + Math.cos(w * t) * s.r * 4, s.y, s.r, 0, TAU); g.fill();
+          }
+          // shooting star 1.6 → 2.5 s
+          const u = (t - 1.6) / 0.9;
+          if (u > 0 && u < 1) {
+            const x = W * (0.12 + 0.5 * u), y = H * (0.08 + 0.22 * u), len = 260;
+            const gr = g.createLinearGradient(x, y, x - len, y - len * 0.44); gr.addColorStop(0, `rgba(255,255,255,${1 - u})`); gr.addColorStop(1, "rgba(255,255,255,0)");
+            g.strokeStyle = gr; g.lineWidth = 4; g.lineCap = "round"; g.beginPath(); g.moveTo(x, y); g.lineTo(x - len, y - len * 0.44); g.stroke();
+          }
+          // ringed planet, bottom-left behind the title
+          const px = 250, py = 1010 + Math.sin(w * t) * 8, pr = 200;
+          g.save(); g.translate(px, py); g.rotate(-0.32);
+          g.lineWidth = 16; g.strokeStyle = "rgba(0,212,255,0.55)"; g.beginPath(); g.ellipse(0, 0, pr * 1.75, pr * 0.42, 0, Math.PI, TAU); g.stroke();
+          g.fillStyle = radial(-pr * 0.35, -pr * 0.4, pr * 1.4, [[0, "#b49bff"], [0.45, "#6a48ef"], [1, "#1b0c55"]]); g.beginPath(); g.arc(0, 0, pr, 0, TAU); g.fill();
+          g.strokeStyle = "rgba(0,212,255,0.8)"; g.beginPath(); g.ellipse(0, 0, pr * 1.75, pr * 0.42, 0, 0, Math.PI); g.stroke();
+          g.restore();
+        },
+        abysses(t) {
+          g.fillStyle = radial(W * 0.5, -200, 1500, [[0, "#0a6e8f"], [0.4, "#03344f"], [1, "#000a14"]]); g.fillRect(0, 0, W, H);
+          // light rays from the surface
+          g.save(); g.globalCompositeOperation = "lighter";
+          for (let i = 0; i < 7; i++) {
+            const x = 180 + i * 270 + Math.sin(w * t + i) * 40, a = 0.05 + 0.04 * (0.5 + 0.5 * Math.sin(w * t * 2 + i * 1.7)), sk = 260 + i * 20;
+            const gr = g.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, `rgba(160,255,240,${a * 2})`); gr.addColorStop(1, "rgba(160,255,240,0)");
+            g.fillStyle = gr; g.beginPath(); g.moveTo(x, -10); g.lineTo(x + 90, -10); g.lineTo(x + 90 + sk, H); g.lineTo(x - 60 + sk, H); g.closePath(); g.fill();
+          }
+          g.restore();
+          for (const s of S.snow) { g.fillStyle = `rgba(200,255,250,${0.25 + 0.2 * Math.sin(w * t + s.p)})`; g.beginPath(); g.arc(s.x + Math.sin(w * t + s.p) * 12, s.y + Math.cos(w * t + s.p) * 10, s.r, 0, TAU); g.fill(); }
+          // jellyfish
+          [[300, 790, 1.15, 0], [600, 300, 0.7, 2.2], [1840, 560, 0.85, 4.1]].forEach(([x, y, sc, ph]) => {
+            const pulse = 0.5 + 0.5 * Math.sin(w * t * 2 + ph), jx = x + Math.sin(w * t + ph) * 26, jy = y - pulse * 18 + Math.cos(w * t + ph) * 10;
+            g.save(); g.translate(jx, jy); g.scale(sc, sc);
+            g.fillStyle = radial(0, 0, 220, [[0, "rgba(255,120,220,0.35)"], [1, "rgba(255,120,220,0)"]]); g.fillRect(-220, -220, 440, 440);
+            g.strokeStyle = "rgba(255,170,235,0.55)"; g.lineWidth = 4; g.lineCap = "round";
+            for (let k = -3; k <= 3; k++) { g.beginPath(); g.moveTo(k * 18, 0); for (let s = 0; s <= 10; s++) g.lineTo(k * 18 + Math.sin(w * t * 2 + s * 0.6 + k + ph) * 12, s * 22); g.stroke(); }
+            g.fillStyle = "rgba(255,150,230,0.85)"; g.beginPath(); g.ellipse(0, 0, 90 + pulse * 10, 70 - pulse * 10, 0, Math.PI, TAU); g.quadraticCurveTo(0, 18, -90 - pulse * 10, 0); g.fill();
+            g.fillStyle = "rgba(255,255,255,0.35)"; g.beginPath(); g.ellipse(-28, -36, 26, 14, -0.4, 0, TAU); g.fill();
+            g.restore();
+          });
+          for (const b of S.bubbles) {
+            const y = loopY(b.y, -b.k, H + 80, t) - 40, x = b.x + Math.sin(w * t * 2 + b.p) * 10;
+            g.strokeStyle = "rgba(190,255,255,0.55)"; g.lineWidth = 2.5; g.beginPath(); g.arc(x, y, b.r, 0, TAU); g.stroke();
+            g.fillStyle = "rgba(255,255,255,0.6)"; g.beginPath(); g.arc(x - b.r * 0.35, y - b.r * 0.35, b.r * 0.22, 0, TAU); g.fill();
+          }
+        },
+        sakura(t) {
+          const sky = g.createLinearGradient(0, 0, 0, H); sky.addColorStop(0, "#251040"); sky.addColorStop(0.45, "#7a2f6b"); sky.addColorStop(0.75, "#f0829a"); sky.addColorStop(1, "#ffc38a"); g.fillStyle = sky; g.fillRect(0, 0, W, H);
+          g.fillStyle = radial(560, 760, 520, [[0, "rgba(255,230,170,0.85)"], [0.25, "rgba(255,190,140,0.45)"], [1, "rgba(255,170,150,0)"]]); g.fillRect(0, 0, W, H);
+          g.fillStyle = "#ffe7b8"; g.beginPath(); g.arc(560, 760, 120, 0, TAU); g.fill();
+          // cloud bands drifting back and forth
+          g.fillStyle = "rgba(255,210,220,0.18)"; for (let i = 0; i < 4; i++) { const y = 230 + i * 120, x = Math.sin(w * t + i) * 60; g.fillRect(x - 100 + i * 200, y, 900, 16); g.fillRect(x + 900 + i * 90, y + 40, 700, 10); }
+          // mountains
+          [["#8a3a6e", 640, 0.0042, 140, 0], ["#5a2050", 760, 0.006, 110, 3], ["#2d0f30", 880, 0.009, 80, 7]].forEach(([c, base, f, amp, ph]) => {
+            g.fillStyle = c; g.beginPath(); g.moveTo(0, H);
+            for (let x = 0; x <= W; x += 10) g.lineTo(x, base - Math.abs(Math.sin(x * f + ph)) * amp - Math.sin(x * f * 2.7 + ph) * amp * 0.25);
+            g.lineTo(W, H); g.closePath(); g.fill();
+          });
+          // Mount Fuji–like snowy peak far away
+          g.fillStyle = "#b34e7e"; g.beginPath(); g.moveTo(980, 640); g.lineTo(1360, 360); g.lineTo(1740, 640); g.fill();
+          g.fillStyle = "#ffe3ef"; g.beginPath(); g.moveTo(1290, 412); g.lineTo(1360, 360); g.lineTo(1430, 412); g.lineTo(1395, 400); g.lineTo(1360, 420); g.lineTo(1325, 400); g.fill();
+          for (const p of S.petals) {
+            const y = loopY(p.y, p.k, H + 80, t) - 40, x = p.x + Math.sin(w * t * p.k + p.p) * 70 - 0;
+            g.save(); g.translate(x, y); g.rotate(p.p + w * t * p.sp); g.scale(p.s, p.s * (0.55 + 0.45 * Math.abs(Math.sin(w * t * 2 + p.p))));
+            g.fillStyle = "rgba(255,190,215,0.92)"; g.beginPath(); g.moveTo(0, -14); g.bezierCurveTo(14, -10, 14, 10, 0, 14); g.bezierCurveTo(-14, 10, -14, -10, 0, -14); g.fill();
+            g.fillStyle = "rgba(255,120,170,0.6)"; g.beginPath(); g.ellipse(0, 4, 3, 7, 0, 0, TAU); g.fill();
+            g.restore();
+          }
+        },
+        neon(t) {
+          g.fillStyle = radial(W * 0.5, H * 0.35, 1300, [[0, "#2a0750"], [0.6, "#0d0224"], [1, "#05000f"]]); g.fillRect(0, 0, W, H);
+          const ground = 900;
+          S.city.forEach((layer, li) => {
+            for (const b of layer) {
+              const top = ground - b.h * (li ? 1 : 0.9);
+              g.fillStyle = li ? "#0e0420" : "#1a0838"; g.fillRect(b.x, top, b.w, b.h + 200);
+              // windows flicker with an 8 s period
+              for (let wy = top + 24; wy < ground - 20; wy += 34) for (let wx = b.x + 12; wx < b.x + b.w - 16; wx += 26) {
+                const id = wx * 7.1 + wy * 3.3, on = hash(id) > 0.55 && hash(id + Math.floor(mod(t, P) * 2) * 0.13 * (hash(id) > 0.9 ? 1 : 0)) > 0.3;
+                if (on) { g.fillStyle = hash(id + 1) > 0.5 ? `rgba(0,240,255,${li ? 0.55 : 0.3})` : `rgba(255,200,120,${li ? 0.45 : 0.25})`; g.fillRect(wx, wy, 12, 16); }
+              }
+            }
+          });
+          // neon signs
+          g.save(); g.globalCompositeOperation = "lighter";
+          [[400, 120, 230, 64, "255,40,160", 0], [1680, 380, 70, 260, "0,240,255", 1.3], [1250, 300, 180, 54, "255,40,160", 2.7]].forEach(([x, y, sw, sh, c, ph]) => {
+            const fl = mod(t * 3 + ph, P) < 0.18 ? 0.25 : 1;
+            g.shadowColor = `rgba(${c},1)`; g.shadowBlur = 40; g.strokeStyle = `rgba(${c},${0.95 * fl})`; g.lineWidth = 8; g.strokeRect(x, y, sw, sh);
+            g.shadowBlur = 0; g.fillStyle = `rgba(${c},${0.12 * fl})`; g.fillRect(x, y, sw, sh);
+          });
+          g.restore();
+          // wet street reflection
+          const st = g.createLinearGradient(0, ground, 0, H); st.addColorStop(0, "#2a0a40"); st.addColorStop(1, "#06000e"); g.fillStyle = st; g.fillRect(0, ground, W, H - ground);
+          g.save(); g.globalCompositeOperation = "lighter";
+          [[515, "255,40,160"], [1715, "0,240,255"], [1340, "255,40,160"]].forEach(([x, c], i) => { for (let k = 0; k < 9; k++) { g.fillStyle = `rgba(${c},${0.22 - k * 0.022})`; g.fillRect(x - 60 + Math.sin(w * t * 3 + k + i) * 10, ground + 10 + k * 18, 120 - k * 6, 6); } });
+          g.restore();
+          // rain
+          g.strokeStyle = "rgba(170,220,255,0.4)"; g.lineWidth = 2;
+          for (const r of S.rain) { const y = loopY(r.y, r.k, H + 60, t) - 60, x = r.x - (y / H) * 160; g.globalAlpha = r.a * 2; g.beginPath(); g.moveTo(x, y); g.lineTo(x - r.l * 0.18, y + r.l); g.stroke(); }
+          g.globalAlpha = 1;
+        },
+        arcade(t) {
+          g.imageSmoothingEnabled = false;
+          const sky = g.createLinearGradient(0, 0, 0, 620); sky.addColorStop(0, "#0c0a2c"); sky.addColorStop(1, "#3a1a78"); g.fillStyle = sky; g.fillRect(0, 0, W, H);
+          // pixel stars (blink on an 8 s grid)
+          for (const s of S.stars.slice(0, 160)) { if (s.y > 600) continue; const on = Math.sin(w * t * s.k + s.p) > -0.4; if (on) { g.fillStyle = s.r > 2 ? "#ffd600" : "#ffffff"; const q = s.r > 2 ? 8 : 4; g.fillRect(Math.round(s.x / 4) * 4, Math.round(s.y / 4) * 4, q, q); } }
+          // striped sun
+          const cx = 1290, cy = 600, r = 250;
+          for (let y = cy - r; y < cy; y += 8) { const band = (cy - y) / r; if (band < 0.5 && Math.floor((cy - y) / 8) % 3 === 0) continue; const hw = Math.sqrt(r * r - (cy - y) * (cy - y)); g.fillStyle = band > 0.6 ? "#ffd600" : band > 0.3 ? "#ff8a3c" : "#ff3c8c"; g.fillRect(Math.round((cx - hw) / 8) * 8, y, Math.round((hw * 2) / 8) * 8, 8); }
+          // perspective grid floor scrolling toward the viewer
+          g.fillStyle = "#170d3a"; g.fillRect(0, 600, W, H - 600);
+          g.strokeStyle = "#ff3c8c"; g.lineWidth = 4;
+          for (let i = -14; i <= 14; i++) { g.beginPath(); g.moveTo(W / 2 + i * 60, 600); g.lineTo(W / 2 + i * 420, H); g.stroke(); }
+          const ph = mod((t / P) * 8, 1);
+          for (let k = 0; k < 9; k++) { const z = (k + ph) / 9, y = 600 + (H - 600) * z * z; g.globalAlpha = 0.35 + 0.65 * z; g.fillRect(0, Math.round(y / 4) * 4, W, 4 + z * 4); g.globalAlpha = 1; }
+          // pixel ghosts crossing the sky (own 10×10 sprite)
+          const GH = ["0011111100", "0111111110", "1111111111", "1102211022", "1102211022", "1111111111", "1111111111", "1111111111", "1101101101", "1001001001"];
+          [["#50ff78", 160, 1, 0], ["#ff3c8c", 330, 1, 0.45], ["#3fd2ff", 480, 1, 0.75]].forEach(([c, y, k, off]) => {
+            const span = W + 300, x = mod(off * span + (k * span * t) / P, span) - 150, by = y + Math.round(Math.sin(w * t * 4 + off * 9)) * 8, px = 9;
+            GH.forEach((row, ry) => [...row].forEach((v, rx) => { if (v === "0") return; g.fillStyle = v === "2" ? "#ffffff" : c; g.fillRect(Math.round(x) + rx * px, by + ry * px, px, px); }));
+          });
+          // spinning coins
+          [[220, 860], [560, 940], [1760, 880]].forEach(([x, y], i) => { const sw = Math.abs(Math.cos(w * t * 2 + i)), cw = Math.max(8, Math.round((36 * sw) / 4) * 4); g.fillStyle = "#ffd600"; g.fillRect(x - cw / 2, y - 24, cw, 48); g.fillStyle = "#ff8a3c"; g.fillRect(x - cw / 2, y + 16, cw, 8); });
+          // scanlines
+          g.fillStyle = "rgba(0,0,0,0.16)"; for (let y = 0; y < H; y += 6) g.fillRect(0, y, W, 2);
+        },
+      };
+      const paint = (t) => draw[THEME](mod(t, P));
+
+      // ---------------------------------------------------------------- the chat, one perfect 8 s loop
+      const tl = gsap.timeline({ paused: true });
+      const clock = { t: 0 };
+      tl.fromTo(clock, { t: 0 }, { t: P, duration: P, ease: "none", onUpdate: () => paint(clock.t) }, 0);
+      const arrive = (sel, at) => tl.fromTo(sel, { opacity: 0, y: 26, filter: "blur(6px)" }, { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.5, ease: "expo.out" }, at);
+      tl.set(["#m1", "#m2", "#m3", "#m4", "#typing", "#react", "#field .typed"], { opacity: 0 }, 0);
+      arrive("#m1", 0.45);
+      tl.fromTo("#typing", { opacity: 0 }, { opacity: 1, duration: 0.2 }, 1.15);
+      tl.fromTo("#typing i", { y: 0 }, { y: -8, duration: 0.18, ease: "sine.inOut", stagger: 0.1, yoyo: true, repeat: 3 }, 1.2);
+      tl.to("#typing", { opacity: 0, duration: 0.15 }, 2.05);
+      arrive("#m2", 2.1);
+      // the user types, then sends
+      tl.set("#field .ph", { opacity: 1 }, 0);
+      tl.set("#field .ph", { opacity: 0 }, 2.7);
+      tl.set("#field .typed", { opacity: 1 }, 2.7);
+      tl.fromTo("#field .typed", { clipPath: "inset(0 100% 0 0)" }, { clipPath: "inset(0 0% 0 0)", duration: 0.9, ease: "steps(28)" }, 2.7);
+      tl.fromTo("#send", { scale: 1 }, { scale: 0.86, duration: 0.08, ease: "power2.in" }, 3.72);
+      tl.to("#send", { scale: 1, duration: 0.35, ease: "back.out(2.2)" }, 3.8);
+      tl.set("#field .typed", { opacity: 0 }, 3.8);
+      tl.set("#field .ph", { opacity: 1 }, 3.8);
+      arrive("#m3", 3.8);
+      tl.fromTo("#react", { opacity: 0, scale: 0.3 }, { opacity: 1, scale: 1, duration: 0.45, ease: "back.out(2.4)" }, 4.55);
+      arrive("#m4", 5.25);
+      // clear the conversation so the video loops seamlessly
+      tl.to(["#m4", "#m3", "#m2", "#m1"], { opacity: 0, y: -18, filter: "blur(6px)", duration: 0.3, ease: "power3.in", stagger: 0.06 }, 7.3);
+      tl.to("#react", { opacity: 0, duration: 0.2 }, 7.36);
+      window.__timelines["main"] = tl;
+      paint(0);
+      tl.seek(0);
+    </script>
+  </body>
+</html>

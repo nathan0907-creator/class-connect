@@ -5,3 +5,5 @@ server/service-account.json
 server/*.json.key
 arg/
 minecraft/
+design/theme-films/renders/
+design/theme-films/.hyperframes/
