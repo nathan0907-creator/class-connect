@@ -9,6 +9,7 @@ import { state, on, emit, isDelegate, isPrincipal, isTeacher, memberName } from 
 import { generateClassKey, wrapClassKey, unwrapClassKey, encryptJSON, decryptJSON } from './crypto.js';
 import { notify } from './notify.js';
 import { $, $$, h, icon, avatar, toast, toastError, fmtTime, fmtDay, linkify, modal } from './ui.js';
+import { badWord, maskBad } from './modbot.js';
 
 let root;
 let threads = new Map();        // sid -> thread row
@@ -259,7 +260,7 @@ function renderMessages(rows) {
         h('div.msg-head', h('b', { style: { color: author?.color } }, memberName(r.user_id)),
           author?.role === 'teacher' ? h('span.role-badge.teacher', '🎓') : author?.role === 'delegate' ? h('span.role-badge', '★') : null,
           h('time', fmtTime(r.created_at))),
-        h('div.bubble', r.text == null ? h('span.locked-text', icon('lock'), ' Message illisible pour l\'instant') : h('div.text', linkify(r.text))))));
+        h('div.bubble', r.text == null ? h('span.locked-text', icon('lock'), ' Message illisible pour l\'instant') : h('div.text', linkify(maskBad(r.text)))))));
     return out;
   }));
   box.scrollTop = box.scrollHeight;
@@ -281,6 +282,7 @@ export function bindDMComposer() {
   const submit = async () => {
     const text = input.value.trim();
     if (!text || !current) return;
+    if (badWord(text)) return toast('🤖 Message bloqué par la modération automatique : langage vulgaire ou inapproprié. Reformule ton message.', 'error', 6000);
     input.value = '';
     try { await send(text); } catch (err) { input.value = text; toastError(err); }
   };

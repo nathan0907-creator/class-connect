@@ -23,6 +23,7 @@ import {
 } from './chatplus.js';
 import { gameCard, quizCard, GAMES } from './games.js';
 import { $, h, icon, avatar, toast, toastError, fmtTime, fmtDay, fmtSize, linkify, confirmDialog } from './ui.js';
+import { badWord, maskBad, checkImage } from './modbot.js';
 
 const PAGE = 50;
 const GROUP_MS = 5 * 60 * 1000;
@@ -758,7 +759,7 @@ async function fillBubble(el, row) {
     parts.push(mediaEl(payload, row.epoch));
   }
   if (payload.text) {
-    const text = h('div.text', linkify(maskBanned(payload.text)));
+    const text = h('div.text', linkify(maskBad(maskBanned(payload.text))));
     parts.push(text);
     // Formulas written as $…$ are drawn by KaTeX (text only, never HTML).
     if (payload.text.includes('$')) renderMath(text);
@@ -990,6 +991,7 @@ async function sendText() {
   if (isMuted()) return toast(`🔇 Tu es en sourdine jusqu'à ${fmtTime(state.me.muted_until)}`, 'error');
   const bad = bannedIn(text);
   if (bad) return toast(`Ce message contient un mot interdit par les délégués : « ${bad} »`, 'error');
+  if (badWord(text)) return toast('🤖 Message bloqué par la modération automatique : langage vulgaire ou inapproprié. Reformule ton message.', 'error', 6000);
   if (compose.edit) return saveEdit(text);
   const wait = slowSeconds() * 1000 - (Date.now() - lastSent);
   if (wait > 0) return toast(`Mode lent : attends encore ${Math.ceil(wait / 1000)} s`, 'error');
@@ -1084,6 +1086,12 @@ async function sendFileImpl(original) {
   try {
     const file = kind === 'image' ? await compressImage(original) : original;
     if (file.size > MAX_FILE) throw new Error(`Fichier trop lourd (${fmtSize(file.size)}, 15 Mo max)`);
+    // 🤖 Photos are checked for nudity on this device before anything is sent.
+    if (kind === 'image') {
+      label.textContent = '🤖 Vérification de la photo…';
+      const verdict = await checkImage(original);
+      if (!verdict.ok) throw new Error(`🤖 Photo refusée par la modération automatique (${verdict.reason}).`);
+    }
     const dims = await mediaSize(file, kind);
     label.textContent = 'Chiffrement…';
     const desc = await uploadEncrypted(file, key, (p) => {

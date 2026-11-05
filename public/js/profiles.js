@@ -7,6 +7,7 @@ import { encryptJSON, decryptJSON } from './crypto.js';
 import { currentKey } from './keyring.js';
 import { h, icon, avatar, modal, toast, toastError, busy, GIF_RE } from './ui.js';
 import { GIPHY_API_KEY } from './config.js';
+import { badWord, checkImage } from './modbot.js';
 import { cleanLooks, looksEditor, profileBanner, songLine, moodLine, openIdCard } from './looks.js';
 
 const BIO_MAX = 160;
@@ -178,7 +179,11 @@ export function openProfileEditor() {
     const f = fileInput.files[0];
     fileInput.value = '';
     if (!f) return;
-    try { photo = await photoFrom(f); gif = ''; renderPreview(); } catch (err) { toastError(err); }
+    try {
+      const verdict = await checkImage(f);
+      if (!verdict.ok) throw new Error(`🤖 Photo refusée par la modération automatique (${verdict.reason}).`);
+      photo = await photoFrom(f); gif = ''; renderPreview();
+    } catch (err) { toastError(err); }
   } });
   const removeBtn = h('button.btn.btn-ghost.btn-sm', { type: 'button', onclick: () => { photo = ''; gif = ''; renderPreview(); } }, 'Retirer');
 
@@ -256,6 +261,7 @@ export function openProfileEditor() {
       { label: 'Enregistrer', variant: 'btn-primary', onClick: async () => {
         const name = displayName.value.trim();
         if (!name) throw new Error('Le pseudo affiché ne peut pas être vide');
+        if (badWord(`${name} ${bio.value} ${status.value}`)) throw new Error('🤖 Ton pseudo, ton statut ou ta bio contient un mot inapproprié.');
         const jobs = [];
         if (name !== me.display_name) jobs.push(updateDoc(userRef(me.id), { display_name: name }));
         const birthday = bday.value();

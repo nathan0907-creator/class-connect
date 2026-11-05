@@ -347,5 +347,15 @@ test('formats de réponse de l\'IA : identiques à ceux de Firebase, sans charge
   assert.deepEqual(JSON.parse(JSON.stringify(make(Local))), JSON.parse(JSON.stringify(make(Fb).toJSON())));
 });
 
+test('bot de modération : attrape les variantes déguisées, sans bloquer les mots normaux', async () => {
+  const { badWord, maskBad } = await import('../public/js/modbot.js');
+  for (const t of ['espèce de pute', 'PUUUUTE', 'p.u.t.e', 'p u t e', 'pu7e', 's4l0pe', 'S@LOPE', 'f*ck', 'en.cu.lé', 'b!te', 'n1que', 'c0nn4rd', 'envoie des nudes', 'ta gueule', 'sh1t'])
+    assert.ok(badWord(t), `devrait être bloqué : ${t}`);
+  for (const t of ['computer', 'la baisse des prix', 'une queue de cheval', 'randonnée pédestre', 'x = 3 et y = 4', 'c\'est un cône', 'le parti nazi en 1933', 'unique', 'la dispute', 'réputé', 'rdv à 5h', 'le pd-g', 'un dictionnaire', 'les sucres', 'abricot', 'contrebasse'])
+    assert.equal(badWord(t), '', `faux positif : ${t}`);
+  assert.equal(maskBad('espèce de pute'), 'espèce de ★★★★');
+  assert.equal(maskBad('Bonjour tout le monde'), 'Bonjour tout le monde');
+});
+
 // Firebase (importé par ui.js) garde des connexions ouvertes : on termine proprement.
 after(() => setTimeout(() => process.exit(process.exitCode || 0), 100));

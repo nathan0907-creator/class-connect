@@ -13,6 +13,7 @@ const SCRIPTS = [
   'https://cdn.jsdelivr.net/npm/three@0.170.0/',
   'https://cdn.jsdelivr.net/npm/katex@0.18.7/',
   'https://cdn.jsdelivr.net/npm/qrcode-generator@2.0.4/',
+  'https://cdn.jsdelivr.net/npm/nsfwjs@4.2.1/',                                  // photo check (modbot.js), integrity-checked
   'https://www.google.com/recaptcha/', 'https://www.gstatic.com/recaptcha/',   // App Check
   'https://apis.google.com',                                                     // Firebase Auth helper
   'https://www.googletagmanager.com',                                            // Analytics, after consent only
