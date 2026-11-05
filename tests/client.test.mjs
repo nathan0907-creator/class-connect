@@ -340,5 +340,12 @@ test('chemins Firestore : sous-collections (messages privés, réponses aux quiz
   assert.equal(sub('c1', 'surveys', 's', 'answers', 'u').type, 'document');
 });
 
+test('formats de réponse de l\'IA : identiques à ceux de Firebase, sans charger le SDK', async () => {
+  const { Schema: Local } = await import('../public/js/schema.js');
+  const { Schema: Fb } = await import('firebase/ai');
+  const make = (S) => S.object({ properties: { a: S.string(), n: S.integer(), x: S.number(), list: S.array({ items: S.object({ properties: { t: S.string() } }) }) }, optionalProperties: ['x'] });
+  assert.deepEqual(JSON.parse(JSON.stringify(make(Local))), JSON.parse(JSON.stringify(make(Fb).toJSON())));
+});
+
 // Firebase (importé par ui.js) garde des connexions ouvertes : on termine proprement.
 after(() => setTimeout(() => process.exit(process.exitCode || 0), 100));

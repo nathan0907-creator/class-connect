@@ -35,14 +35,14 @@ function showBanner(onGranted) {
   banner.setAttribute('aria-live', 'polite');
   banner.setAttribute('aria-label', 'Gestion des cookies');
   const base = document.querySelector('meta[name="cc-base"]')?.content || '';
-  banner.innerHTML = `
-    <p><b>🍪 Cookies</b> — Class Connect n'utilise que le stockage indispensable à la connexion.
-    Avec ton accord, nous mesurons aussi l'audience de façon anonyme (Google Analytics) pour améliorer le site.
-    <a href="${base}confidentialite.html">En savoir plus</a></p>
-    <div class="cookie-actions">
-      <button type="button" class="btn btn-ghost btn-sm" data-choice="denied">Refuser</button>
-      <button type="button" class="btn btn-ghost btn-sm" data-choice="granted">Accepter</button>
-    </div>`;
+  // Built node by node (no innerHTML): nothing here can ever be read as HTML.
+  const el = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
+  const choice = (value, label) => { const b = el('button', { type: 'button', className: 'btn btn-ghost btn-sm', textContent: label }); b.dataset.choice = value; return b; };
+  banner.append(
+    el('p', {}, el('b', { textContent: '🍪 Cookies' }),
+      ' — Class Connect n\'utilise que le stockage indispensable à la connexion. Avec ton accord, nous mesurons aussi l\'audience de façon anonyme (Google Analytics) pour améliorer le site. ',
+      el('a', { href: `${base}confidentialite.html`, textContent: 'En savoir plus' })),
+    el('div', { className: 'cookie-actions' }, choice('denied', 'Refuser'), choice('granted', 'Accepter')));
   banner.addEventListener('click', (e) => {
     const value = e.target.closest('[data-choice]')?.dataset.choice;
     if (!value) return;

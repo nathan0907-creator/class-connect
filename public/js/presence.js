@@ -1,18 +1,23 @@
 // Online presence and per-channel typing indicators through Firebase Realtime Database (optional, free).
-import { ref, onValue, set, remove, onDisconnect, onChildAdded, onChildChanged, serverTimestamp } from 'firebase/database';
-import { rtdb } from './fb.js';
+// The database SDK is only downloaded when a class is opened (it isn't needed for the login screen).
+import { loadRtdb } from './fb.js';
 import { state, emit } from './state.js';
 
+let R = null;               // loaded SDK + database
 let offs = [];
 let typingOffs = [];
 let cid = null;
 let typingChannel = null;
 let wantedChannel = null;   // channel opened before presence was started
 let lastTyping = 0;
+let session = 0;            // a newer start/stop cancels a start still loading
 
-export function startPresence(classId) {
+export async function startPresence(classId) {
   stopPresence();
-  if (!rtdb) return;
+  const mySession = ++session;
+  R = await loadRtdb().catch(() => null);
+  if (!R || mySession !== session) return;
+  const { rtdb, ref, onValue, onDisconnect, set } = R;
   cid = classId;
   const mine = ref(rtdb, `presence/${cid}/${state.me.id}`);
 
@@ -34,7 +39,8 @@ export function watchTyping(channel) {
   typingOffs.forEach((off) => off());
   typingOffs = [];
   wantedChannel = channel;
-  if (!rtdb || !cid) return;
+  if (!R || !cid) return;
+  const { rtdb, ref, onDisconnect, onChildAdded, onChildChanged } = R;
   typingChannel = channel;
   const uid = state.me.id;
   const path = `typing/${cid}/${channel}`;
@@ -48,19 +54,20 @@ export function watchTyping(channel) {
 }
 
 export function stopPresence() {
+  session++;
   offs.forEach((off) => off());
   typingOffs.forEach((off) => off());
   offs = [];
   typingOffs = [];
-  if (rtdb && cid && state.me) {
-    remove(ref(rtdb, `presence/${cid}/${state.me.id}`)).catch(() => {});
+  if (R && cid && state.me) {
+    R.remove(R.ref(R.rtdb, `presence/${cid}/${state.me.id}`)).catch(() => {});
   }
   cid = null;
   typingChannel = null;
 }
 
 export function sendTyping() {
-  if (!rtdb || !cid || !typingChannel || Date.now() - lastTyping < 2500) return;
+  if (!R || !cid || !typingChannel || Date.now() - lastTyping < 2500) return;
   lastTyping = Date.now();
-  set(ref(rtdb, `typing/${cid}/${typingChannel}/${state.me.id}`), serverTimestamp()).catch(() => {});
+  R.set(R.ref(R.rtdb, `typing/${cid}/${typingChannel}/${state.me.id}`), R.serverTimestamp()).catch(() => {});
 }

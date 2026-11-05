@@ -42,12 +42,6 @@ service cloud.firestore {
     function canPost(cid, ch, d) {
       return canChannel(cid, ch) && (ch != 'announcements' || isStaff(cid) || d.get('kind', '') == 'alert');
     }
-    // Pin / delete others' messages: delegates and deputies for students, teachers for the staff room.
-    function moderates(cid, ch) {
-      return (ch == 'messages' && (isDelegate(cid) || isDeputy(cid)))
-        || (ch == 'staff_messages' && isTeacher(cid))
-        || (ch in ['mixed_messages', 'announcements'] && isStaff(cid));
-    }
     // Reports: delegates for the students' channels, teachers for theirs, and head teachers receive ALL reports.
     function handlesReports(cid, ch) {
       return isPrincipal(cid)
@@ -143,6 +137,14 @@ service cloud.firestore {
         && request.resource.data.wrap is map && request.resource.data.wrap.keys().hasOnly(['iv', 'wrapped', 'from_public_key', 'to_public_key'])
         && str(request.resource.data.wrap.wrapped, 10, 400) && str(request.resource.data.wrap.from_public_key, 50, 400)
         && getAfter(/databases/$(database)/documents/feedback_rate/$(uid())).data.last == request.time;
+    }
+
+    // ---------------------------------------------------------------- vote for the next theme (one vote each, can change it)
+    match /theme_votes/{userId} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && userId == uid() && request.resource.data.keys().hasOnly(['choice', 'at'])
+        && request.resource.data.choice in ['galaxie', 'abysses', 'sakura', 'neon', 'arcade'] && request.resource.data.at == request.time;
+      allow delete: if signedIn() && userId == uid();
     }
 
     // ---------------------------------------------------------------- my devices (list + remote logout), owner only

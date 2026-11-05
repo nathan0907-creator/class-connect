@@ -1,11 +1,14 @@
 // Revision assistant powered by Gemini through Firebase AI Logic (no server, no secret key in the page:
 // requests are authorised by the Firebase project and can be protected with App Check).
-import { getAI, getGenerativeModel, GoogleAIBackend, Schema } from 'firebase/ai';
+// The AI SDK is only downloaded the first time the AI is used (it isn't needed to open the app).
+import { Schema } from './schema.js';
+let sdk = null;
+const loadSdk = () => (sdk ||= import('firebase/ai'));
 import { firebaseApp } from './fb.js';
 import { AI_MODEL, AI_FALLBACK_MODEL } from './config.js';
 
 let ai = null;
-const backend = () => (ai ||= getAI(firebaseApp, { backend: new GoogleAIBackend() }));
+const backend = ({ getAI, GoogleAIBackend }) => (ai ||= getAI(firebaseApp, { backend: new GoogleAIBackend() }));
 
 /** The ground rules: stay inside the class documents and reuse the notebook's methods. */
 export function systemInstruction(className) {
@@ -21,8 +24,9 @@ RÈGLES ABSOLUES (ne jamais les enfreindre) :
 7. FORME : français, niveau élève, bienveillant et précis. Formules mathématiques en LaTeX entre $...$ (ou $$...$$ pour les formules centrées).`;
 }
 
-function model(name, system, schema, temperature) {
-  return getGenerativeModel(backend(), {
+async function model(name, system, schema, temperature) {
+  const m = await loadSdk();
+  return m.getGenerativeModel(backend(m), {
     model: name,
     systemInstruction: system,
     generationConfig: schema
@@ -55,7 +59,7 @@ export async function generate(request, { system, schema = null, temperature = 0
   let lastError;
   for (const name of [AI_MODEL, AI_FALLBACK_MODEL]) {
     try {
-      const result = await model(name, system, schema, temperature).generateContent(request);
+      const result = await (await model(name, system, schema, temperature)).generateContent(request);
       const text = result.response.text();
       if (!schema) return text;
       try { return JSON.parse(text); } catch { throw new Error('Réponse illisible de l\'IA, réessaie.'); }

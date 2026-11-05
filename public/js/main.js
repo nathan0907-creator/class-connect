@@ -31,11 +31,11 @@ import { initSecurity, startDevice, stopDevice, forgetDevice } from './security.
 import { initShortcuts } from './shortcuts.js';
 import { initShare } from './share.js';
 import { initArg } from './arg.js';
-import { initVegaIntro } from './vega-intro.js';
 import { initWelcomeVideo } from './welcome-video.js';
 import { initSupport } from './support.js';
 import { initNotice } from './notice.js';
 import { initFeedback } from './feedback.js';
+import { initThemeVote } from './theme-vote.js';
 import { $, $$, h, toast, toastError, enableTilt, busy, avatar } from './ui.js';
 import { safeColor } from './safe.js';
 
@@ -384,6 +384,7 @@ async function boot() {
   initSupport();
   initNotice();
   initFeedback();
+  initThemeVote();
   watchNetwork();
   if (captureInvite()) {
     setTimeout(() => toast('✉️ Invitation reçue ! Connecte-toi ou crée ton compte : ta demande pour rejoindre la classe partira automatiquement.', 'info', 9000), 800);
@@ -432,7 +433,6 @@ async function boot() {
   initCosmos();
   initSecurity();
   initArg();
-  initVegaIntro();
 
   $$('.nav-item').forEach((b) => b.addEventListener('click', () => showPanel(b.dataset.panel)));
   on('goto', showPanel);

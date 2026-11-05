@@ -14,6 +14,7 @@ import { fmtBirthday } from './profiles.js';
 import { insertInComposer } from './chat.js';
 import { openGames, openLiveQuiz } from './games.js';
 import { openConstellation } from './cosmos.js';
+import { openThemeVote } from './theme-vote.js';
 import { orgTiles } from './orga.js';
 
 let root;
@@ -74,7 +75,8 @@ function render() {
       tile('🎂', 'Cartes d\'anniversaire', 'Signe la carte des prochains anniversaires', openCards),
       tile('🏅', 'Album de fin d\'année', 'Les votes « le plus… » de la classe', openAwards),
       tile('🖼️', 'Photo de classe', 'Une mosaïque avec tous les avatars', openMosaic),
-      tile('🌌', 'Constellation', 'Une étoile par membre, elle grandit avec la classe', openConstellation)),
+      tile('🌌', 'Constellation', 'Une étoile par membre, elle grandit avec la classe', openConstellation),
+      tile('🗳️', 'Vote des thèmes', 'Choisis le prochain look de l\'appli', openThemeVote)),
     h('h3.life-title', '📋 S\'organiser'),
     h('div.life-grid', orgTiles(tile)));
 }

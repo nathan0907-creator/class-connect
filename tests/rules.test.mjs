@@ -773,3 +773,14 @@ describe('Écrire au créateur', () => {
     await assertSucceeds(getDoc(doc(as('bob'), 'public', 'owner')));
   });
 });
+
+describe('Vote des thèmes', () => {
+  test('un vote chacun, modifiable, uniquement parmi les thèmes proposés', async () => {
+    await assertSucceeds(setDoc(doc(as('bob'), 'theme_votes', 'bob'), { choice: 'sakura', at: serverTimestamp() }));
+    await assertSucceeds(setDoc(doc(as('bob'), 'theme_votes', 'bob'), { choice: 'neon', at: serverTimestamp() }));
+    await assertFails(setDoc(doc(as('bob'), 'theme_votes', 'alice'), { choice: 'neon', at: serverTimestamp() }));
+    await assertFails(setDoc(doc(as('bob'), 'theme_votes', 'bob'), { choice: 'licorne', at: serverTimestamp() }));
+    await assertSucceeds(getDocs(collection(as('alice'), 'theme_votes')));
+    await assertFails(getDocs(collection(anon(), 'theme_votes')));
+  });
+});

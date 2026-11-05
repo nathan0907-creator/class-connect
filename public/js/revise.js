@@ -3,8 +3,7 @@
 import {
   onSnapshot, query, orderBy, limit, getDocs, getDoc, addDoc, setDoc, updateDoc, deleteDoc, doc, serverTimestamp, Timestamp, deleteField,
 } from 'firebase/firestore';
-import { ref as rref, push, onChildAdded, onValue, set as rset } from 'firebase/database';
-import { db, sub, plain, rtdb } from './fb.js';
+import { db, sub, plain, loadRtdb } from './fb.js';
 import { state, emit, memberName } from './state.js';
 import { h, modal, toast, toastError, confirmDialog, fmtDay } from './ui.js';
 import { seal, unseal, txt } from './vault.js';
@@ -13,7 +12,7 @@ import { generate } from './ai.js';
 import { renderMarkdown } from './md.js';
 import { compressImage } from './media.js';
 import { allEvents, daysUntil } from './events.js';
-import { Schema } from 'firebase/ai';
+import { Schema } from './schema.js';
 
 const col = (name) => sub(state.cls.id, name);
 
@@ -211,8 +210,10 @@ export function openStudyRoom() {
 }
 
 // ------------------------------------------------------------ collaborative whiteboard (encrypted strokes, live)
-export function openWhiteboard() {
-  if (!rtdb) return toast('Tableau indisponible', 'error');
+export async function openWhiteboard() {
+  const R = await loadRtdb().catch(() => null);
+  if (!R) return toast('Tableau indisponible', 'error');
+  const { rtdb, ref: rref, push, onChildAdded, onValue, set: rset } = R;
   const W = 1200, H = 800;
   const canvas = h('canvas.board-canvas', { width: W, height: H, 'aria-label': 'Tableau blanc partagé' });
   const ctx = canvas.getContext('2d');

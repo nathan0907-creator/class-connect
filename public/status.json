@@ -3,8 +3,8 @@
   "title": "Maintenance en cours",
   "message": "",
   "notice": {
-    "id": "fix-chargement-2026-11",
-    "title": "✅ Problème résolu",
-    "message": "Le bug qui pouvait bloquer Class Connect sur un chargement sans fin à la connexion est réparé.\nMerci pour votre patience ! Si quelque chose ne marche toujours pas, préviens ton délégué."
+    "id": "maj-2026-11-05",
+    "title": "🚀 Mise à jour de Class Connect",
+    "message": "⚡ Plus rapide : l'appli charge un seul fichier au lieu de 62, les icônes sont 3 fois plus légères, et l'IA comme la présence en ligne ne se chargent que quand on en a besoin.\n🗳️ Vote des thèmes : 5 univers à découvrir en vidéo (Galaxie, Abysses, Sakura, Néon City, Rétro Arcade). Vote pour ton préféré dans Vie de classe !\n📨 Écrire au créateur : envoie une idée, un bug ou un merci, chiffré de bout en bout (onglet Équipage).\n✅ Le chargement sans fin à la connexion est réparé.\n🔒 Sécurité renforcée en coulisses."
   }
 }

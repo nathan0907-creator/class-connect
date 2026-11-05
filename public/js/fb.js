@@ -4,7 +4,6 @@ import {
   getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, terminate, clearIndexedDbPersistence,
   doc, collection, connectFirestoreEmulator,
 } from 'firebase/firestore';
-import { getDatabase, connectDatabaseEmulator } from 'firebase/database';
 import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check';
 import { FIREBASE_CONFIG, RECAPTCHA_SITE_KEY } from './config.js';
 
@@ -38,8 +37,17 @@ export async function clearOfflineData() {
   if (!db) return;
   try { await terminate(db); await clearIndexedDbPersistence(db); } catch { /* another tab still uses it */ }
 }
-export const rtdb = app && FIREBASE_CONFIG.databaseURL ? getDatabase(app) : null;
-if (rtdb && EMULATORS) connectDatabaseEmulator(rtdb, '127.0.0.1', 9000);
+/** Realtime Database (presence, "… écrit", whiteboard), downloaded on first use: the login screen doesn't need it.
+ *  Resolves to the SDK functions plus `rtdb`, or null when the project has no Realtime Database. */
+let rtdbPromise = null;
+export function loadRtdb() {
+  if (!app || !FIREBASE_CONFIG.databaseURL) return Promise.resolve(null);
+  return (rtdbPromise ||= import('firebase/database').then((m) => {
+    const rtdb = m.getDatabase(app);
+    if (EMULATORS) m.connectDatabaseEmulator(rtdb, '127.0.0.1', 9000);
+    return { ...m, rtdb };
+  }));
+}
 
 /** Google Analytics (via Firebase) — only called after the visitor accepts cookies. */
 export async function startAnalytics() {

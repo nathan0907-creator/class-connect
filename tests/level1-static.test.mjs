@@ -77,11 +77,10 @@ test('pas d\'eval, de new Function ni de document.write', () => {
   }
 });
 
-test('innerHTML seulement avec du texte fixe (jamais de données utilisateur)', () => {
+test('aucun innerHTML / outerHTML / insertAdjacentHTML : tout le DOM est construit nœud par nœud', () => {
   const uses = publicFiles.filter((x) => x.endsWith('.js')).flatMap((f) =>
     [...read(f).matchAll(/\.(innerHTML|outerHTML)\s*=|insertAdjacentHTML\s*\(/g)].map(() => rel(f)));
-  // consent.js : bandeau cookies, texte fixe + un chemin lu dans une balise <meta> écrite par nous.
-  assert.deepEqual([...new Set(uses)], ['public\\js\\consent.js'].map((p) => p.replace(/\\/g, path.sep)));
+  assert.deepEqual([...new Set(uses)], []);
 });
 
 test('les textes affichés passent par textContent (fonction h) : aucune concaténation HTML dans ui.js', () => {
