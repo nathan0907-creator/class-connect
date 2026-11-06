@@ -3,8 +3,8 @@
   "title": "Maintenance en cours",
   "message": "",
   "notice": {
-    "id": "maj-2026-11-05",
-    "title": "🚀 Mise à jour de Class Connect",
-    "message": "⚡ Plus rapide : l'appli charge un seul fichier au lieu de 62, les icônes sont 3 fois plus légères, et l'IA comme la présence en ligne ne se chargent que quand on en a besoin.\n🗳️ Vote des thèmes : 5 univers à découvrir en vidéo (Galaxie, Abysses, Sakura, Néon City, Rétro Arcade). Vote pour ton préféré dans Vie de classe !\n📨 Écrire au créateur : envoie une idée, un bug ou un merci, chiffré de bout en bout (onglet Équipage).\n✅ Le chargement sans fin à la connexion est réparé.\n🔒 Sécurité renforcée en coulisses."
+    "id": "maj-2026-11-05-appels",
+    "title": "📞 Nouveau : messages privés et appels entre élèves",
+    "message": "💬 Écris en privé à n'importe quel élève de ta classe : onglet « Privé » → « Élèves ».\n📞 Appelle-le en audio ou en vidéo directement dans l'appli, sans numéro de téléphone.\n🔒 Tout est chiffré de bout en bout : seuls vous deux pouvez lire ou entendre, ni les délégués, ni les profs, ni le serveur.\n🛡️ Un souci ? Bloque la personne ou signale-la aux délégués (bouton ⋯). La modération automatique vérifie aussi les messages et l'image des appels vidéo.\n🎬 Les vidéos de démo des thèmes ont été refaites : va voter dans Vie de classe !"
   }
 }

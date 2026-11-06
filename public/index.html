@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-aa//tPmmlGyItVTvOTW4fNGcj+SsPjqqRp3IynyjVA4=' 'sha256-h9RdMVaGj390STVMWBRGJ0mZmNqU0mTIQrBDZGF32Bg=' 'sha256-zlnjKLbx+BIeoEKCBwptiZsbiz4bCnpTMuhDO6mYpj4=' 'sha256-e5trLMD+8K59QCKFTXHbwHBHEyBvyw0hYpCnGXXMzVA=' https://www.gstatic.com/firebasejs/12.19.0/ https://cdn.jsdelivr.net/npm/three@0.170.0/ https://cdn.jsdelivr.net/npm/katex@0.18.7/ https://cdn.jsdelivr.net/npm/qrcode-generator@2.0.4/ https://cdn.jsdelivr.net/npm/nsfwjs@4.2.1/ https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/ https://apis.google.com https://www.googletagmanager.com https://*.europe-west1.firebasedatabase.app; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net/npm/katex@0.18.7/; font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net/npm/katex@0.18.7/; img-src 'self' data: blob: https:; media-src 'self' data: blob:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app wss://*.firebasedatabase.app https://api.giphy.com https://www.google.com https://www.gstatic.com https://cdn.jsdelivr.net https://fonts.googleapis.com https://fonts.gstatic.com https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com; frame-src https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/ https://class-connectv3.firebaseapp.com https://www.youtube-nocookie.com; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-/fibUgNqo2tBleD+5Xpz9GZO1fDBf21hJsF/+EdVpwc=' 'sha256-h9RdMVaGj390STVMWBRGJ0mZmNqU0mTIQrBDZGF32Bg=' 'sha256-zlnjKLbx+BIeoEKCBwptiZsbiz4bCnpTMuhDO6mYpj4=' 'sha256-PujkJgAKT+lqkB0+ISbMaXuJAoQNny2UUTd+Rtq/7mI=' https://www.gstatic.com/firebasejs/12.19.0/ https://cdn.jsdelivr.net/npm/three@0.170.0/ https://cdn.jsdelivr.net/npm/katex@0.18.7/ https://cdn.jsdelivr.net/npm/qrcode-generator@2.0.4/ https://cdn.jsdelivr.net/npm/nsfwjs@4.2.1/ https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/ https://apis.google.com https://www.googletagmanager.com https://*.europe-west1.firebasedatabase.app; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net/npm/katex@0.18.7/; font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net/npm/katex@0.18.7/; img-src 'self' data: blob: https:; media-src 'self' data: blob:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app wss://*.firebasedatabase.app https://api.giphy.com https://www.google.com https://www.gstatic.com https://cdn.jsdelivr.net https://fonts.googleapis.com https://fonts.gstatic.com https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com; frame-src https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/ https://class-connectv3.firebaseapp.com https://www.youtube-nocookie.com; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
   <script>if (location.protocol === 'http:' && !/^(localhost|127\.|\[::1\])/.test(location.hostname)) location.replace('https:' + location.href.slice(5));
   /* Anti-clickjacking: never usable inside another site's frame. */ if (self !== top) { document.documentElement.style.display = 'none'; try { top.location.replace(location.href); } catch (e) {} }</script>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -438,11 +438,33 @@
         <section class="panel" id="panel-dm" aria-labelledby="dm-title">
           <header class="panel-head">
             <div>
-              <h2 id="dm-title" data-dm-title>Contacter les délégués</h2>
-              <p class="muted">Conversation privée, chiffrée de bout en bout : seuls toi et les délégués la voyez (et le prof principal si tu l'invites).</p>
+              <h2 id="dm-title" data-dm-title>Messages privés</h2>
+              <p class="muted">Tout est chiffré de bout en bout : personne d'autre que les participants ne peut lire ni écouter.</p>
             </div>
           </header>
-          <div class="dm-layout">
+          <div class="dm-tabs" role="tablist" aria-label="Type de conversation">
+            <button type="button" role="tab" class="dm-tab" data-dm-tab="pm" aria-selected="true"><span aria-hidden="true">💬</span> Élèves <b class="badge" data-badge="pm"></b></button>
+            <button type="button" role="tab" class="dm-tab" data-dm-tab="staff" aria-selected="false"><span aria-hidden="true">🛡️</span> Délégués <b class="badge" data-badge="staff"></b></button>
+          </div>
+          <div class="pm-layout" data-dm-pane="pm">
+            <aside class="pm-side" aria-label="Élèves de la classe">
+              <div class="pm-hero">
+                <span class="pm-hero-ico" aria-hidden="true">📞</span>
+                <div><b>Appels audio et vidéo</b><small>Appelle un camarade directement depuis l'appli, sans numéro de téléphone. Chiffré de bout en bout.</small></div>
+              </div>
+              <input type="search" class="pm-search" placeholder="Chercher un élève…" aria-label="Chercher un élève">
+              <div class="pm-list"></div>
+            </aside>
+            <div class="pm-view">
+              <div class="pm-head"></div>
+              <div class="pm-messages" role="log" aria-live="polite"></div>
+              <form class="pm-composer dm-composer" hidden>
+                <textarea rows="1" maxlength="4000" placeholder="Message chiffré…" aria-label="Écrire un message privé"></textarea>
+                <button type="submit" class="send-btn" title="Envoyer" aria-label="Envoyer"><i class="ico ico-send" aria-hidden="true"></i></button>
+              </form>
+            </div>
+          </div>
+          <div class="dm-layout" data-dm-pane="staff" hidden>
             <aside class="dm-inbox" aria-label="Conversations"></aside>
             <div class="dm-view">
               <div class="dm-head"></div>

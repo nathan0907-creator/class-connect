@@ -530,6 +530,85 @@ service cloud.firestore {
         }
       }
 
+      // Messages privés entre élèves : one conversation per pair of students, id "<uidA>_<uidB>" (sorted). The content is
+      // end-to-end encrypted with a key that only the two of them can derive (ECDH of their identity keys): nobody
+      // else (delegates, teachers, the server) can read it. Either one can block the other: no messages, no calls.
+      function classmate(id) {
+        let u = get(userPath(id)).data;
+        return u.class_id == cid && u.status == 'active' && u.role != 'teacher';
+      }
+      function pairPath(pid) { return /databases/$(database)/documents/classes/$(cid)/pairs/$(pid); }
+      match /pairs/{pid} {
+        function peers() { return pid.split('_'); }
+        function isPeer() { return isStudent(cid) && peers().size() == 2 && uid() in peers(); }
+        function otherPeer() { return peers()[0] == uid() ? peers()[1] : peers()[0]; }
+        function validPair(d) {
+          return d.keys().hasOnly(['members', 'last_at', 'last_by', 'updated_at', 'blocked'])
+            && d.members == peers() && d.last_at is timestamp && d.updated_at == request.time
+            && d.blocked is list && d.blocked.size() <= 2 && d.blocked.toSet().difference(peers().toSet()).size() == 0;
+        }
+        allow get: if isPeer();
+        allow list: if isStudent(cid) && uid() in resource.data.members;
+        allow create: if isPeer() && peers()[0] < peers()[1] && classmate(otherPeer())
+          && validPair(request.resource.data) && request.resource.data.last_by == uid()
+          && request.resource.data.blocked.size() == 0;
+        allow update: if isPeer() && validPair(request.resource.data)
+          && request.resource.data.last_by in [resource.data.last_by, uid()]
+          // Each one only adds or removes their own block; while blocked, nothing else moves.
+          && request.resource.data.blocked.toSet().difference(resource.data.blocked.toSet()).hasOnly([uid()])
+          && resource.data.blocked.toSet().difference(request.resource.data.blocked.toSet()).hasOnly([uid()])
+          && (resource.data.blocked.size() == 0 || onlyChanged(['blocked', 'updated_at']));
+        allow delete: if false;
+
+        match /pm/{mid} {
+          allow read: if isPeer();
+          allow create: if isPeer() && get(pairPath(pid)).data.blocked.size() == 0
+            && request.resource.data.keys().hasOnly(['user_id', 'iv', 'ciphertext', 'created_at'])
+            && request.resource.data.user_id == uid() && request.resource.data.created_at == request.time
+            && str(request.resource.data.iv, 10, 32) && str(request.resource.data.ciphertext, 10, 60000);
+          allow update, delete: if false;
+        }
+      }
+
+      // Appels audio / vidéo entre élèves (WebRTC, of a pair that exists and isn't blocked). The call document only
+      // carries the connection set-up, encrypted with the pair's key; the sound and the picture go directly from one
+      // browser to the other (DTLS-SRTP), never through the server.
+      function sealedBlob(b) { return b is map && b.keys().hasOnly(['iv', 'ciphertext']) && str(b.iv, 10, 32) && str(b.ciphertext, 10, 40000); }
+      match /calls/{callId} {
+        function party(d) { return isStudent(cid) && uid() in [d.from, d.to]; }
+        function step(o, n) {
+          return (o.state == 'ringing' && n.state == 'accepted' && uid() == o.to && sealedBlob(n.answer))
+            || (o.state == 'ringing' && n.state in ['declined', 'missed', 'cancelled', 'ended'] && n.answer == o.answer
+                && (n.state != 'declined' || uid() == o.to) && (n.state != 'cancelled' || uid() == o.from))
+            || (o.state == 'accepted' && n.state == 'ended' && n.answer == o.answer);
+        }
+        allow get: if party(resource.data);
+        // Written so a query on « to == me » (incoming calls) can be proven.
+        allow list: if isStudent(cid) && (resource.data.to == uid() || resource.data.from == uid());
+        allow create: if isStudent(cid)
+          && request.resource.data.keys().hasOnly(['pair', 'from', 'to', 'video', 'state', 'offer', 'answer', 'created_at', 'updated_at'])
+          && request.resource.data.from == uid() && request.resource.data.to is string && request.resource.data.to != uid()
+          && request.resource.data.pair == (uid() < request.resource.data.to ? uid() + '_' + request.resource.data.to : request.resource.data.to + '_' + uid())
+          && get(pairPath(request.resource.data.pair)).data.blocked.size() == 0
+          && classmate(request.resource.data.to)
+          && request.resource.data.video is bool && request.resource.data.state == 'ringing'
+          && sealedBlob(request.resource.data.offer) && request.resource.data.answer == null
+          && request.resource.data.created_at == request.time && request.resource.data.updated_at == request.time;
+        allow update: if party(resource.data) && onlyChanged(['state', 'answer', 'updated_at'])
+          && request.resource.data.updated_at == request.time && step(resource.data, request.resource.data);
+        allow delete: if false;
+
+        match /ice/{iid} {
+          function call() { return get(/databases/$(database)/documents/classes/$(cid)/calls/$(callId)).data; }
+          allow read: if party(call());
+          allow create: if party(call()) && call().state in ['ringing', 'accepted']
+            && request.resource.data.keys().hasOnly(['from', 'iv', 'ciphertext', 'created_at'])
+            && request.resource.data.from == uid() && request.resource.data.created_at == request.time
+            && str(request.resource.data.iv, 10, 32) && str(request.resource.data.ciphertext, 10, 4000);
+          allow update, delete: if false;
+        }
+      }
+
       // Countdowns (holidays, tests, trips): added by delegates, deputies and teachers.
       match /events/{eid} {
         function validEvent(d) {

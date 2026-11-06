@@ -83,6 +83,19 @@ function loadModel() {
 }
 
 /**
+ * Checks what a <video> shows right now (calls): true when it looks explicit. Never throws: false when it can't tell.
+ * Used on the picture RECEIVED in a video call, so a modified app on the other side can't get around it.
+ */
+export async function explicitFrame(video) {
+  try {
+    if (!video || video.readyState < 2 || !video.videoWidth) return false;
+    const model = await loadModel();
+    const scores = Object.fromEntries((await model.classify(video)).map((p) => [p.className, p.probability]));
+    return (scores.Porn || 0) + (scores.Hentai || 0) > 0.55 || (scores.Sexy || 0) > 0.85;
+  } catch { return false; }
+}
+
+/**
  * Checks a photo before it is sent. Resolves { ok: true } or { ok: false, reason }.
  * Pornographic or « sexy » content above the thresholds is refused. If the check itself can't run (no network for
  * the model…), the photo is refused too, rather than letting it through unchecked.

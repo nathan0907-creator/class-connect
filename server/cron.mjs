@@ -96,6 +96,22 @@ for (const [channel, ch] of Object.entries(CHANNELS)) {
   }
 }
 
+// ------------------------------------------------------------ messages between students (content unreadable here: only "new message")
+{
+  const latest = new Map();   // pair path -> message
+  for (const d of (await inWindow(db.collectionGroup('pm'), 'created_at').get()).docs) latest.set(d.ref.parent.parent.path, { ref: d.ref.parent.parent, msg: d.data() });
+  for (const { ref, msg } of latest.values()) {
+    const cid = ref.parent.parent?.id;
+    const p = (await ref.get()).data();
+    const sender = users.get(msg.user_id);
+    if (!p || !sender || sender.class_id !== cid || p.blocked?.length) continue;
+    const to = (p.members || []).find((x) => x !== msg.user_id);
+    if (!to || users.get(to)?.class_id !== cid) continue;
+    await sendTo(new Set([to]), { title: `💬 ${sender.display_name || 'Quelqu\'un'}`, body: 'Nouveau message privé chiffré', tag: `cc-pm-${ref.id}`, url: SITE },
+      `${className(cid)} · message entre élèves`).catch((err) => log('⚠ envoi :', err.message));
+  }
+}
+
 // ------------------------------------------------------------ « Écrire au créateur » : tell the creator a message is waiting
 {
   const fresh = await inWindow(db.collection('feedback'), 'created_at').get();

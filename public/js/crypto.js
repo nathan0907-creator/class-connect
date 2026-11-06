@@ -87,6 +87,12 @@ async function pairKey(myPrivate, theirPublicB64, info) {
  */
 export const personalKey = (myPrivate, myPublicB64, purpose) => pairKey(myPrivate, myPublicB64, `personal|${purpose}`);
 
+/**
+ * Key shared by two members only (ECDH of my private key with their public key = theirs with mine): used for the
+ * private messages and calls between students. Nobody else can derive it, there is nothing to distribute.
+ */
+export const peerKey = (myPrivate, theirPublicB64, purpose) => pairKey(myPrivate, theirPublicB64, `peer|${purpose}`);
+
 export const generateClassKey = () => subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
 
 export async function wrapClassKey(classKey, myPrivate, recipientPublicB64, { classId, epoch, userId }) {

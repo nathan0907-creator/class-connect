@@ -23,6 +23,8 @@ import { initEvents, startEvents, stopEvents } from './events.js';
 import { initTheme, applyTheme } from './theme.js';
 import { applyQualityClass } from './quality.js';
 import { initDM, startDM, stopDM, bindDMComposer } from './dm.js';
+import { initPM, startPM, stopPM } from './pm.js';
+import { startCalls, stopCalls } from './call.js';
 import { initLife, startLife, stopLife } from './life.js';
 import { startSettings, stopSettings } from './admin.js';
 import { initDisplay } from './display.js';
@@ -281,6 +283,8 @@ async function enterApp() {
   startCouncil();
   startProfiles();
   startDM();
+  startPM();
+  startCalls();
   if (isDelegate() || isTeacher()) {
     startModeration();
     purgeExpired().catch(() => {});
@@ -354,6 +358,8 @@ function stopClass() {
   stopCouncil();
   stopProfiles();
   stopDM();
+  stopPM();
+  stopCalls();
   stopLife();
   stopSettings();
   stopDevice();
@@ -427,6 +433,7 @@ async function boot() {
   initProfiles();
   initEvents();
   initDM();
+  initPM();
   bindDMComposer();
   initLife();
   initNotify();

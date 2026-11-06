@@ -784,3 +784,71 @@ describe('Vote des thèmes', () => {
     await assertFails(getDocs(collection(anon(), 'theme_votes')));
   });
 });
+
+describe('Messages entre élèves et appels', () => {
+  const P = 'alice_bob';
+  const pair = (by = 'alice') => ({ members: ['alice', 'bob'], last_at: serverTimestamp(), last_by: by, updated_at: serverTimestamp(), blocked: [] });
+  const pm = (uid) => ({ user_id: uid, ...enc, created_at: serverTimestamp() });
+  const ring = (from = 'alice', to = 'bob', extra = {}) => ({
+    pair: P, from, to, video: true, state: 'ringing', offer: enc, answer: null, created_at: serverTimestamp(), updated_at: serverTimestamp(), ...extra,
+  });
+
+  test('deux élèves de la classe ouvrent une conversation que personne d\'autre ne lit', async () => {
+    await assertSucceeds(setDoc(c(as('alice'), C1, 'pairs', P), pair()));
+    await assertSucceeds(addDoc(collection(as('bob'), 'classes', C1, 'pairs', P, 'pm'), pm('bob')));
+    await assertSucceeds(getDocs(query(collection(as('bob'), 'classes', C1, 'pairs'), where('members', 'array-contains', 'bob'))));
+    for (const u of ['dele', 'princ', 'prof', 'depu', 'eve']) {
+      await assertFails(getDoc(c(as(u), C1, 'pairs', P)));
+      await assertFails(getDocs(collection(as(u), 'classes', C1, 'pairs', P, 'pm')));
+    }
+    await assertFails(getDocs(collection(as('dele'), 'classes', C1, 'pairs')));
+    await assertFails(addDoc(collection(as('alice'), 'classes', C1, 'pairs', P, 'pm'), pm('bob')));       // au nom de l'autre
+  });
+  test('pas de conversation avec un prof, un élève d\'une autre classe ou en attente, ni à l\'envers', async () => {
+    await assertFails(setDoc(c(as('alice'), C1, 'pairs', 'alice_prof'), { ...pair(), members: ['alice', 'prof'] }));
+    await assertFails(setDoc(c(as('alice'), C1, 'pairs', 'alice_pend'), { ...pair(), members: ['alice', 'pend'] }));
+    await assertFails(setDoc(c(as('dele'), C1, 'pairs', 'dele_eve'), { ...pair('dele'), members: ['dele', 'eve'] }));
+    await assertFails(setDoc(c(as('bob'), C1, 'pairs', 'bob_alice'), { ...pair('bob'), members: ['bob', 'alice'] }));
+    await assertFails(setDoc(c(as('dele'), C1, 'pairs', P), pair('dele')));                                   // pas dans la paire
+    await assertSucceeds(setDoc(c(as('alice'), C1, 'pairs', 'alice_dele'), { ...pair(), members: ['alice', 'dele'] }));
+  });
+  test('bloquer coupe messages et appels, chacun ne gère que son propre blocage', async () => {
+    await assertSucceeds(setDoc(c(as('alice'), C1, 'pairs', P), pair()));
+    await assertSucceeds(updateDoc(c(as('bob'), C1, 'pairs', P), { blocked: ['bob'], updated_at: serverTimestamp() }));
+    await assertFails(addDoc(collection(as('alice'), 'classes', C1, 'pairs', P, 'pm'), pm('alice')));
+    await assertFails(setDoc(c(as('alice'), C1, 'calls', 'k1'), ring()));
+    await assertFails(updateDoc(c(as('alice'), C1, 'pairs', P), { blocked: [], updated_at: serverTimestamp() }));        // débloquer à sa place
+    await assertFails(updateDoc(c(as('alice'), C1, 'pairs', P), { last_at: serverTimestamp(), last_by: 'alice', updated_at: serverTimestamp() }));
+    await assertSucceeds(updateDoc(c(as('bob'), C1, 'pairs', P), { blocked: [], updated_at: serverTimestamp() }));
+    await assertSucceeds(addDoc(collection(as('alice'), 'classes', C1, 'pairs', P, 'pm'), pm('alice')));
+  });
+  test('un appel : seul l\'appelé décroche, les autres ne voient rien', async () => {
+    await assertSucceeds(setDoc(c(as('alice'), C1, 'pairs', P), pair()));
+    await assertFails(setDoc(c(as('alice'), C1, 'calls', 'k0'), ring('alice', 'bob', { from: 'bob', to: 'alice' })));   // au nom de bob
+    await assertFails(setDoc(c(as('alice'), C1, 'calls', 'k0'), ring('alice', 'bob', { answer: enc })));
+    await assertSucceeds(setDoc(c(as('alice'), C1, 'calls', 'k1'), ring()));
+    await assertSucceeds(getDocs(query(collection(as('bob'), 'classes', C1, 'calls'), where('to', '==', 'bob'), where('state', '==', 'ringing'))));
+    await assertFails(getDoc(c(as('dele'), C1, 'calls', 'k1')));
+    await assertFails(getDocs(collection(as('dele'), 'classes', C1, 'calls')));
+    await assertSucceeds(addDoc(collection(as('alice'), 'classes', C1, 'calls', 'k1', 'ice'), { from: 'alice', ...enc, created_at: serverTimestamp() }));
+    await assertFails(addDoc(collection(as('dele'), 'classes', C1, 'calls', 'k1', 'ice'), { from: 'dele', ...enc, created_at: serverTimestamp() }));
+    await assertFails(getDocs(collection(as('dele'), 'classes', C1, 'calls', 'k1', 'ice')));
+    await assertFails(updateDoc(c(as('alice'), C1, 'calls', 'k1'), { state: 'accepted', answer: enc, updated_at: serverTimestamp() }));   // l'appelant
+    await assertFails(updateDoc(c(as('bob'), C1, 'calls', 'k1'), { state: 'accepted', answer: enc, offer: enc, to: 'dele', updated_at: serverTimestamp() }));
+    await assertSucceeds(updateDoc(c(as('bob'), C1, 'calls', 'k1'), { state: 'accepted', answer: enc, updated_at: serverTimestamp() }));
+    await assertFails(updateDoc(c(as('bob'), C1, 'calls', 'k1'), { state: 'ringing', updated_at: serverTimestamp() }));
+    await assertSucceeds(updateDoc(c(as('alice'), C1, 'calls', 'k1'), { state: 'ended', updated_at: serverTimestamp() }));
+    await assertFails(addDoc(collection(as('alice'), 'classes', C1, 'calls', 'k1', 'ice'), { from: 'alice', ...enc, created_at: serverTimestamp() }));   // appel fini
+    await assertFails(deleteDoc(c(as('alice'), C1, 'calls', 'k1')));
+  });
+  test('refuser revient à l\'appelé, annuler à l\'appelant', async () => {
+    await assertSucceeds(setDoc(c(as('alice'), C1, 'pairs', P), pair()));
+    await assertSucceeds(setDoc(c(as('alice'), C1, 'calls', 'k2'), ring()));
+    await assertFails(updateDoc(c(as('alice'), C1, 'calls', 'k2'), { state: 'declined', updated_at: serverTimestamp() }));
+    await assertFails(updateDoc(c(as('bob'), C1, 'calls', 'k2'), { state: 'cancelled', updated_at: serverTimestamp() }));
+    await assertSucceeds(updateDoc(c(as('bob'), C1, 'calls', 'k2'), { state: 'declined', updated_at: serverTimestamp() }));
+    await assertSucceeds(setDoc(c(as('alice'), C1, 'calls', 'k3'), ring()));
+    await assertSucceeds(updateDoc(c(as('alice'), C1, 'calls', 'k3'), { state: 'cancelled', updated_at: serverTimestamp() }));
+    await assertFails(setDoc(c(as('alice'), C1, 'calls', 'k4'), ring('alice', 'prof', { pair: 'alice_prof' })));            // pas de prof
+  });
+});

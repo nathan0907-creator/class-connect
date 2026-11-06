@@ -10,6 +10,7 @@ import { generateClassKey, wrapClassKey, unwrapClassKey, encryptJSON, decryptJSO
 import { notify } from './notify.js';
 import { $, $$, h, icon, avatar, toast, toastError, fmtTime, fmtDay, linkify, modal } from './ui.js';
 import { badWord, maskBad } from './modbot.js';
+import { pmUnread } from './pm.js';
 
 let root;
 let threads = new Map();        // sid -> thread row
@@ -78,8 +79,8 @@ export function startDM() {
   document.body.classList.toggle('can-dm', canUse());
   if (!canUse()) return;
   // Students contact the delegates; delegates and head teachers receive the conversations.
-  $$('[data-dm-label]').forEach((el) => { el.textContent = el.closest('.nav-item') ? 'Privé' : isInbox() ? '✉️ Messages privés' : '✉️ Contacter les délégués'; });
-  $('[data-dm-title]').textContent = isInbox() ? 'Messages privés' : 'Contacter les délégués';
+  $$('[data-dm-label]').forEach((el) => { el.textContent = el.closest('.nav-item') ? 'Privé' : '✉️ Messages privés'; });
+  $('[data-dm-title]').textContent = 'Messages privés';
   firstList = true;
   const col = sub(state.cls.id, 'threads');
   const q = isDelegate() ? col : isPrincipal() ? query(col, where('include_principal', '==', true)) : null;
@@ -118,9 +119,10 @@ function markSeen() {
   updateBadge();
 }
 const unreadCount = () => [...threads.values()].filter((t) => t.last_by !== state.me.id && (t.last_at || 0) > getSeen(t.student_id)).length;
-function updateBadge() {
-  const n = state.cls ? unreadCount() : 0;
+export function updateBadge() {
+  const n = state.cls ? unreadCount() + pmUnread() : 0;
   $$('[data-badge="dm"]').forEach((b) => { b.textContent = n || ''; });
+  $$('[data-badge="staff"]').forEach((b) => { b.textContent = (state.cls && unreadCount()) || ''; });
   document.body.classList.toggle('dm-unread', n > 0);
 }
 
@@ -152,8 +154,10 @@ function openThread(sid) {
   render();
 }
 
-async function send(text) {
-  const sid = current;
+/** Sends a message in MY conversation with the delegates (used to report a problem from a private chat). */
+export const reportToDelegates = (text) => send(text, state.me.id);
+
+async function send(text, sid = current) {
   let t = threads.get(sid);
   let key = t ? await keyFor(t) : null;
   if (!t) {
@@ -167,7 +171,7 @@ async function send(text) {
     keys.set(sid, key);
     t = plain(await getDoc(threadRef(sid)));
     threads.set(sid, t);
-    openThread(sid);
+    if (sid === current) openThread(sid);
   }
   if (!key) throw new Error('Clé de la conversation pas encore reçue : un délégué doit se connecter pour te la transmettre.');
   const enc = await encryptJSON(key, { v: 1, text }, aad(sid, state.me.id));
