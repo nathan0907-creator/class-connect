@@ -11,7 +11,7 @@ import { notify } from './notify.js';
 import { $, $$, h, icon, avatar, toast, toastError, fmtTime, fmtDay, linkify, modal } from './ui.js';
 import { badWord, maskBad } from './modbot.js';
 import { reportToDelegates, updateBadge } from './dm.js';
-import { startCall, inCall } from './call.js';
+import { startCall, inCall, dnd, setDnd } from './call.js';
 
 let root;
 let pairs = new Map();          // pid -> pair doc
@@ -31,6 +31,8 @@ const aad = (pid, uid) => `pm|${state.cls.id}|${pid}|${uid}`;
 const seenKey = (pid) => `cc-pm-seen-${state.cls?.id}-${pid}`;
 const getSeen = (pid) => { try { return Number(localStorage.getItem(seenKey(pid)) || 0); } catch { return 0; } };
 const setSeen = (pid, t) => { try { localStorage.setItem(seenKey(pid), String(t)); } catch { /* ignore */ } };
+const online = (id) => !!state.online?.has(id);
+const draftKey = (otherId) => `cc-pm-draft-${state.cls?.id}-${pairId(otherId)}`;
 const canPM = () => !!state.me && !isTeacher() && state.me.status === 'active';
 const classmates = () => [...state.members.values()]
   .filter((m) => m.status === 'active' && m.role !== 'teacher' && m.id !== state.me.id)
@@ -82,7 +84,14 @@ export function initPM() {
   on('panel', (name) => { if (name === 'dm') { renderList(); markSeen(); } });
   on('members', () => { renderList(); renderHead(); });
   on('profiles', renderList);
+  on('presence', () => { renderList(); renderHead(); });
   document.addEventListener('visibilitychange', markSeen);
+  // 📵 Ne pas déranger (this device): incoming calls are declined at once.
+  const hero = root.querySelector('.pm-hero');
+  const dndBtn = h('button.pm-dnd', { type: 'button', role: 'switch', onclick: () => { setDnd(!dnd()); paintDnd(); toast(dnd() ? '📵 Ne pas déranger : les appels seront refusés' : '🔔 Tu peux de nouveau recevoir des appels'); } });
+  const paintDnd = () => { dndBtn.setAttribute('aria-checked', String(dnd())); dndBtn.replaceChildren(dnd() ? '📵 Ne pas déranger' : '🔔 Appels activés'); hero.classList.toggle('dnd', dnd()); };
+  paintDnd();
+  hero.append(dndBtn);
   bindComposer();
 }
 
@@ -103,7 +112,12 @@ export function startPM() {
   firstList = true;
   unsubList = onSnapshot(query(sub(state.cls.id, 'pairs'), where('members', 'array-contains', state.me.id)), (snap) => {
     const before = new Map(pairs);
-    pairs = new Map(snap.docs.map((d) => [d.id, plain(d)]));
+    pairs = new Map(snap.docs.map((d) => {
+      const p = plain(d);
+      // « seen » is a map of timestamps: plain() only converts top-level ones.
+      p.seen = Object.fromEntries(Object.entries(d.get('seen', { serverTimestamps: 'estimate' }) || {}).map(([k, v]) => [k, typeof v === 'number' ? v : v?.toMillis?.() || 0]));
+      return [d.id, p];
+    }));
     for (const p of pairs.values()) {
       const prev = before.get(p.id);
       const other = otherOf(p);
@@ -115,6 +129,8 @@ export function startPM() {
     if (!snap.metadata.fromCache) firstList = false;
     renderList();
     renderHead();
+    if (current && lastRows.length) renderMessages(lastRows);
+    markSeen();
     updateBadge();
   }, toastError);
   renderList();
@@ -127,9 +143,17 @@ export function stopPM() {
 }
 
 const isOpen = () => root?.classList.contains('active') && !document.hidden && !root.querySelector('.pm-layout').hidden;
+let seenWriting = false;
 function markSeen() {
   const p = current && pairs.get(pairId(current));
-  if (p && isOpen()) setSeen(p.id, p.last_at || Date.now());
+  if (p && isOpen()) {
+    setSeen(p.id, p.last_at || Date.now());
+    if (p.last_by !== state.me.id && !p.blocked?.length && (p.seen?.[state.me.id] || 0) < (p.last_at || 0) && !seenWriting) {
+      seenWriting = true;
+      updateDoc(pairRef(current), { [`seen.${state.me.id}`]: serverTimestamp(), updated_at: serverTimestamp() })
+        .catch(() => {}).finally(() => { seenWriting = false; });
+    }
+  }
   updateBadge();
   renderTabBadges();
 }
@@ -169,14 +193,15 @@ function renderList() {
     const blocked = p && blockedState(m.id);
     return h(`div.pm-item${m.id === current ? '.active' : ''}${p && unread(p) ? '.unread' : ''}`,
       h('button.pm-open', { type: 'button', onclick: () => open(m.id) },
-        avatar(m, 40),
+        h('span.pm-av', avatar(m, 40), online(m.id) ? h('i.pm-online', { title: 'En ligne' }) : null),
         h('span.dm-item-body', h('b', m.display_name),
-          h('small', blocked ? '⛔ Bloqué' : p?.last_at ? `${fmtDay(p.last_at)} · ${fmtTime(p.last_at)}` : `@${m.username}`)),
+          h('small', blocked ? '⛔ Bloqué' : p?.last_at ? `${fmtDay(p.last_at)} · ${fmtTime(p.last_at)}` : online(m.id) ? '🟢 En ligne' : `@${m.username}`)),
         p && unread(p) ? h('i.dm-dot', { 'aria-label': 'non lu' }) : null),
       blocked ? null : h('span.pm-calls', callButtons(m)));
   };
   const convRows = conv.map((p) => state.members.get(otherOf(p))).filter((m) => m && match(m)).map((m) => row(m, pairs.get(pairId(m.id))));
-  const others = classmates().filter((m) => !withConv.has(m.id) && match(m)).map((m) => row(m, null));
+  const others = classmates().filter((m) => !withConv.has(m.id) && match(m))
+    .sort((a, b) => Number(online(b.id)) - Number(online(a.id))).map((m) => row(m, null));
   list.replaceChildren(...[
     convRows.length ? h('p.pm-section', 'Conversations') : null,
     ...convRows,
@@ -193,6 +218,8 @@ function open(otherId) {
   unsubMsgs?.();
   root.querySelector('.pm-layout').classList.add('open');
   root.querySelector('.pm-messages').replaceChildren();
+  const input = root.querySelector('.pm-composer textarea');
+  try { input.value = localStorage.getItem(draftKey(otherId)) || ''; } catch { input.value = ''; }
   const pid = pairId(otherId);
   unsubMsgs = onSnapshot(query(pmCol(otherId), orderBy('created_at'), limitToLast(200)), async (snap) => {
     let key = null;
@@ -234,8 +261,8 @@ function renderHead() {
   composer.hidden = !!blocked;
   head.replaceChildren(
     h('button.icon-btn.pm-back', { type: 'button', 'aria-label': 'Retour à la liste', onclick: close }, '←'),
-    avatar(m, 42),
-    h('div.pm-who', h('b', m.display_name), h('small.muted', blocked ? '⛔ Conversation bloquée' : '🔒 Chiffré de bout en bout · vous deux seulement')),
+    h('span.pm-av', avatar(m, 42), online(m.id) ? h('i.pm-online') : null),
+    h('div.pm-who', h('b', m.display_name), h('small.muted', blocked ? '⛔ Conversation bloquée' : online(m.id) ? '🟢 En ligne · 🔒 chiffré, vous deux seulement' : '🔒 Chiffré de bout en bout · vous deux seulement')),
     blocked ? null : h('div.pm-head-calls', callButtons(m, true)),
     h('button.icon-btn.pm-more', { type: 'button', 'aria-label': 'Plus d\'options', title: 'Bloquer, signaler…', onclick: () => options(m) }, '⋯'),
   );
@@ -291,6 +318,11 @@ function renderMessages(rows) {
         h('div.bubble', r.text == null ? h('span.locked-text', icon('lock'), ' Message illisible') : h('div.text', linkify(maskBad(r.text)))))));
     return out;
   }));
+  const last = rows[rows.length - 1];
+  const theirSeen = pairs.get(pairId(current))?.seen?.[current] || 0;
+  if (last && last.user_id === state.me.id && !last.call) {
+    box.append(h('div.pm-seen', theirSeen >= (last.created_at || Infinity) ? `Vu ✓✓ ${fmtTime(theirSeen)}` : 'Envoyé ✓'));
+  }
   box.scrollTop = box.scrollHeight;
 }
 
@@ -302,8 +334,14 @@ function bindComposer() {
     if (!text || !current) return;
     if (badWord(text)) return toast('🤖 Message bloqué par la modération automatique : langage vulgaire ou inapproprié. Reformule ton message.', 'error', 6000);
     input.value = '';
-    try { await post(current, { text }); } catch (err) { input.value = text; toastError(err); }
+    const to = current;
+    try { localStorage.removeItem(draftKey(to)); } catch { /* ignore */ }
+    try { await post(to, { text }); } catch (err) { input.value = text; toastError(err); }
   };
+  input.addEventListener('input', () => {
+    if (!current) return;
+    try { if (input.value.trim()) localStorage.setItem(draftKey(current), input.value.slice(0, 4000)); else localStorage.removeItem(draftKey(current)); } catch { /* ignore */ }
+  });
   form.addEventListener('submit', (e) => { e.preventDefault(); submit(); });
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit(); } });
 }

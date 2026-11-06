@@ -543,8 +543,9 @@ service cloud.firestore {
         function isPeer() { return isStudent(cid) && peers().size() == 2 && uid() in peers(); }
         function otherPeer() { return peers()[0] == uid() ? peers()[1] : peers()[0]; }
         function validPair(d) {
-          return d.keys().hasOnly(['members', 'last_at', 'last_by', 'updated_at', 'blocked'])
+          return d.keys().hasOnly(['members', 'last_at', 'last_by', 'updated_at', 'blocked', 'seen'])
             && d.members == peers() && d.last_at is timestamp && d.updated_at == request.time
+            && d.get('seen', {}) is map && d.get('seen', {}).keys().hasOnly(peers())
             && d.blocked is list && d.blocked.size() <= 2 && d.blocked.toSet().difference(peers().toSet()).size() == 0;
         }
         allow get: if isPeer();
@@ -557,7 +558,10 @@ service cloud.firestore {
           // Each one only adds or removes their own block; while blocked, nothing else moves.
           && request.resource.data.blocked.toSet().difference(resource.data.blocked.toSet()).hasOnly([uid()])
           && resource.data.blocked.toSet().difference(request.resource.data.blocked.toSet()).hasOnly([uid()])
-          && (resource.data.blocked.size() == 0 || onlyChanged(['blocked', 'updated_at']));
+          && (resource.data.blocked.size() == 0 || onlyChanged(['blocked', 'updated_at']))
+          // « Vu »: each one only writes the moment they read, as now.
+          && (!('seen' in changed()) || (request.resource.data.seen.diff(resource.data.get('seen', {})).affectedKeys().hasOnly([uid()])
+              && request.resource.data.seen[uid()] == request.time));
         allow delete: if false;
 
         match /pm/{mid} {
@@ -637,6 +641,18 @@ service cloud.firestore {
           && request.resource.data.kind in ['absent', 'room', 'cancel'] && isDate(request.resource.data.date)
           && request.resource.data.slot_id is string && request.resource.data.by == uid()
           && request.resource.data.created_at == request.time && sealed(request.resource.data, 2000);
+        allow update: if false;
+        allow delete: if isActiveMember(cid) && (resource.data.by == uid() || isStaff(cid));
+      }
+
+      // 📚 Cahier de devoirs: any member adds one (encrypted with the class key); its author or the staff delete it.
+      // The due date stays readable so that old entries can be cleaned up.
+      match /homework/{hid} {
+        allow read: if isActiveMember(cid);
+        allow create: if isActiveMember(cid)
+          && request.resource.data.keys().hasOnly(['due', 'epoch', 'iv', 'ciphertext', 'by', 'created_at'])
+          && isDate(request.resource.data.due) && request.resource.data.by == uid()
+          && request.resource.data.created_at == request.time && sealed(request.resource.data, 4000);
         allow update: if false;
         allow delete: if isActiveMember(cid) && (resource.data.by == uid() || isStaff(cid));
       }

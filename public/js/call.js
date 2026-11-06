@@ -19,6 +19,9 @@ let unsubIncoming = null;
 const handled = new Set();        // call ids already shown (or ignored)
 
 export const inCall = () => !!s;
+/** « Ne pas déranger »: incoming calls are declined at once (kept on this device). */
+export const dnd = () => { try { return localStorage.getItem('cc-dnd') === '1'; } catch { return false; } };
+export const setDnd = (on) => { try { localStorage.setItem('cc-dnd', on ? '1' : '0'); } catch { /* ignore */ } };
 const supported = () => !!(window.RTCPeerConnection && navigator.mediaDevices?.getUserMedia);
 const callRef = (id) => sub(state.cls.id, 'calls', id);
 const iceCol = (id) => sub(state.cls.id, 'calls', id, 'ice');
@@ -68,6 +71,11 @@ export function startCalls() {
       const age = Date.now() - (c.created_at || 0);
       if (age > RING_MS) { updateDoc(callRef(c.id), { state: 'missed', updated_at: serverTimestamp() }).catch(() => {}); continue; }
       if (s) { updateDoc(callRef(c.id), { state: 'declined', updated_at: serverTimestamp() }).catch(() => {}); continue; }   // busy
+      if (dnd()) {
+        updateDoc(callRef(c.id), { state: 'declined', updated_at: serverTimestamp() }).catch(() => {});
+        toast(`📵 Appel de ${memberName(c.from)} refusé (Ne pas déranger)`, 'info', 6000);
+        continue;
+      }
       incoming(c, RING_MS - age);
     }
   }, () => {});
@@ -169,6 +177,7 @@ function peer(sess) {
       try {
         const m = JSON.parse(e.data);
         sess.ui.root.classList.toggle('peer-cam-off', m.cam === false);
+        sess.ui.root.classList.toggle('peer-screen', m.screen === true);
         sess.ui.root.classList.toggle('peer-muted', m.mic === false);
       } catch { /* ignore */ }
     };
@@ -196,7 +205,7 @@ const sendCtl = (sess) => {
   if (sess.ctl?.readyState !== 'open') return;
   const v = sess.local?.getVideoTracks()[0];
   const a = sess.local?.getAudioTracks()[0];
-  sess.ctl.send(JSON.stringify({ cam: !!v && v.enabled, mic: !!a && a.enabled }));
+  sess.ctl.send(JSON.stringify({ cam: !!sess.screen || (!!v && v.enabled), mic: !!a && a.enabled, screen: !!sess.screen }));
 };
 
 /** Calls a classmate. */
@@ -280,7 +289,7 @@ export function hangup(reason) {
   finish(next);
 }
 
-function stopMedia(sess) { sess.local?.getTracks().forEach((t) => t.stop()); }
+function stopMedia(sess) { sess.local?.getTracks().forEach((t) => t.stop()); sess.screen?.stop(); }
 
 function finish(reason) {
   const sess = s;
@@ -348,6 +357,8 @@ function screen(sess, text) {
     h('div.call-controls',
       h('button.call-btn.round', { type: 'button', 'aria-label': 'Couper / activer le micro', onclick: () => toggle('mic') }, icon('mic')),
       h('button.call-btn.round.cam', { type: 'button', 'aria-label': 'Couper / activer la caméra', onclick: () => toggle('cam') }, icon('video')),
+      h('button.call-btn.round.flip', { type: 'button', 'aria-label': 'Changer de caméra (avant / arrière)', title: 'Changer de caméra', onclick: () => flipCamera(sess) }, icon('flip')),
+      navigator.mediaDevices?.getDisplayMedia ? h('button.call-btn.round.share', { type: 'button', 'aria-label': 'Partager mon écran', title: 'Partager mon écran (pour montrer un exercice…)', onclick: () => shareScreen(sess) }, icon('screen')) : null,
       h('button.call-btn.round.min', { type: 'button', 'aria-label': 'Réduire', onclick: () => root.classList.toggle('mini') }, icon('minimize')),
       h('button.call-btn.decline', { type: 'button', 'aria-label': 'Raccrocher', onclick: () => hangup() }, icon('phone-off'), h('span', 'Raccrocher'))));
   root.addEventListener('click', (e) => { if (root.classList.contains('mini') && !e.target.closest('button')) root.classList.remove('mini'); });
@@ -355,8 +366,61 @@ function screen(sess, text) {
   requestAnimationFrame(() => root.classList.add('in'));
   sess.ui = { root, remote, audio, local, status: st, shield };
 }
+// ------------------------------------------------------------ camera switch & screen sharing (same video sender)
+const videoSender = (sess) => sess.pc?.getTransceivers().find((t) => t.receiver.track?.kind === 'video')?.sender;
+async function swapVideo(sess, track) {
+  const sender = videoSender(sess);
+  if (!sender || !sess.hadVideo) throw new Error('Partage d\'écran possible seulement dans un appel vidéo avec ta caméra');
+  await sender.replaceTrack(track);
+}
+async function flipCamera(sess) {
+  const old = sess.local?.getVideoTracks()[0];
+  if (!old || sess.screen) return;
+  sess.facing = sess.facing === 'environment' ? 'user' : 'environment';
+  try {
+    const cam = (await navigator.mediaDevices.getUserMedia({ video: { facingMode: { exact: sess.facing }, width: { ideal: 640 }, height: { ideal: 480 } } })).getVideoTracks()[0];
+    await swapVideo(sess, cam);
+    cam.enabled = old.enabled;
+    sess.local.removeTrack(old);
+    old.stop();
+    sess.local.addTrack(cam);
+    sess.ui.root.classList.toggle('rear-cam', sess.facing === 'environment');
+  } catch {
+    sess.facing = sess.facing === 'environment' ? 'user' : 'environment';
+    toast('Pas d\'autre caméra sur cet appareil');
+  }
+}
+async function shareScreen(sess) {
+  if (sess.screen) return stopShare(sess);
+  try {
+    const stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 12 } }, audio: false });
+    const track = stream.getVideoTracks()[0];
+    await swapVideo(sess, track);
+    sess.screen = track;
+    track.onended = () => stopShare(sess);
+    sess.ui.local.srcObject = stream;
+    sess.ui.root.classList.add('sharing');
+    sendCtl(sess);
+    toast('🖥️ Tu partages ton écran', 'success');
+  } catch (err) {
+    if (err?.name !== 'NotAllowedError') toastError(err);
+  }
+}
+async function stopShare(sess) {
+  const track = sess.screen;
+  if (!track) return;
+  sess.screen = null;
+  track.stop();
+  const cam = sess.local?.getVideoTracks()[0] || null;
+  await swapVideo(sess, cam).catch(() => {});
+  if (sess.ui) { sess.ui.local.srcObject = sess.local; sess.ui.root.classList.remove('sharing'); }
+  sendCtl(sess);
+}
+
 function showLocal(sess) {
   sess.ui.local.srcObject = sess.local;
+  sess.hadVideo = sess.local.getVideoTracks().length > 0;
+  navigator.mediaDevices.enumerateDevices?.().then((d) => { sess.ui?.root.classList.toggle('multi-cam', d.filter((x) => x.kind === 'videoinput').length > 1); }).catch(() => {});
   sess.ui.root.classList.toggle('has-local-video', sess.local.getVideoTracks().length > 0);
 }
 

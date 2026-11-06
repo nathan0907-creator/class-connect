@@ -852,3 +852,34 @@ describe('Messages entre élèves et appels', () => {
     await assertFails(setDoc(c(as('alice'), C1, 'calls', 'k4'), ring('alice', 'prof', { pair: 'alice_prof' })));            // pas de prof
   });
 });
+
+describe('Cahier de devoirs', () => {
+  const hw = (by, extra = {}) => ({ due: '2030-01-15', epoch: 1, ...enc, by, created_at: serverTimestamp(), ...extra });
+  test('tout membre ajoute un devoir chiffré, seuls l\'auteur et l\'équipe le suppriment', async () => {
+    await assertSucceeds(setDoc(c(as('alice'), C1, 'homework', 'h1'), hw('alice')));
+    await assertSucceeds(getDocs(collection(as('prof'), 'classes', C1, 'homework')));
+    await assertFails(getDocs(collection(as('eve'), 'classes', C1, 'homework')));
+    await assertFails(getDocs(collection(as('pend'), 'classes', C1, 'homework')));
+    await assertFails(addDoc(collection(as('alice'), 'classes', C1, 'homework'), hw('bob')));                    // au nom d'un autre
+    await assertFails(addDoc(collection(as('alice'), 'classes', C1, 'homework'), hw('alice', { due: 'demain' })));
+    await assertFails(addDoc(collection(as('alice'), 'classes', C1, 'homework'), hw('alice', { epoch: 0 })));    // ancienne clé
+    await assertFails(addDoc(collection(as('alice'), 'classes', C1, 'homework'), hw('alice', { subject: 'Maths' })));   // en clair
+    await assertFails(updateDoc(c(as('alice'), C1, 'homework', 'h1'), { due: '2030-01-16' }));
+    await assertFails(deleteDoc(c(as('bob'), C1, 'homework', 'h1')));
+    await assertSucceeds(deleteDoc(c(as('dele'), C1, 'homework', 'h1')));
+    await assertSucceeds(setDoc(c(as('bob'), C1, 'homework', 'h2'), hw('bob')));
+    await assertSucceeds(deleteDoc(c(as('bob'), C1, 'homework', 'h2')));
+  });
+});
+
+describe('Messages entre élèves — « Vu »', () => {
+  const P = 'alice_bob';
+  test('chacun n\'écrit que son propre « vu », à l\'heure actuelle', async () => {
+    await assertSucceeds(setDoc(c(as('alice'), C1, 'pairs', P), { members: ['alice', 'bob'], last_at: serverTimestamp(), last_by: 'alice', updated_at: serverTimestamp(), blocked: [] }));
+    await assertSucceeds(updateDoc(c(as('bob'), C1, 'pairs', P), { 'seen.bob': serverTimestamp(), updated_at: serverTimestamp() }));
+    await assertFails(updateDoc(c(as('bob'), C1, 'pairs', P), { 'seen.alice': serverTimestamp(), updated_at: serverTimestamp() }));
+    await assertFails(updateDoc(c(as('bob'), C1, 'pairs', P), { 'seen.bob': Timestamp.fromMillis(Date.now() + 864e5), updated_at: serverTimestamp() }));
+    await assertFails(updateDoc(c(as('bob'), C1, 'pairs', P), { 'seen.dele': serverTimestamp(), updated_at: serverTimestamp() }));
+    await assertSucceeds(updateDoc(c(as('alice'), C1, 'pairs', P), { 'seen.alice': serverTimestamp(), updated_at: serverTimestamp() }));
+  });
+});

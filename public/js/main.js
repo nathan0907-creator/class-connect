@@ -24,6 +24,7 @@ import { initTheme, applyTheme } from './theme.js';
 import { applyQualityClass } from './quality.js';
 import { initDM, startDM, stopDM, bindDMComposer } from './dm.js';
 import { initPM, startPM, stopPM } from './pm.js';
+import { initHomework, startHomework, stopHomework } from './homework.js';
 import { startCalls, stopCalls } from './call.js';
 import { initLife, startLife, stopLife } from './life.js';
 import { startSettings, stopSettings } from './admin.js';
@@ -335,6 +336,7 @@ function startClass(cid) {
 
   startChat();
   startSlots();
+  startHomework();
   startEvents();
   startProposals();
   startStudy();
@@ -350,6 +352,7 @@ function stopClass() {
   classUnsubs = [];
   stopAllChat();
   stopSlots();
+  stopHomework();
   stopEvents();
   stopProposals();
   stopPresence();
@@ -433,6 +436,7 @@ async function boot() {
   initProfiles();
   initEvents();
   initDM();
+  initHomework();
   initPM();
   bindDMComposer();
   initLife();
